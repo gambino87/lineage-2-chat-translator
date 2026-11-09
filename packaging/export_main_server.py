@@ -185,13 +185,35 @@ def export_release(root: Path = ROOT, site: Path | None = None,
             "installer": manifest["installer"], "files": len(files), "deployed": False}
 
 
+def publish_and_export(*, output_dir: Path | None = None,
+                       base_url: str = DEFAULT_BASE_URL) -> dict:
+    """Keep the public source current before producing a deployable release bundle.
+
+    Validate the website first so a bad local release cannot publish source.
+    Source publication verifies its public commit and immutable version tag;
+    any failure stops the export. The low-level exporter remains offline for
+    isolated tests, while this is the required production entry point.
+    """
+    base_url = validated_base_url(base_url)
+    release_site.prepare_site(ROOT, ROOT / "sites/l2-chat-translator", SOURCES, ASSETS, check=True)
+    publisher = _sibling("source_release")
+    source = publisher.publish_source(ROOT)
+    result = export_release(output_dir=output_dir, base_url=base_url)
+    require(source.get("version") == result["version"]
+            and source.get("installer") == result["installer"],
+            "Release changed after source publication. Do not deploy this bundle; rerun the release export.")
+    publisher.verify_source_current(ROOT, source)
+    result["source"] = source
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help="HTTPS origin, without a path.")
     parser.add_argument("--output-dir", type=Path, help="Defaults to the project's release directory.")
     args = parser.parse_args()
     try:
-        print(json.dumps(export_release(output_dir=args.output_dir, base_url=args.base_url), indent=2))
+        print(json.dumps(publish_and_export(output_dir=args.output_dir, base_url=args.base_url), indent=2))
     except (ValueError, OSError, KeyError, zipfile.BadZipFile) as exc:
         raise SystemExit(str(exc)) from exc
 

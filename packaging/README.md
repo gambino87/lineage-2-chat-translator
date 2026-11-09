@@ -126,7 +126,10 @@ are retained. A prepared/published version cannot be rebuilt under the same name
 The existing release manifests are required to verify retained downloads.
 
 The build **prepares** files; it does not publish them. Export the verified bundle
-with `packaging/export_main_server.py` and publish atomically to the main server
+with `packaging/export_main_server.py`. That production command first updates
+and verifies the public GitHub source snapshot and immutable release tag; source
+publication failure blocks export. See [PUBLIC-SOURCE.md](PUBLIC-SOURCE.md).
+Then publish atomically to the main server
 following `HOSTING.md`. Run the check above immediately before export. Deploy the
 homepage and installer together, then verify the public installer checksum.
 The original Sites mirror is separate and retains its existing identity/audience.

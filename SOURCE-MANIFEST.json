@@ -110,6 +110,20 @@
       "sha256": "b9f1e9add97131b89511cd63c90cab3c7eaee3c308cbcd3e93eedf7d096bb617"
     }
   ],
+  "publication_adapted_files": [
+    "packaging/HOSTING.md",
+    "packaging/USER-README.txt",
+    "tests/test_chat_overlay.py",
+    "tests/test_overlay_integration.py",
+    "tests/test_reply_composer.py",
+    "tests/test_source_url_protection.py",
+    "tests/test_translator_core.py",
+    "tests/test_whisper_integration.py"
+  ],
+  "publication_adaptations": "Deidentify known player/example aliases, a streamer path and operator SSH-key location; normalize the guide's version heading. Compiled application inputs remain unchanged.",
+  "validation": {
+    "release_packaged_self_test_passed": true
+  },
   "files": [
     {
       "path": ".gitattributes",
@@ -125,7 +139,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "33495499577894211134b2e0828174a7d6c09b02b2ce98675b98cd6e0374d1b8"
+      "sha256": "ec92cfe4ecc186c981d55ed567119d3bad0e24506c2862ccb73116bd995ecfa5"
     },
     {
       "path": "Setup Ollama.ps1",
@@ -225,15 +239,19 @@
     },
     {
       "path": "packaging/HOSTING.md",
-      "sha256": "bf80af1f6a238373674c614a8ef857ce5cb2ca0f18d9223f3f1898fd8c945dff"
+      "sha256": "dc8661e5e7c67bf4cd67760d3a5c851b35085ee98796a6b90868cfa6561f09e4"
     },
     {
       "path": "packaging/INSTALL-COMPLETE.txt",
       "sha256": "ad9954e91db0d77465b92334f504025cac4d67448045ac0b0ecbd8eea95eaeaa"
     },
     {
+      "path": "packaging/PUBLIC-SOURCE.md",
+      "sha256": "46fb6240f2a5e61f73a2cc9cb3a4d379cf905768100e678bc28d477b76961eae"
+    },
+    {
       "path": "packaging/README.md",
-      "sha256": "17e663d064fb65ee4ea28b4a7a20819dcb0424fb0ad852315596ea7595eebcd9"
+      "sha256": "9da55a6c779a278b4c90d8c38b6b3ac51362c9c1b849844479ec763907c29e09"
     },
     {
       "path": "packaging/THIRD-PARTY-NOTICES.txt",
@@ -261,7 +279,7 @@
     },
     {
       "path": "packaging/export_main_server.py",
-      "sha256": "d3fa20495fa4bb6103fe640c92fcefe29351f023b2c713dabde8fdfae8436840"
+      "sha256": "70073f326c1cf6e8df4b6c87e8054657b6669d29639bb1da2367d3adf73d35af"
     },
     {
       "path": "packaging/installer.iss",
@@ -328,12 +346,36 @@
       "sha256": "256f68c974c0f23f3029ccb35e3a8716ed309bd1eedf0f4e2a472de692fdda9b"
     },
     {
+      "path": "packaging/public-source/LICENSE-NOTICE.md",
+      "sha256": "8616b91db1fd58c31992a906a3a681d7ab7a2fb8b21c74e6704801212717d115"
+    },
+    {
+      "path": "packaging/public-source/README.template.md",
+      "sha256": "ad82d85d7a69d829d5f48e2ddad18c5538ae4f8c750370ee824ae0441caa8074"
+    },
+    {
+      "path": "packaging/public-source/allowlist.json",
+      "sha256": "21dbbfa9c598761a2a7a5d30e0a606657bc77746366f67efb2a3cc20e44426d5"
+    },
+    {
+      "path": "packaging/public-source/gitattributes.txt",
+      "sha256": "a61bbe6a11034dec3bf2161ff671c7cd55f6cdc23deba55725de8fcf02836f23"
+    },
+    {
+      "path": "packaging/public-source/gitignore.txt",
+      "sha256": "60489b424e2a64e6995f9abf6dae9964210a078478b78d0b286df11594c4393f"
+    },
+    {
       "path": "packaging/release_site.py",
       "sha256": "91f058d8f260444d61b74bc518e2df692f0f52671046b7db558f2e606c417f1f"
     },
     {
       "path": "packaging/requirements-build.txt",
       "sha256": "12443442c4b7ef74a1a733560ed9256de202d1ab0c7a290e8d6f8ccd46e18c4c"
+    },
+    {
+      "path": "packaging/source_release.py",
+      "sha256": "47040f1cbf189f9fa51c6b8638ee8b611cbab27fde325dfaee55bffc51c90cc3"
     },
     {
       "path": "packaging/verify_dll_upgrade.py",
@@ -361,7 +403,7 @@
     },
     {
       "path": "sites/l2-chat-translator/index.template.html",
-      "sha256": "10b6e3c9c5a2aeaa13e4f477697328727890d04d7876d0ba656f5270e14df81e"
+      "sha256": "c3254eed03e23adf0d33abecc2c3573e25ad2d2a9d462671cf83833c10619183"
     },
     {
       "path": "tests/test_app_update_integration.py",
@@ -453,7 +495,7 @@
     },
     {
       "path": "tests/test_main_server_export.py",
-      "sha256": "65206fae1ce1aa55fde08c6aae0486456e546050ec9190a57529c976a37bdca6"
+      "sha256": "3a40a481cb70e65aba4cfee886dbf46537cdd3dc8dd526d02ba0cd30d6fb831d"
     },
     {
       "path": "tests/test_ollama_service.py",
@@ -502,6 +544,10 @@
     {
       "path": "tests/test_service_shutdown.py",
       "sha256": "96525243f44eabcc27d6fb47a9af3f42a2a0845955f3725bb80621f76dca9d59"
+    },
+    {
+      "path": "tests/test_source_release.py",
+      "sha256": "580d8bbf3490e69ae6107de60ddb0cc8f5e7d81a4e263d19f6b9f34534583aac"
     },
     {
       "path": "tests/test_source_url_protection.py",
@@ -563,23 +609,5 @@
       "path": "verify_local.py",
       "sha256": "2c924871800e8b91e6294d7b197b4df24bda196f8ba78b0f29088146eda5f683"
     }
-  ],
-  "publication_adapted_files": [
-    "packaging/HOSTING.md",
-    "packaging/USER-README.txt",
-    "tests/test_chat_overlay.py",
-    "tests/test_overlay_integration.py",
-    "tests/test_reply_composer.py",
-    "tests/test_source_url_protection.py",
-    "tests/test_translator_core.py",
-    "tests/test_whisper_integration.py"
-  ],
-  "publication_adaptations": "Replace identifying test/example player aliases, a streamer path, and the operator's private SSH-key location; correct the user guide version heading to 1.7.11. Application modules and six assets are unchanged.",
-  "validation": {
-    "tests_run": 740,
-    "tests_passed": 732,
-    "tests_skipped": 8,
-    "application_only_build_passed": true,
-    "packaged_headless_self_test_passed": true
-  }
+  ]
 }

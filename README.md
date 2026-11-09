@@ -61,10 +61,6 @@ For a headless application-only build, use `packaging/build.py --skip-installer`
 Tests skip checks that require an unavailable platform facility; a successful
 test run does not establish coverage of every Windows or model configuration.
 
-This snapshot was checked before publication: **740 tests ran, 732 passed and
-eight were skipped**. A fresh application-only build and its packaged headless
-self-test passed. No interface was opened and no model was started for these checks.
-
 The included website project ID identifies the public mirror and is not a
 credential. Local page preparation does not publish anything. Deploying a
 separate instance requires your own hosting and credentials; read the deployment
@@ -73,9 +69,9 @@ official version or upload it to the official update feed.
 
 ## Relationship to the published installer
 
-[SOURCE-MANIFEST.json](SOURCE-MANIFEST.json) records the shipped v1.7.11 installer
-checksum and the SHA-256 hashes of its **17 application modules and six assets**.
-Those 23 files are byte-for-byte copies of the recorded release inputs. The
+[SOURCE-MANIFEST.json](SOURCE-MANIFEST.json) records the v1.7.11 release installer
+checksum and the SHA-256 hashes of its application modules and assets.
+Those files are byte-for-byte copies of the recorded release inputs. The
 manifest also inventories the other files in this snapshot, excluding itself.
 Git preserves their original line endings so those hashes remain checkable.
 
@@ -114,3 +110,10 @@ The original application code is made available for transparency; no additional
 open-source license has been selected for it. Existing third-party licenses,
 including GPL-3.0 for the separate L2J-derived item dataset, remain in effect.
 See [LICENSE-NOTICE.md](LICENSE-NOTICE.md) and the preserved upstream notices.
+
+## Keeping source current
+
+The release exporter publishes an allowlisted source snapshot and verifies its
+public GitHub commit before exporting the website release. Version tags preserve
+the matching application and installer identity; tooling-only updates can advance
+`main` without moving an existing tag. See [the source publication workflow](packaging/PUBLIC-SOURCE.md).

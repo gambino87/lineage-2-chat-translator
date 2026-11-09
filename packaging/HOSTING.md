@@ -23,7 +23,11 @@ restarted as part of translator website work.
    Run `.build-tools/venv/Scripts/python.exe packaging/build.py` from the project
    root. It tests/builds the installer, checks the frozen app and prepares the page.
 2. Run `packaging/release_site.py --check`, then `packaging/export_main_server.py`
-   with that Python. The exporter validates source/asset hashes, installer bytes,
+   with that Python. Before creating the upload bundle, the exporter publishes
+   and verifies the matching GitHub source snapshot and version tag. A failed
+   source update stops the release; retry after resolving it. See
+   `PUBLIC-SOURCE.md` for the source-only allowlist and privacy checks.
+   The exporter validates source/asset hashes, installer bytes,
    the public allowlist and changelog. It changes only the exported page's
    canonical/og:url origin to the main server; the Sites source remains intact.
 3. Upload the resulting ZIP and `.manifest.json` from `release/`, plus

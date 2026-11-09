@@ -3,9 +3,10 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+from types import SimpleNamespace
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import zipfile
 
 
@@ -14,6 +15,61 @@ _SPEC = importlib.util.spec_from_file_location(
 )
 exporter = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(exporter)
+
+
+class SourcePublicationGateTests(unittest.TestCase):
+    def test_public_source_must_succeed_before_bundle_export(self):
+        order = []
+        installer = {"file": "test.exe", "sha256": "b" * 64, "bytes": 123}
+        source = {"repository": "https://github.com/example/source", "commit": "a" * 40,
+                  "version": "1.2.3", "installer": installer}
+        publisher = Mock(side_effect=lambda root: order.append("source") or source)
+        revalidate = Mock(side_effect=lambda *a: order.append("revalidate"))
+        with patch.object(exporter.release_site, "prepare_site", side_effect=lambda *a, **k: order.append("validate")), \
+                patch.object(exporter, "_sibling", return_value=SimpleNamespace(publish_source=publisher, verify_source_current=revalidate)), \
+                patch.object(exporter, "export_release", side_effect=lambda **k: order.append("export") or {"version": "1.2.3", "installer": installer}):
+            result = exporter.publish_and_export()
+        self.assertEqual(order, ["validate", "source", "export", "revalidate"])
+        self.assertEqual(result["source"], source)
+        publisher.assert_called_once_with(exporter.ROOT)
+        revalidate.assert_called_once_with(exporter.ROOT, source)
+
+    def test_release_change_after_source_publication_is_not_reported_as_ready(self):
+        source = {"version": "1.2.3", "installer": {"sha256": "a" * 64}}
+        for changed in ({"version": "1.2.4", "installer": source["installer"]},
+                        {"version": "1.2.3", "installer": {"sha256": "b" * 64}}):
+            with self.subTest(changed=changed), patch.object(exporter.release_site, "prepare_site"), \
+                    patch.object(exporter, "_sibling", return_value=SimpleNamespace(publish_source=Mock(return_value=source))), \
+                    patch.object(exporter, "export_release", return_value=changed):
+                with self.assertRaisesRegex(ValueError, "Do not deploy"):
+                    exporter.publish_and_export()
+
+    def test_source_publication_failure_stops_export(self):
+        publisher = Mock(side_effect=ValueError("Source publication could not be verified."))
+        with patch.object(exporter.release_site, "prepare_site"), \
+                patch.object(exporter, "_sibling", return_value=SimpleNamespace(publish_source=publisher)), \
+                patch.object(exporter, "export_release") as export:
+            with self.assertRaisesRegex(ValueError, "could not be verified"):
+                exporter.publish_and_export()
+        export.assert_not_called()
+
+    def test_stale_website_or_invalid_destination_never_publishes_source(self):
+        with patch.object(exporter, "_sibling") as source, patch.object(exporter, "export_release") as export:
+            with self.assertRaises(ValueError):
+                exporter.publish_and_export(base_url="http://example.test")
+            with patch.object(exporter.release_site, "prepare_site", side_effect=ValueError("stale page")):
+                with self.assertRaisesRegex(ValueError, "stale page"):
+                    exporter.publish_and_export()
+        source.assert_not_called()
+        export.assert_not_called()
+
+    def test_production_cli_uses_publication_gate(self):
+        with patch("sys.argv", ["export_main_server.py"]), \
+                patch.object(exporter, "publish_and_export", return_value={"source": "verified"}) as gate, \
+                patch.object(exporter, "export_release") as offline, patch("builtins.print"):
+            exporter.main()
+        gate.assert_called_once_with(output_dir=None, base_url=exporter.DEFAULT_BASE_URL)
+        offline.assert_not_called()
 
 
 class MainServerExportTests(unittest.TestCase):

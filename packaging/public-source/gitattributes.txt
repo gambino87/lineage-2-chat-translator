@@ -1,0 +1,4 @@
+# Preserve original source bytes so release-input SHA-256 values stay verifiable.
+* -text
+*.png binary
+*.ico binary
