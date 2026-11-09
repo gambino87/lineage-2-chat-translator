@@ -1,0 +1,43 @@
+LINEAGE 2 CHAT TRANSLATOR - THIRD-PARTY NOTICES
+
+Bundled with this application:
+
+L2J Server Datapack item ID/name reference data (L2J Server contributors).
+The separate generated catalog is in assets/item_catalog.json, with provenance
+and locale coverage; attribution is in assets/ITEM-CATALOG-NOTICE.txt.
+The dataset's GPLv3 license is included in licenses/L2J-ITEM-DATA.txt.
+https://bitbucket.org/l2jserver/l2j-server-datapack
+This is reference data for standard High Five IDs, not data extracted from a
+user's game client. Client data, player chat and model-generated item translations
+are not included. Two explicitly identified localized labels are independently
+recorded as observed link-title aliases; missing locale names stay absent.
+
+Python 3.12 (Python Software Foundation and contributors).
+Full Python license and incorporated third-party notices: licenses/PYTHON.txt.
+https://docs.python.org/3/license.html
+
+Tcl/Tk 8.6 (the Regents of the University of California, Sun Microsystems,
+Scriptics and other contributors). Full notices: licenses/TCL.txt and TK.txt.
+https://www.tcl-lang.org/software/tcltk/license.html
+
+PyInstaller bootloader (PyInstaller Development Team).
+The GNU GPL includes an exception permitting distribution of bundled
+applications under their own terms. Full terms: licenses/PYINSTALLER.txt.
+https://pyinstaller.org/en/stable/license.html
+
+Inno Setup installer engine (Jordan Russell and Martijn Laan).
+Full license: licenses/INNO-SETUP.txt.
+https://jrsoftware.org/files/is/license.txt
+
+Downloaded separately by configuration; not included in this installer:
+
+Ollama 0.40.14: MIT license; its portable archive includes upstream notices
+and GPU dependencies. https://github.com/ollama/ollama/blob/v0.40.14/LICENSE
+
+Qwen3.5 models: Apache License 2.0.
+https://huggingface.co/Qwen/Qwen3.5-9B/blob/main/LICENSE
+
+Qwen2.5 3B: Qwen Research License.
+https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/blob/main/LICENSE
+
+Selecting a downloaded model is subject to that model's license terms.

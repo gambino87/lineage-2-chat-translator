@@ -1,0 +1,1650 @@
+{
+  "schema_version": 1,
+  "purpose": "Research reference for Lineage II translation; not loaded into the model wholesale.",
+  "scope_notes": [
+    "Only a selected subset is active in game_slang.py. Some entries are ambiguous or research-only; consult context and risks.",
+    "Russian coverage is Cyrillic game slang, informal spellings and Latin transliteration, not asserted regional dialect identification. Ukrainian and Bulgarian are separate languages.",
+    "Simplified/Traditional Chinese and Portuguese/Spanish spelling do not identify nationality or spoken dialect.",
+    "Universal abbreviations and linked item names are protected independently. Shared vocabulary must not determine source language.",
+    "English outgoing hints were tested but not enabled because they did not reliably improve qwen2.5:3b replies.",
+    "Examples are synthetic. Source links support usage or broader context, not necessarily every alias; risks describe evidence limits."
+  ],
+  "entries": [
+    {
+      "id": "ru_shots",
+      "language": "Russian",
+      "forms": [
+        "соски",
+        "сосок",
+        "сосками",
+        "soski"
+      ],
+      "english_gloss": "shots (weapon/magic consumables)",
+      "context": "Equipment grades, buying, selling or running out of consumables.",
+      "risks": "Do not infer Soulshots versus Spiritshots without evidence. Outside game context the word has ordinary anatomical meanings.",
+      "sources": [
+        "https://gamechosis.com/en/gamedb/lineage2/basics/slang/"
+      ],
+      "examples": [
+        {
+          "source": "Соски закончились, вернусь через минуту.",
+          "expected_notes": "Shots ran out; preserve timing; do not invent a shot type."
+        }
+      ]
+    },
+    {
+      "id": "ru_buff",
+      "language": "Russian",
+      "forms": [
+        "баф",
+        "бафф",
+        "бафы",
+        "бафни",
+        "бафните",
+        "baf",
+        "bafni"
+      ],
+      "english_gloss": "buff; apply buffs",
+      "context": "Beneficial effects; imperative endings indicate a request.",
+      "risks": "Never map the noun to an imperative. Latin forms are proposed transliterations, not regional dialect labels.",
+      "sources": [
+        "https://www.worldof.ru/lineage/jargon-la2"
+      ],
+      "examples": [
+        {
+          "source": "Баф закончился.",
+          "expected_notes": "The buff wore off; no request."
+        },
+        {
+          "source": "Бафни перед боем.",
+          "expected_notes": "Request a buff before the fight."
+        }
+      ]
+    },
+    {
+      "id": "ru_heal",
+      "language": "Russian",
+      "forms": [
+        "хил",
+        "хилл",
+        "хилер",
+        "хилить",
+        "хильни",
+        "hil",
+        "khil"
+      ],
+      "english_gloss": "heal; healing; healer",
+      "context": "Health restoration or recruitment for a healer.",
+      "risks": "Distinguish action, request and player role. Transliteration alone is weak language evidence.",
+      "sources": [
+        "https://l2base.su/publ/1/1/1-1-0-22"
+      ],
+      "examples": [
+        {
+          "source": "Ищем хила, у нас уже есть танк.",
+          "expected_notes": "Recruiting a healer; do not turn into a healing command."
+        }
+      ]
+    },
+    {
+      "id": "ru_leveling",
+      "language": "Russian",
+      "forms": [
+        "кач",
+        "кача",
+        "качаться",
+        "прокачка",
+        "kach"
+      ],
+      "english_gloss": "leveling; grind for XP",
+      "context": "Character progression, levels and parties.",
+      "risks": "кач in downloads or physical exercise is not automatically leveling. Latin spelling is proposed transliteration.",
+      "sources": [
+        "https://l2base.su/publ/1/1/1-1-0-22"
+      ],
+      "examples": [
+        {
+          "source": "Ищу пати для кача на час.",
+          "expected_notes": "Looking for a leveling party for one hour."
+        }
+      ]
+    },
+    {
+      "id": "ru_spoil",
+      "language": "Russian",
+      "forms": [
+        "спойл",
+        "спойла",
+        "спойлер",
+        "спойлить",
+        "spoil",
+        "spoyl"
+      ],
+      "english_gloss": "Spoil skill/action; spoiler character in recruitment",
+      "context": "Monster interaction versus requesting a party member.",
+      "risks": "Not a plot spoiler. Bare спойл cannot always identify a character. Shared Latin game terms do not identify Russian.",
+      "sources": [
+        "https://4gameforum.com/threads/490099/",
+        "https://gamechosis.com/en/gamedb/lineage2/basics/slang/"
+      ],
+      "examples": [
+        {
+          "source": "Спойл не проходит на этом мобе.",
+          "expected_notes": "Skill does not land; not a person."
+        },
+        {
+          "source": "Нужен спойл в группу.",
+          "expected_notes": "Recruiting a spoiler character."
+        }
+      ]
+    },
+    {
+      "id": "ru_res",
+      "language": "Russian",
+      "forms": [
+        "рес",
+        "рез",
+        "ресни",
+        "реснуть",
+        "ресы",
+        "ресов",
+        "res",
+        "rez"
+      ],
+      "english_gloss": "resurrection or resources, context-dependent",
+      "context": "Death/revival favors resurrection; crafting/trade favors resources.",
+      "risks": "Do not assign one fixed meaning. Plurals can still refer to resurrection scrolls. Latin forms are shared across languages.",
+      "sources": [
+        "https://www.worldof.ru/lineage/jargon-la2"
+      ],
+      "examples": [
+        {
+          "source": "Ресни у ворот, пожалуйста.",
+          "expected_notes": "Resurrect at the gate."
+        },
+        {
+          "source": "Не хватает ресов для крафта.",
+          "expected_notes": "Missing crafting materials."
+        }
+      ]
+    },
+    {
+      "id": "ru_mob_train",
+      "language": "Russian",
+      "forms": [
+        "парик",
+        "парики",
+        "паровоз",
+        "parik",
+        "parovoz"
+      ],
+      "english_gloss": "mob train; gathered pull of monsters",
+      "context": "Pulling, tanking and fighting many monsters.",
+      "risks": "Not a wig/locomotive in combat context; ordinary meanings remain possible. Latin forms are inferred transliterations.",
+      "sources": [
+        "https://4gameforum.com/threads/490099/"
+      ],
+      "examples": [
+        {
+          "source": "Не веди большой парик, хил без маны.",
+          "expected_notes": "Do not bring a large mob train; healer has no mana."
+        }
+      ]
+    },
+    {
+      "id": "ru_cp_ambiguity",
+      "language": "Russian / shared game abbreviation",
+      "forms": [
+        "КП",
+        "кп",
+        "конста",
+        "конст-пати",
+        "CP",
+        "kp"
+      ],
+      "english_gloss": "constant party in recruitment; CP also means Combat Points",
+      "context": "Recruitment/schedules imply a regular party; bars, recovery and potions imply Combat Points.",
+      "risks": "Keep universal CP unchanged unless clarification is explicitly wanted. Alone it supplies no source-language evidence.",
+      "sources": [
+        "https://4gameforum.com/threads/490099/",
+        "https://legacy-lineage2.com/Knowledge/cp.html",
+        "https://www.reddit.com/r/Lineage2/comments/1mkq8lq/lu4_meta_with_coins/"
+      ],
+      "examples": [
+        {
+          "source": "КП ищет хила на вечер.",
+          "expected_notes": "A regular party recruits a healer."
+        },
+        {
+          "source": "CP почти на нуле.",
+          "expected_notes": "Combat Points nearly depleted; preserve CP."
+        }
+      ]
+    },
+    {
+      "id": "ru_shillien_elder",
+      "language": "Russian",
+      "forms": [
+        "ШЕ",
+        "ше",
+        "шилка",
+        "SE"
+      ],
+      "english_gloss": "SE / Shillien Elder",
+      "context": "Class lists, level requirements and party recruitment.",
+      "risks": "No automatic expansion inside names. ше alone must not force Russian identification; it can occur in other languages.",
+      "sources": [
+        "https://l2base.su/publ/1/1/1-1-0-22",
+        "https://4gameforum.com/threads/490099/"
+      ],
+      "examples": [
+        {
+          "source": "Нужен ШЕ 55+.",
+          "expected_notes": "Recruiting SE, preserving 55+."
+        }
+      ]
+    },
+    {
+      "id": "ru_elven_elder",
+      "language": "Russian",
+      "forms": [
+        "ЕЕ",
+        "ее",
+        "EE"
+      ],
+      "english_gloss": "EE / Elven Elder in class context",
+      "context": "Class recruitment or healer lists.",
+      "risks": "Lowercase ее normally also means her/its. Case alone is insufficient; require class context.",
+      "sources": [
+        "https://l2base.su/publ/1/1/1-1-0-22"
+      ],
+      "examples": [
+        {
+          "source": "Ищем ЕЕ в пати.",
+          "expected_notes": "Recruiting EE."
+        },
+        {
+          "source": "Я видел ее у ворот.",
+          "expected_notes": "Saw her, not an Elven Elder abbreviation."
+        }
+      ]
+    },
+    {
+      "id": "ru_prophet",
+      "language": "Russian",
+      "forms": [
+        "ПП",
+        "пп",
+        "профет",
+        "PP"
+      ],
+      "english_gloss": "PP / Prophet in class context",
+      "context": "Buffer recruitment and class comparisons.",
+      "risks": "Short abbreviations are ambiguous; no expansion in nicknames, items or unrelated text.",
+      "sources": [
+        "https://l2base.su/publ/1/1/1-1-0-22"
+      ],
+      "examples": [
+        {
+          "source": "ПП уже есть, нужен хилер.",
+          "expected_notes": "Already have a Prophet; need a healer."
+        }
+      ]
+    },
+    {
+      "id": "ru_enchant",
+      "language": "Russian",
+      "forms": [
+        "точка",
+        "заточка",
+        "точить",
+        "заточить",
+        "tochka"
+      ],
+      "english_gloss": "enchant scroll, enchanting or enchant level depending on grammar",
+      "context": "Equipment, grades and enhancement numbers.",
+      "risks": "точка also means a point/location; preserve exact item names. Latin spelling is proposed transliteration.",
+      "sources": [
+        "https://l2base.su/publ/1/1/1-1-0-22",
+        "https://4gameforum.com/threads/490099/"
+      ],
+      "examples": [
+        {
+          "source": "Хочу заточить меч до +5.",
+          "expected_notes": "Enchant the sword to +5; preserve number."
+        },
+        {
+          "source": "Точка сбора у ворот.",
+          "expected_notes": "Meeting point, not an enchant scroll."
+        }
+      ]
+    },
+    {
+      "id": "ru_recharge",
+      "language": "Russian",
+      "forms": [
+        "залив",
+        "заливка",
+        "залей",
+        "залить ману",
+        "zalivka"
+      ],
+      "english_gloss": "mana recharge; mana-recharging character",
+      "context": "Mana/MP and support roles.",
+      "risks": "Also has ordinary pouring/uploading meanings and other game uses; require mana context. Latin form is inferred.",
+      "sources": [
+        "https://board.scryde.net/threads/recharge-pod-mana-refresh.88588/",
+        "https://4gameforum.com/threads/67333/page-6"
+      ],
+      "examples": [
+        {
+          "source": "Залей ману бишу, у него пусто.",
+          "expected_notes": "Recharge the Bishop's mana; do not translate as pouring water."
+        }
+      ]
+    },
+    {
+      "id": "ru_jewelry",
+      "language": "Russian",
+      "forms": [
+        "бижа",
+        "бижу",
+        "бижи",
+        "bizha"
+      ],
+      "english_gloss": "jewelry equipment",
+      "context": "Equipment and trade.",
+      "risks": "Do not invent necklace/ring/earring when unspecified. Latin form is inferred transliteration.",
+      "sources": [
+        "https://www.worldof.ru/lineage/jargon-la2"
+      ],
+      "examples": [
+        {
+          "source": "Куплю бижу B грейда.",
+          "expected_notes": "Buying B-grade jewelry; preserve grade."
+        }
+      ]
+    },
+    {
+      "id": "ru_party",
+      "language": "Russian / borrowed game term",
+      "forms": [
+        "пати",
+        "пачка",
+        "pati"
+      ],
+      "english_gloss": "party/group in player context",
+      "context": "Recruitment, invitations and group composition.",
+      "risks": "пачка can be an ordinary pack; do not add пт as a blanket alias: it can mean prime time. Shared loanwords do not identify language.",
+      "sources": [
+        "https://l2life.moy.su/publ/manual/igrovoj_sleng/1-1-0-34",
+        "https://4gameforum.com/threads/667259/",
+        "https://4gameforum.com/threads/490099/"
+      ],
+      "examples": [
+        {
+          "source": "В пати осталось два места.",
+          "expected_notes": "Two party slots remain."
+        }
+      ]
+    },
+    {
+      "id": "ru_thanks",
+      "language": "Russian informal / transliteration",
+      "forms": [
+        "спс",
+        "спасиб",
+        "sps",
+        "spasibo"
+      ],
+      "english_gloss": "thanks",
+      "context": "Conversational acknowledgment.",
+      "risks": "Latin sps conflicts with SpS (Spellsinger/Spiritshots). Do not map class or consumable lists to thanks. Informal spelling is not a regional dialect.",
+      "sources": [
+        "https://gamechosis.com/en/gamedb/lineage2/basics/slang/",
+        "https://4gameforum.com/threads/490099/"
+      ],
+      "examples": [
+        {
+          "source": "Спс за помощь!",
+          "expected_notes": "Thanks for the help."
+        }
+      ]
+    },
+    {
+      "id": "ru_mob",
+      "language": "Russian / borrowed game term",
+      "forms": [
+        "моб",
+        "мобы",
+        "мобов",
+        "mob"
+      ],
+      "english_gloss": "monster / hostile NPC",
+      "context": "Combat and farming.",
+      "risks": "Latin mob is shared game vocabulary, not Russian evidence; not necessarily a human crowd.",
+      "sources": [
+        "https://l2life.moy.su/publ/manual/igrovoj_sleng/1-1-0-34"
+      ],
+      "examples": [
+        {
+          "source": "Эти мобы слишком сильные для нас.",
+          "expected_notes": "The monsters are too strong for the group."
+        }
+      ]
+    },
+    {
+      "id": "ru_alt_character",
+      "language": "Russian",
+      "forms": [
+        "твинк",
+        "твин",
+        "альт",
+        "мульт",
+        "tvink"
+      ],
+      "english_gloss": "alternate character; sometimes a deliberately geared low-level character",
+      "context": "Switching characters or describing a secondary character.",
+      "risks": "Do not imply a second person or English non-game meaning of twink. Exact specialized meaning varies; Latin form is inferred.",
+      "sources": [
+        "https://4gameforum.com/threads/490099/"
+      ],
+      "examples": [
+        {
+          "source": "Перезайду на твинка через минуту.",
+          "expected_notes": "Switching to an alt in a minute."
+        }
+      ]
+    },
+    {
+      "id": "en_pull",
+      "language": "English / shared game term",
+      "forms": [
+        "pull",
+        "pulls",
+        "pulling"
+      ],
+      "english_gloss": "engage/lure enemies toward the group",
+      "context": "Starting encounters or gathering enemies.",
+      "risks": "Do not translate as physically dragging an object when monsters are intended.",
+      "sources": [
+        "https://mmorpgs.info/wiki/general/glossary/"
+      ],
+      "examples": [
+        {
+          "source": "Small pulls please, our healer is low.",
+          "expected_notes": "Gather fewer enemies; preserve the request."
+        }
+      ]
+    },
+    {
+      "id": "en_train",
+      "language": "English / shared game term",
+      "forms": [
+        "train",
+        "mob train"
+      ],
+      "english_gloss": "group of monsters following a player",
+      "context": "Warnings about pursuing monsters.",
+      "risks": "Can also mean training; require surrounding combat context. Do not assume griefing intent.",
+      "sources": [
+        "https://gamechosis.com/en/gamedb/lineage2/basics/slang/"
+      ],
+      "examples": [
+        {
+          "source": "Train coming to the entrance, move!",
+          "expected_notes": "Incoming monsters, not a railway train."
+        }
+      ]
+    },
+    {
+      "id": "en_kite",
+      "language": "English / shared game term",
+      "forms": [
+        "kite",
+        "kiting"
+      ],
+      "english_gloss": "keep an enemy at range while fighting/moving",
+      "context": "Combat positioning.",
+      "risks": "Not a flying toy; avoid adding tactical instructions absent from the source.",
+      "sources": [
+        "https://en.wikibooks.org/wiki/Lineage_2/Gameplay_Guides/Solo_Guide_1"
+      ],
+      "examples": [
+        {
+          "source": "Kite it until the healer is back.",
+          "expected_notes": "Maintain distance from the enemy until healer returns."
+        }
+      ]
+    },
+    {
+      "id": "en_aggro",
+      "language": "English / shared game term",
+      "forms": [
+        "aggro",
+        "agro"
+      ],
+      "english_gloss": "enemy attention/threat; provoke an enemy",
+      "context": "Tank targeting, enemies chasing players.",
+      "risks": "Can also describe a hostile attitude; preserve noun/verb distinctions.",
+      "sources": [
+        "https://en.wikibooks.org/wiki/Lineage_2/Gameplay_Guides/Solo_Guide_1"
+      ],
+      "examples": [
+        {
+          "source": "The healer got aggro.",
+          "expected_notes": "Enemy now targets healer; healer did not necessarily become angry."
+        }
+      ]
+    },
+    {
+      "id": "en_wipe",
+      "language": "English / shared game term",
+      "forms": [
+        "wipe",
+        "wiped"
+      ],
+      "english_gloss": "party defeat/deaths; alternatively server progress reset",
+      "context": "Boss attempt versus server/account discussion.",
+      "risks": "Do not force the party-death sense when a server wipe is discussed.",
+      "sources": [
+        "https://4gameforum.com/threads/490099/"
+      ],
+      "examples": [
+        {
+          "source": "We wiped on the boss again.",
+          "expected_notes": "The group died."
+        },
+        {
+          "source": "Will the server wipe after beta?",
+          "expected_notes": "Question about progress reset."
+        }
+      ]
+    },
+    {
+      "id": "en_materials",
+      "language": "English / shared game term",
+      "forms": [
+        "mats",
+        "mat",
+        "key mats",
+        "keymats"
+      ],
+      "english_gloss": "crafting materials; key mats are item-specific components",
+      "context": "Crafting, recipes and trade.",
+      "risks": "Not floor mats. Preserve material/item names and quantities exactly.",
+      "sources": [
+        "https://www.reddit.com/r/Lineage2/comments/1cboqs6",
+        "https://www.reddit.com/r/Lineage2/comments/1usbkos/l2_x1_3040_spoiler_i_need_advice_where_to_grind/"
+      ],
+      "examples": [
+        {
+          "source": "I have the recipe but need more mats.",
+          "expected_notes": "Missing crafting materials."
+        }
+      ]
+    },
+    {
+      "id": "en_box",
+      "language": "English / shared game term",
+      "forms": [
+        "box",
+        "buffer box",
+        "dualbox",
+        "dualboxing"
+      ],
+      "english_gloss": "additional client/character controlled by the same player",
+      "context": "Extra support characters or simultaneous clients.",
+      "risks": "Ordinary container/item meaning remains possible. Do not infer automation or claim any server permits it.",
+      "sources": [
+        "https://www.reddit.com/r/Lineage2/comments/1s42tva/best_experience_for_solo_player/",
+        "https://www.reddit.com/r/Lineage2/comments/1h08973"
+      ],
+      "examples": [
+        {
+          "source": "My buffer box is offline.",
+          "expected_notes": "Secondary support character/client is offline."
+        }
+      ]
+    },
+    {
+      "id": "en_resurrect",
+      "language": "English / shared game term",
+      "forms": [
+        "rez",
+        "res",
+        "ress",
+        "rezz"
+      ],
+      "english_gloss": "resurrect/revive a dead character",
+      "context": "Requests after death.",
+      "risks": "Short res is ambiguous outside revival context; do not use as sole evidence of English.",
+      "sources": [
+        "https://mmorpgs.info/wiki/general/glossary/"
+      ],
+      "examples": [
+        {
+          "source": "Can someone rez me by the stairs?",
+          "expected_notes": "Request resurrection by the stairs."
+        }
+      ]
+    },
+    {
+      "id": "pt_upar",
+      "language": "Portuguese",
+      "forms": [
+        "upar",
+        "upando",
+        "upei",
+        "upou",
+        "upamos",
+        "upar lvl"
+      ],
+      "english_gloss": "level up; gain levels/experience",
+      "context": "High-confidence gaming meaning when discussing a character, level, XP, or a leveling party. Forms are common in Brazilian gaming Portuguese, but do not infer the player's nationality.",
+      "risks": "Do not split or rewrite player/item names. The English word up alone is highly ambiguous. uparlvl without a space is plausible chat compression, not a verified general spelling.",
+      "sources": [
+        "https://forum.l2tnt.com.br/index.php?topic=3641.0",
+        "https://forum.l2tnt.com.br/index.php?topic=10163.0"
+      ],
+      "examples": [
+        {
+          "source": "Bora upar em Cruma?",
+          "expected_notes": "Want to level up in Cruma? Preserve Cruma."
+        }
+      ]
+    },
+    {
+      "id": "pt_farmar",
+      "language": "Portuguese",
+      "forms": [
+        "farmar",
+        "farmando",
+        "farmei",
+        "farma"
+      ],
+      "english_gloss": "farm; repeatedly hunt/gather for resources",
+      "context": "Resource, Adena, item, or XP acquisition in game.",
+      "risks": "Do not translate as literal agriculture in game chat. Does not imply automation, botting, or real-money trading. Preserve the resource name and amount.",
+      "sources": [
+        "https://forum.l2tnt.com.br/index.php?topic=31206.0",
+        "https://forum.l2tnt.com.br/index.php?topic=28825.0"
+      ],
+      "examples": [
+        {
+          "source": "Vou farmar adena, volto em 10 min.",
+          "expected_notes": "I'm going to farm adena; back in 10 minutes."
+        }
+      ]
+    },
+    {
+      "id": "pt_dropar",
+      "language": "Portuguese",
+      "forms": [
+        "dropar",
+        "dropou",
+        "dropando",
+        "dropei"
+      ],
+      "english_gloss": "drop loot; get an item as a drop",
+      "context": "Loot context; grammatical subject decides whether a monster drops something or a player obtains it.",
+      "risks": "Do not force every player-subject occurrence into intentionally discarding an item. Preserve linked item text. Also possible outside games; use sentence context.",
+      "sources": [
+        "https://forum.l2tnt.com.br/index.php?topic=31206.0",
+        "https://forum.l2tnt.com.br/index.php?topic=28825.0"
+      ],
+      "examples": [
+        {
+          "source": "O boss dropou [Club].",
+          "expected_notes": "The boss dropped [Club]. Preserve the linked name exactly."
+        },
+        {
+          "source": "Tentei dropar a receita ontem.",
+          "expected_notes": "I tried to get the recipe as a drop yesterday; not intentionally drop a recipe."
+        }
+      ]
+    },
+    {
+      "id": "pt_buffar",
+      "language": "Portuguese",
+      "forms": [
+        "buffar",
+        "buffando",
+        "buffa",
+        "bufar",
+        "bufa"
+      ],
+      "english_gloss": "apply buffs; buff someone",
+      "context": "A request involving characters, a buffer, a party, or named beneficial skills. Source directly confirms buffar/buffando; single-f spelling is a linguistic variant candidate.",
+      "risks": "Portuguese bufar also means snort/huff. Require game-buff context for that spelling. Buff in patch discussion can mean strengthening a class rather than casting a skill.",
+      "sources": [
+        "https://forum.l2tnt.com.br/index.php?topic=3641.0"
+      ],
+      "examples": [
+        {
+          "source": "Pode me buffar antes da pt?",
+          "expected_notes": "Can you buff me before the party? pode is ordinary can, not protected slang."
+        }
+      ]
+    },
+    {
+      "id": "pt_pt",
+      "language": "Portuguese",
+      "forms": [
+        "pt",
+        "PT"
+      ],
+      "english_gloss": "party, in group/recruitment context",
+      "context": "Examples include pedir pt, entrar na pt, pt full, and pt para upar. Cross-language acronym; retaining PT is often safest.",
+      "risks": "Not a Portuguese-language detector. PT can label a language, country, time zone, or other subject. Do not use pt alone to decide reply language. CP may refer to a constant party or Combat Points; never infer CP from PT.",
+      "sources": [
+        "https://forum.l2tnt.com.br/index.php?topic=10163.0",
+        "https://forum.l2tnt.com.br/index.php?topic=5632.0"
+      ],
+      "examples": [
+        {
+          "source": "Tem vaga na pt para healer?",
+          "expected_notes": "Is there room in the party for a healer?"
+        },
+        {
+          "source": "PT ou EN?",
+          "expected_notes": "Likely language labels; do not force PT into party or infer nationality."
+        }
+      ]
+    },
+    {
+      "id": "pt_puxar",
+      "language": "Portuguese",
+      "forms": [
+        "puxar",
+        "puxa",
+        "puxando"
+      ],
+      "english_gloss": "pull mobs/aggro OR summon a player, depending on object/context",
+      "context": "puxar mobs: attract/bring enemies; puxar player/party to a destination: can mean summon/teleport them. Both are attested in L2 player discussions.",
+      "risks": "Ordinary Portuguese pull has many meanings. No unconditional replacement. Do not translate summoning a party as attacking it; do not infer a particular skill unless named.",
+      "sources": [
+        "https://forum.l2tnt.com.br/index.php?topic=10163.0",
+        "https://forum.l2tnt.com.br/index.php?topic=5632.0",
+        "https://forum.l2tnt.com.br/index.php?topic=22456.0"
+      ],
+      "examples": [
+        {
+          "source": "Puxa so dois mobs.",
+          "expected_notes": "Pull only two mobs."
+        },
+        {
+          "source": "Pode me puxar pra TOI?",
+          "expected_notes": "Can you summon me to TOI? Summoning is a contextual reading; preserve TOI."
+        }
+      ]
+    },
+    {
+      "id": "pt_sumonar",
+      "language": "Portuguese",
+      "forms": [
+        "sumonar",
+        "summonar",
+        "sumona",
+        "sumonando",
+        "sumonado"
+      ],
+      "english_gloss": "summon",
+      "context": "Summon a party member to a location, or summon a creature depending on the object. sumonar and its inflections are attested in L2 community posts.",
+      "risks": "Do not assume all summoning targets are monsters. Do not infer skill availability from the glossary; client chronicle and server rules vary.",
+      "sources": [
+        "https://forum.l2tnt.com.br/index.php?topic=5632.0"
+      ],
+      "examples": [
+        {
+          "source": "Alguem sumona para TOI?",
+          "expected_notes": "Can anyone summon me/us to TOI? Subject omitted; do not invent a named player."
+        }
+      ]
+    },
+    {
+      "id": "pt_char",
+      "language": "Portuguese",
+      "forms": [
+        "char",
+        "chars",
+        "chares"
+      ],
+      "english_gloss": "player character",
+      "context": "The playable character in discussions of level, class, equipment, or alternate characters. Shared borrowed term, not Portuguese-specific.",
+      "risks": "Retain names and class abbreviations; never use char as a language detector. sub can mean subclass in class context but must not be expanded unconditionally. cura is ordinary healing/cure and does not necessarily identify a healer class.",
+      "sources": [
+        "https://forum.l2tnt.com.br/index.php?topic=3641.0",
+        "https://forum.l2tnt.com.br/index.php?topic=22456.0"
+      ],
+      "examples": [
+        {
+          "source": "Meu char ainda ta sem sub.",
+          "expected_notes": "My character still has no subclass, if class context supports sub; do not guess a specific subclass."
+        }
+      ]
+    },
+    {
+      "id": "pt_poleiro",
+      "language": "Portuguese",
+      "forms": [
+        "poleiro",
+        "poleiros",
+        "poleira"
+      ],
+      "english_gloss": "polearm user / polearm leveling character",
+      "context": "L2 leveling-party context, usually a character gathering and killing groups with a polearm. Source confirms poleiro/poleiros; feminine inflection is a linguistic candidate.",
+      "risks": "Ordinary Portuguese poleiro means a perch/roost. Do not assume a specific class such as Warlord solely from this word.",
+      "sources": [
+        "https://forum.l2tnt.com.br/index.php?topic=4885.0"
+      ],
+      "examples": [
+        {
+          "source": "Procuro poleiro para upar a pt.",
+          "expected_notes": "Looking for a polearm user to level the party; not looking for a bird perch."
+        }
+      ]
+    },
+    {
+      "id": "pt_ressar",
+      "language": "Portuguese",
+      "forms": [
+        "ressar",
+        "ressa",
+        "ress"
+      ],
+      "english_gloss": "resurrect / revive, in explicit dead-player context",
+      "context": "Candidate verified in Portuguese MMO player usage, not independently confirmed as common in L2. Enable only after benchmark validation.",
+      "risks": "Do not include rezar as an unconditional synonym: it ordinarily means pray. cura means heal/cure, not necessarily resurrect. res/ress/rez are shared MMO abbreviations and weak language evidence.",
+      "sources": [
+        "https://forum.albiononline.com/index.php/Thread/29010-Anti-jogo-ou-%C3%A9-liberado/"
+      ],
+      "examples": [
+        {
+          "source": "Morri, alguem pode me ressar?",
+          "expected_notes": "I died; can someone resurrect me?"
+        },
+        {
+          "source": "Vou rezar para dropar.",
+          "expected_notes": "I'm going to pray for a drop. Do not translate rezar as resurrect."
+        }
+      ]
+    },
+    {
+      "id": "es_levear",
+      "language": "Spanish",
+      "forms": [
+        "levear",
+        "levelear",
+        "leveando",
+        "leveleando",
+        "leveo",
+        "leveleo"
+      ],
+      "english_gloss": "level up / leveling / gain experience",
+      "context": "Character progression and leveling-party context. Forms vary among communities; no nationality inference.",
+      "risks": "Preserve level numbers and named zones. Different conjugations are linguistic variants; do not substring-match inside names.",
+      "sources": [
+        "https://foro.lineage2.es/thread.php?threadid=31952",
+        "https://l2afliccion.webnode.es/guias/"
+      ],
+      "examples": [
+        {
+          "source": "Busco gente para levear en catas.",
+          "expected_notes": "Looking for people to level in the catacombs."
+        }
+      ]
+    },
+    {
+      "id": "es_farmear",
+      "language": "Spanish",
+      "forms": [
+        "farmear",
+        "farmeando",
+        "farmeo",
+        "farmea"
+      ],
+      "english_gloss": "farm resources/loot/experience",
+      "context": "Repeated in-game acquisition. Attested in server-authored L2 documentation and player community text.",
+      "risks": "Does not by itself imply botting or real-money trading. Shared English root is not evidence that the whole message is English.",
+      "sources": [
+        "https://l2.muplatas2.com/blog/economia-drop-spoil-adena",
+        "https://oldschoolplayer.blogspot.com/2008/09/"
+      ],
+      "examples": [
+        {
+          "source": "Estoy farmeando adena para el set.",
+          "expected_notes": "I'm farming adena for the set."
+        }
+      ]
+    },
+    {
+      "id": "es_dropear",
+      "language": "Spanish",
+      "forms": [
+        "dropear",
+        "dropea",
+        "dropeo",
+        "dropeó",
+        "dropean",
+        "drop"
+      ],
+      "english_gloss": "drop loot; a loot drop",
+      "context": "Monster loot or equipment loss context. Without accents, dropeo may be a noun or verb; infer from syntax.",
+      "risks": "Preserve source agent and direction: a monster dropping something differs from a player losing or obtaining it. drop alone is language-neutral. Item links must remain exact.",
+      "sources": [
+        "https://l2.muplatas2.com/blog/economia-drop-spoil-adena",
+        "https://oldschoolplayer.blogspot.com/2008/09/"
+      ],
+      "examples": [
+        {
+          "source": "Ese mob dropea [Club]?",
+          "expected_notes": "Does that mob drop [Club]? Preserve [Club] exactly."
+        }
+      ]
+    },
+    {
+      "id": "es_bufear",
+      "language": "Spanish",
+      "forms": [
+        "bufear",
+        "buffear",
+        "buffea",
+        "bufea",
+        "bufeado",
+        "buffeado"
+      ],
+      "english_gloss": "buff / apply beneficial effects",
+      "context": "Casting buffs on characters/party; source confirms bufear and buffear. Other forms are normal colloquial inflections.",
+      "risks": "A patch buff can instead be a balance improvement. Do not treat ordinary curar/cura as a resurrection or a specific class name.",
+      "sources": [
+        "https://foro.lineage2.es/thread.php?threadid=31952",
+        "https://oldschoolplayer.blogspot.com/2008/09/"
+      ],
+      "examples": [
+        {
+          "source": "Me puedes buffear antes de salir?",
+          "expected_notes": "Can you buff me before leaving?"
+        }
+      ]
+    },
+    {
+      "id": "es_pj",
+      "language": "Spanish",
+      "forms": [
+        "pj",
+        "PJ",
+        "pjs",
+        "PJs",
+        "personaje"
+      ],
+      "english_gloss": "player character / character",
+      "context": "Characters, class, inventory, levels, or accounts. char is also used and shared across languages.",
+      "risks": "Do not infer player's nationality from this abbreviation. Do not treat a player-name substring as a token. Preserve named characters and linked items.",
+      "sources": [
+        "https://l2afliccion.webnode.es/guias/",
+        "https://2f4s7.github.io/L2C4W/"
+      ],
+      "examples": [
+        {
+          "source": "Cambio al otro pj y vuelvo.",
+          "expected_notes": "I'll switch to my other character and come back."
+        }
+      ]
+    },
+    {
+      "id": "es_catas",
+      "language": "Spanish",
+      "forms": [
+        "cata",
+        "catas",
+        "catacumba",
+        "catacumbas"
+      ],
+      "english_gloss": "catacomb(s)",
+      "context": "L2 hunting-location or party context; short forms appear in player guides and glossary.",
+      "risks": "Ordinary Spanish cata can mean tasting/test; require game-location context. Do not invent the specific catacomb. No assumption that every server has the same mechanics or XP multiplier.",
+      "sources": [
+        "https://foro.lineage2.es/thread.php?threadid=31952",
+        "https://lineagedos.com/updater/Glosario-Kaman-2025.pdf"
+      ],
+      "examples": [
+        {
+          "source": "Hay sitio en catas para uno mas?",
+          "expected_notes": "Is there room in the catacombs for one more?"
+        }
+      ]
+    },
+    {
+      "id": "es_res",
+      "language": "Spanish",
+      "forms": [
+        "res",
+        "rez",
+        "ress",
+        "bres",
+        "brez"
+      ],
+      "english_gloss": "resurrection; bres/brez commonly a Blessed Scroll of Resurrection",
+      "context": "Dead character/resurrection request or scroll context. The community glossary explicitly lists res/rez and bres/brez.",
+      "risks": "Shared acronyms, not language markers. Spanish res ordinarily means a head of livestock; rezar means pray. Keep bres/brez unchanged if item identity is uncertain; do not infer the scroll from plain res.",
+      "sources": [
+        "https://mundol2.foroactivo.com/t67-terminos-en-l2"
+      ],
+      "examples": [
+        {
+          "source": "Estoy muerto, alguien tiene res?",
+          "expected_notes": "I'm dead; does anyone have a res? Do not translate as cattle."
+        },
+        {
+          "source": "Voy a rezar por buen drop.",
+          "expected_notes": "I'll pray for a good drop; not perform resurrection."
+        }
+      ]
+    },
+    {
+      "id": "es_spoilero",
+      "language": "Spanish",
+      "forms": [
+        "spoilero",
+        "spoilera",
+        "espoilero",
+        "espoilera"
+      ],
+      "english_gloss": "spoiler; a character using the Spoil skill",
+      "context": "L2 class/recruitment/resource gathering context. Player-authored glossary explicitly associates these forms with the Spoil skill.",
+      "risks": "Do not translate as someone revealing story spoilers. Do not assume a precise class stage from the nickname. Linked item names remain untouched.",
+      "sources": [
+        "https://lineagedos.com/updater/Glosario-Kaman-2025.pdf"
+      ],
+      "examples": [
+        {
+          "source": "Falta un spoilero para la party.",
+          "expected_notes": "We need a spoiler for the party, meaning a Spoil user."
+        }
+      ]
+    },
+    {
+      "id": "es_kitear_ambiguous",
+      "language": "Spanish",
+      "forms": [
+        "kitear",
+        "kiteando",
+        "kitiar"
+      ],
+      "english_gloss": "context-dependent: kite enemies OR quit/leave the server",
+      "context": "Generic MMO kitear can mean maintaining distance from pursuing enemies. A player-authored L2 glossary instead defines kitear/kitiar as leaving a server; live public community usage also shows that sense.",
+      "risks": "Do not install a blanket mapping. The community glossary itself contains mistakes elsewhere, so treat it as evidence of usage, not a universal definition. Enemy/chase/range context favors kiting; server/player departure context may favor quitting. Leave ambiguity unresolved if context is insufficient.",
+      "sources": [
+        "https://lineagedos.com/updater/Glosario-Kaman-2025.pdf",
+        "https://webos.kick.com/latinflowl2",
+        "https://www10.ulpgc.es/noticia/2025/11/14/como-lexico-videojuegos-cala-idioma-visto-docente-ulpgc-conversation"
+      ],
+      "examples": [
+        {
+          "source": "Kitea al mob mientras recupero mana.",
+          "expected_notes": "Kite the mob while I recover mana; generic MMO reading."
+        },
+        {
+          "source": "Kitearon del server y no vuelven.",
+          "expected_notes": "They quit the server and aren't coming back; possible L2 community reading, not moving around enemies."
+        }
+      ]
+    },
+    {
+      "id": "es_cp_ambiguous",
+      "language": "Spanish",
+      "forms": [
+        "CP",
+        "cp"
+      ],
+      "english_gloss": "Combat Points OR constant/organized party",
+      "context": "Both resource-bar and organized-group uses are documented in Spanish L2 community material; shared across languages. Preserve CP by default.",
+      "risks": "Not a Spanish detector. Recruitment/class roster/schedule context favors a party; damage/potions/bar context favors Combat Points. sub may mean subclass but needs class context; do not blanket-expand either acronym.",
+      "sources": [
+        "https://lineagedos.com/updater/Glosario-Kaman-2025.pdf",
+        "https://oldschoolplayer.blogspot.com/2008/09/"
+      ],
+      "examples": [
+        {
+          "source": "Buscamos healer para CP.",
+          "expected_notes": "Looking for a healer for CP; organized party, preserve acronym."
+        },
+        {
+          "source": "Me quede sin CP y sin mana.",
+          "expected_notes": "I ran out of CP and mana; resource sense, preserve acronym."
+        }
+      ]
+    },
+    {
+      "id": "zh_healer",
+      "language": "Chinese",
+      "forms": [
+        "奶妈",
+        "奶媽",
+        "补师",
+        "補師"
+      ],
+      "english_gloss": "healer",
+      "context": "Party recruitment or combat role. A generic healer, not automatically Bishop, Elven Elder, or Shillien Elder.",
+      "risks": "High confidence for 補師 in original L2 player posts; 奶妈 appears in an older L2 player guide, but exact page fetch timed out and the indexed excerpt was used. 奶 alone is too ambiguous for a global trigger. Simplified/Traditional forms are spelling variants, not evidence of a player's nationality or spoken dialect.",
+      "sources": [
+        "https://forum.gamer.com.tw/C.php?bsn=5264&snA=224618",
+        "https://lineage2.17173.com/content/2006-10-08/20061008213500992.shtml?_platform=PC"
+      ],
+      "examples": [
+        {
+          "source": "组队缺个奶妈，能来吗？",
+          "expected_notes": "Party needs a healer; do not translate as nanny or infer a specific healer class."
+        }
+      ]
+    },
+    {
+      "id": "zh_damage_dealer",
+      "language": "Chinese",
+      "forms": [
+        "打手"
+      ],
+      "english_gloss": "damage dealer / DPS",
+      "context": "Describing the attacking role in a party.",
+      "risks": "High confidence in original Chinese L2 player guides. Outside gaming it can mean a hired thug. Do not infer melee, class, weapon, or number of players.",
+      "sources": [
+        "https://forum.gamer.com.tw/C.php?bsn=5264&snA=239713",
+        "https://lineage2.17173.com/content/2006-10-08/20061008213500992.shtml?_platform=PC"
+      ],
+      "examples": [
+        {
+          "source": "还缺两个打手。",
+          "expected_notes": "Still need two damage dealers; not two assassins or two melee characters."
+        }
+      ]
+    },
+    {
+      "id": "zh_form_party",
+      "language": "Chinese",
+      "forms": [
+        "组队",
+        "組隊",
+        "开组",
+        "開組"
+      ],
+      "english_gloss": "form/join a party; forming a party",
+      "context": "Recruitment, joining, or making a group. 開組 usually means the organizer is forming the group.",
+      "risks": "High confidence. Do not match 组/組 globally: it also counts groups or appears in ordinary words. Negation matters: 不组队 means not partying. Party size and raid access depend on chronicle.",
+      "sources": [
+        "https://forum.gamer.com.tw/C.php?bsn=5264&snA=237500",
+        "https://forum.gamer.com.tw/C.php?bsn=5264&snA=231795"
+      ],
+      "examples": [
+        {
+          "source": "今晚八点开组。",
+          "expected_notes": "Forming a party at eight tonight; retain the time without inventing timezone."
+        }
+      ]
+    },
+    {
+      "id": "zh_need_role",
+      "language": "Chinese",
+      "forms": [
+        "缺奶",
+        "缺补",
+        "缺補",
+        "缺打手"
+      ],
+      "english_gloss": "need a healer; need damage dealers",
+      "context": "A party composition/recruitment clause.",
+      "risks": "High confidence linguistic composition of well-attested L2 role words, but these exact compressed phrases were not separately source-confirmed in the reviewed pages. Match the whole phrase, not 缺 or 奶 independently. 缺奶粉 means short of baby formula and must not trigger healer. Prefer the longer 奶妈/奶媽/補師 expression when overlapping.",
+      "sources": [
+        "https://forum.gamer.com.tw/C.php?bsn=5264&snA=224618",
+        "https://forum.gamer.com.tw/C.php?bsn=5264&snA=239713"
+      ],
+      "examples": [
+        {
+          "source": "练级队缺打手，来两个。",
+          "expected_notes": "Leveling party needs two damage dealers."
+        },
+        {
+          "source": "家里缺奶粉。",
+          "expected_notes": "Negative-control example: ordinary baby formula, not a healer request."
+        }
+      ]
+    },
+    {
+      "id": "zh_pull_mobs",
+      "language": "Chinese",
+      "forms": [
+        "拉怪",
+        "引怪"
+      ],
+      "english_gloss": "pull/lure mobs",
+      "context": "Bringing monsters to the party or controlling aggro.",
+      "risks": "High confidence in original L2 guides. Does not itself imply cheating, griefing, or a particular skill. Match the full phrase; 拉 alone has many meanings.",
+      "sources": [
+        "https://forum.gamer.com.tw/Co.php?bPage=0&bsn=5264&sn=1872879&subbsn=10",
+        "https://tw.ncsoft.com/lineage2/board/qna/view.aspx?nn=43421"
+      ],
+      "examples": [
+        {
+          "source": "先别拉怪，等补师回来。",
+          "expected_notes": "Do not pull yet; wait for the healer to return. Preserve negation."
+        }
+      ]
+    },
+    {
+      "id": "zh_farm_mobs",
+      "language": "Chinese",
+      "forms": [
+        "刷怪"
+      ],
+      "english_gloss": "farm/grind mobs; context can instead mean mobs spawning",
+      "context": "With a player as actor, repeated killing for XP or drops. In discussions of spawn rate, it can describe spawning.",
+      "risks": "Context-dependent, not a fixed replacement. Indexed L2 usage contrasts killing speed with 刷怪 speed, explicitly demonstrating the spawn-rate sense. Do not translate every occurrence as farming.",
+      "sources": [
+        "https://lineage2.17173.com/content/2024-10-22/20241022143409281.shtml"
+      ],
+      "examples": [
+        {
+          "source": "今晚一起刷怪升级。",
+          "expected_notes": "Farm/grind mobs together to level tonight."
+        },
+        {
+          "source": "这里刷怪太慢。",
+          "expected_notes": "Ambiguous: mobs may be spawning too slowly; do not force the player-farming interpretation."
+        }
+      ]
+    },
+    {
+      "id": "zh_buying",
+      "language": "Chinese",
+      "forms": [
+        "收购",
+        "收購",
+        "求购",
+        "求購"
+      ],
+      "english_gloss": "buying / WTB",
+      "context": "Trade advertisement followed by an item, price, or quantity.",
+      "risks": "High confidence for 收購 in official L2 trading documentation; 求购 is a linguistic synonym, not separately evidenced by the cited page. Single 收 means buying only in a clear trade listing; exclude 收到 (received), 收集 (collect), 回收 (recycle/recover), 收工 (finish work). Do not rewrite linked item names or prices.",
+      "sources": [
+        "https://tw.ncsoft.com/lineage2/intro/system/system6.aspx"
+      ],
+      "examples": [
+        {
+          "source": "收购 [Club]，有的私聊。",
+          "expected_notes": "Buying [Club]; PM if you have one. Preserve linked item exactly."
+        },
+        {
+          "source": "收到，谢谢。",
+          "expected_notes": "Negative control: received/got it, thanks; not WTB."
+        }
+      ]
+    },
+    {
+      "id": "zh_selling",
+      "language": "Chinese",
+      "forms": [
+        "出售",
+        "卖",
+        "賣"
+      ],
+      "english_gloss": "selling / WTS",
+      "context": "Trade advertisement with an offered item.",
+      "risks": "High confidence for full trade verbs. 卖/賣 require lexical context and negation; 不卖 is not selling. Single 出 is highly ambiguous and should only get a contextual trade hint when an item/price establishes a listing. 出发 means depart; 出来 means come out; 出货 can refer to getting a drop.",
+      "sources": [
+        "https://tw.ncsoft.com/lineage2/intro/system/system6.aspx",
+        "https://lineage2.17173.com/content/2004-11-13/n861_778069.html?_platform=PC"
+      ],
+      "examples": [
+        {
+          "source": "出售 [Club] 2kk。",
+          "expected_notes": "Selling [Club] 2kk; retain item and price exactly."
+        },
+        {
+          "source": "准备出发。",
+          "expected_notes": "Negative control: getting ready to leave, not selling."
+        }
+      ]
+    },
+    {
+      "id": "zh_whisper",
+      "language": "Chinese",
+      "forms": [
+        "私聊",
+        "私讯",
+        "私訊",
+        "密我"
+      ],
+      "english_gloss": "PM / whisper; message me privately",
+      "context": "Trade or party contact instruction.",
+      "risks": "High confidence for 密我 in a player-authored L2 recruitment example; 私聊/私訊 are general Chinese chat synonyms. Single 密 is too ambiguous. Do not trigger within 秘密 or infer external messaging service.",
+      "sources": [
+        "https://forum.gamer.com.tw/G2.php?bsn=5264&lorder=1&parent=8276&sn=8274"
+      ],
+      "examples": [
+        {
+          "source": "有货的私聊我。",
+          "expected_notes": "PM me if you have stock; no invented contact details."
+        }
+      ]
+    },
+    {
+      "id": "zh_heal_hp",
+      "language": "Chinese",
+      "forms": [
+        "回血",
+        "补血",
+        "補血",
+        "加血"
+      ],
+      "english_gloss": "recover HP / heal",
+      "context": "Combat health recovery. 回血 may be regeneration, while 补血/加血 may be active healing.",
+      "risks": "High confidence in L2 player guides. Do not infer exact skill or whether a potion, passive regeneration, or another player supplies the healing.",
+      "sources": [
+        "https://forum.gamer.com.tw/C.php?bsn=5264&snA=224618",
+        "https://forum.gamer.com.tw/C.php?bsn=5264&snA=239428"
+      ],
+      "examples": [
+        {
+          "source": "先给坦克补血。",
+          "expected_notes": "Heal the tank first."
+        }
+      ]
+    },
+    {
+      "id": "zh_restore_mp",
+      "language": "Chinese",
+      "forms": [
+        "回魔",
+        "回蓝",
+        "回藍",
+        "补魔",
+        "補魔"
+      ],
+      "english_gloss": "recover/restore MP or mana",
+      "context": "Combat-resource recovery or waiting for MP.",
+      "risks": "High confidence for 回魔 in original L2 guide; 回蓝/回藍 are broader MMO synonyms, not independently verified in the cited L2 page. Do not turn every 蓝/藍 into MP: it can mean blue gear or a color. Do not infer Recharge skill unless stated.",
+      "sources": [
+        "https://forum.gamer.com.tw/C.php?bsn=5264&snA=224618"
+      ],
+      "examples": [
+        {
+          "source": "等我回魔，别开怪。",
+          "expected_notes": "Wait for me to recover MP; do not engage mobs yet."
+        }
+      ]
+    },
+    {
+      "id": "zh_soulshot",
+      "language": "Chinese",
+      "forms": [
+        "灵魂弹",
+        "靈魂彈",
+        "灵魂蛋",
+        "靈魂蛋"
+      ],
+      "english_gloss": "Soulshot",
+      "context": "The Lineage II physical-attack consumable; 彈/弹 is official spelling and 蛋 is a player homophone.",
+      "risks": "High confidence official Traditional name and player homophone. Simplified spellings are script equivalents. Do not use 魂弹/魂彈 as an unverified global alias; do not match 蛋 alone or confuse Soulshot with Spiritshot. Preserve linked item names rather than localizing inside links. Match any longer blessed-name expression first.",
+      "sources": [
+        "https://tw.ncsoft.com/lineage2/intro/system/system4.aspx",
+        "https://forum.gamer.com.tw/C.php?bsn=5264&snA=239448",
+        "https://www.lineage2.com/en-us/news/lineage-ii-classic-shadow-of-the-kamael-now-live"
+      ],
+      "examples": [
+        {
+          "source": "灵魂弹用完了，等一下。",
+          "expected_notes": "Out of Soulshots; wait a moment. Not soul bullets, eggs, or Spiritshots."
+        }
+      ]
+    },
+    {
+      "id": "zh_spiritshot",
+      "language": "Chinese",
+      "forms": [
+        "魔灵弹",
+        "魔靈彈"
+      ],
+      "english_gloss": "Spiritshot",
+      "context": "The Lineage II magic consumable.",
+      "risks": "High confidence official Traditional name; Simplified spelling is its script equivalent. Match longest phrases first so 祝福的魔靈彈 is not reduced to ordinary Spiritshot. Do not copy chronicle-specific multipliers from current official documentation into translations.",
+      "sources": [
+        "https://tw.ncsoft.com/lineage2/intro/system/system4.aspx",
+        "https://www.lineage2.com/en-us/news/lineage-ii-classic-shadow-of-the-kamael-now-live"
+      ],
+      "examples": [
+        {
+          "source": "魔灵弹还有吗？",
+          "expected_notes": "Any Spiritshots left? Do not replace with Soulshots."
+        }
+      ]
+    },
+    {
+      "id": "zh_blessed_spiritshot",
+      "language": "Chinese",
+      "forms": [
+        "祝福的魔灵弹",
+        "祝福的魔靈彈",
+        "祝福魔灵弹",
+        "祝福魔靈彈"
+      ],
+      "english_gloss": "Blessed Spiritshot",
+      "context": "The blessed version of the L2 magic consumable.",
+      "risks": "High confidence official full Traditional form plus attested omitted-的 player form. Match before 魔靈彈/魔灵弹; this longest-match rule avoids losing blessed status. Linked item text remains mechanically protected.",
+      "sources": [
+        "https://tw.ncsoft.com/lineage2/intro/system/system4.aspx",
+        "https://forum.gamer.com.tw/Co.php?bsn=05264&sn=1974320",
+        "https://www.lineage2.com/en-us/news/lineage-ii-classic-shadow-of-the-kamael-now-live"
+      ],
+      "examples": [
+        {
+          "source": "求购祝福魔灵弹。",
+          "expected_notes": "Buying Blessed Spiritshots, not ordinary Spiritshots."
+        }
+      ]
+    },
+    {
+      "id": "zh_item_drop",
+      "language": "Chinese",
+      "forms": [
+        "掉落",
+        "掉宝",
+        "掉寶"
+      ],
+      "english_gloss": "drop / loot drop",
+      "context": "Items or currency obtained from monsters or dropped upon death.",
+      "risks": "High confidence official 掉落 and player 掉寶. Do not globally map 爆, 掉, or 爆装: 爆 can indicate burst damage, enchant failure, explosion, or a drop, and 掉线 means disconnect. Use sentence context for direction: an item dropping is different from a player losing it.",
+      "sources": [
+        "https://tw.ncsoft.com/lineage2/intro/system/system4.aspx",
+        "https://forum.gamer.com.tw/Co.php?bPage=0&bsn=5264&sn=2032984&subbsn=1"
+      ],
+      "examples": [
+        {
+          "source": "这个怪会掉落什么？",
+          "expected_notes": "What does this mob drop?"
+        },
+        {
+          "source": "我掉线了。",
+          "expected_notes": "Negative control: disconnected, not dropped loot."
+        }
+      ]
+    },
+    {
+      "id": "zh_powerlevel",
+      "language": "Chinese",
+      "forms": [
+        "带练",
+        "帶練",
+        "带升级",
+        "帶升級"
+      ],
+      "english_gloss": "help someone level / power-level",
+      "context": "A stronger player helping another character gain XP.",
+      "risks": "Medium confidence. A player-authored older L2 article uses 带练级 (lead/help leveling); exact shorter aliases are general MMO usage. Do not infer payment, account sharing, botting, or a professional service. Distinguish 代练/代練, which may mean playing an account on somebody's behalf.",
+      "sources": [
+        "https://games.sina.com.cn/z/tt2/2004-11-04/184078.shtml?from=wap"
+      ],
+      "examples": [
+        {
+          "source": "有人带练吗？我才20级。",
+          "expected_notes": "Anyone able to help me level? I am only level 20; no invented price or account sharing."
+        }
+      ]
+    },
+    {
+      "id": "zh_dualbox",
+      "language": "Chinese",
+      "forms": [
+        "双开",
+        "雙開",
+        "多开",
+        "多開"
+      ],
+      "english_gloss": "dual-box / multibox",
+      "context": "One person running two or multiple game clients/accounts.",
+      "risks": "High confidence in L2 player-authored guide. Two clients does not mean two human players. Do not infer automation or permission under any server's rules.",
+      "sources": [
+        "https://forum.gamer.com.tw/C.php?bsn=5264&snA=237500"
+      ],
+      "examples": [
+        {
+          "source": "这团最多双开。",
+          "expected_notes": "This group allows at most two clients/accounts per player; no automation implication."
+        }
+      ]
+    },
+    {
+      "id": "zh_raid_group",
+      "language": "Chinese",
+      "forms": [
+        "王团",
+        "王團",
+        "推王",
+        "打王"
+      ],
+      "english_gloss": "raid/boss group; fight/kill a boss",
+      "context": "Organizing a group for a boss or fighting a boss.",
+      "risks": "High confidence in original L2 raid-organizer guides. Do not map 王 alone to boss because it can be a name/surname/king or part of another word. 推王 implies tackling a boss, not necessarily successful kill or an instanced dungeon.",
+      "sources": [
+        "https://forum.gamer.com.tw/C.php?bsn=5264&snA=237500",
+        "https://forum.gamer.com.tw/C.php?bsn=5264&snA=231795"
+      ],
+      "examples": [
+        {
+          "source": "今晚王团缺补师。",
+          "expected_notes": "Tonight's boss/raid group needs a healer."
+        }
+      ]
+    },
+    {
+      "id": "ru_moscow_time",
+      "language": "Russian",
+      "forms": [
+        "мск",
+        "МСК"
+      ],
+      "english_gloss": "Moscow time / MSK after a numeric time or range",
+      "context": "A number or time range immediately preceding мск, such as 20-24 мск or 21:00 МСК.",
+      "risks": "Do not convert the hour or infer a timezone for city/name uses. The active pattern does not replace all occurrences of the abbreviation. Model compliance remains imperfect.",
+      "sources": [
+        "https://gramota.ru/poisk?mode=spravka&query=мск"
+      ],
+      "examples": [
+        {
+          "source": "Сбор в 20мск, позже не могу.",
+          "expected_notes": "Meeting at 20 Moscow time; preserve the hour and inability to come later."
+        },
+        {
+          "source": "Я живу в МСК.",
+          "expected_notes": "City usage; do not force a time-zone interpretation."
+        }
+      ]
+    },
+    {
+      "id": "pt_no_precinho",
+      "language": "Portuguese",
+      "forms": [
+        "no precinho"
+      ],
+      "english_gloss": "at a good price / cheaply",
+      "context": "The exact phrase with a protected item/token, explicit k/kk amount, or Portuguese buying/selling words. Incoming English only.",
+      "risks": "Do not treat Portuguese no as English negation. Preserve explicit não and transaction direction. Standalone Precinho can be a proper name and is not expanded. This is a narrow phrase hint, not a general rule for all diminutives; proper-name uses inside trade contexts remain potentially ambiguous.",
+      "sources": [
+        "https://www.infopedia.pt/dicionarios/portugues-ingles/precinho",
+        "https://www.dicionarioinformal.com.br/significado/precinho/33593/"
+      ],
+      "examples": [
+        {
+          "source": "Vendo [Club] no precinho: 10kk, não troco.",
+          "expected_notes": "Selling at a good price; retain exact linked item and 10kk and no trades."
+        },
+        {
+          "source": "Não está no precinho: 50kk por um [Club].",
+          "expected_notes": "Not at a bargain/good price; keep negation and 50kk."
+        }
+      ]
+    },
+    {
+      "id": "zh_buy_equipment_classifier",
+      "language": "Chinese",
+      "forms": [
+        "收個杖",
+        "收个杖",
+        "收把弓"
+      ],
+      "english_gloss": "looking to buy equipment",
+      "context": "A narrow 收 + equipment classifier + optional grade/capability + equipment noun phrase, ending before another CJK character.",
+      "risks": "Do not blanket-replace 收: it can mean receive/collect. Does not cover every buying form or negated 不收這把, and must not match the bow prefix in 弓箭手 (archer).",
+      "sources": [
+        "https://lineage2.17173.com/content/2016-02-13/20160213210432760.shtml?_platform=PC"
+      ],
+      "examples": [
+        {
+          "source": "收把弓，不賣，只出10kk。",
+          "expected_notes": "Buying a bow, not selling, offering only 10kk."
+        }
+      ]
+    },
+    {
+      "id": "zh_top_no_grade_equipment",
+      "language": "Chinese",
+      "forms": [
+        "普頂",
+        "普顶"
+      ],
+      "english_gloss": "top no-grade equipment",
+      "context": "Only when unmasked text mentions staff, bow, or weapon.",
+      "risks": "Do not invent a specific item, exact stats, or compatibility rules. Servers may customize equipment.",
+      "sources": [
+        "https://tw.ncsoft.com/lineage2/news/notice/view.aspx?nn=1015"
+      ],
+      "examples": [
+        {
+          "source": "收個 普頂 可以吃蛋的杖",
+          "expected_notes": "Buying a top no-grade staff that can use shots; subtype unspecified."
+        }
+      ]
+    },
+    {
+      "id": "zh_weapon_shots_capability",
+      "language": "Chinese",
+      "forms": [
+        "可以吃蛋的杖",
+        "杖不能吃蛋",
+        "能吃蛋的武器"
+      ],
+      "english_gloss": "weapon can/cannot use shots",
+      "context": "The 吃蛋 phrase must be adjacent to weapon-capability wording and a weapon noun.",
+      "risks": "Preserve negation and do not infer Soulshot versus Spiritshot. Ordinary eggs, breakfast and holding a staff while eating eggs must not receive a shots hint. Other trade clauses can still be mistranslated by the model.",
+      "sources": [
+        "https://tw.ncsoft.com/lineage2/intro/system/system4.aspx",
+        "https://lineage2.17173.com/content/2016-02-13/20160213210432760.shtml?_platform=PC"
+      ],
+      "examples": [
+        {
+          "source": "這把杖不能吃蛋。",
+          "expected_notes": "This staff cannot use shots."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,237 @@
+#ifndef AppVersion
+  #define AppVersion "1.7.10"
+#endif
+#ifndef AppSource
+  #error AppSource must point to the verified PyInstaller application folder
+#endif
+#ifndef ReleaseDir
+  #error ReleaseDir must point to the release output folder
+#endif
+#ifndef AppIcon
+  #error AppIcon must point to the application icon
+#endif
+#ifndef AppFileList
+  #error AppFileList must point to the verified current payload file list
+#endif
+
+[Setup]
+AppId={{1D8CE3C7-53A6-4C67-AC9F-1C6F0D6B1920}
+AppName=Lineage 2 Chat Translator
+AppVersion={#AppVersion}
+AppVerName=Lineage 2 Chat Translator {#AppVersion}
+AppPublisher=Lineage 2 Chat Translator
+SetupIconFile={#AppIcon}
+DefaultDirName=C:\Lineage 2 Chat Translator
+DefaultGroupName=Lineage 2 Chat Translator
+PrivilegesRequired=lowest
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+MinVersion=10.0
+DisableProgramGroupPage=yes
+DisableWelcomePage=no
+UsePreviousAppDir=yes
+UsePreviousTasks=yes
+AppendDefaultDirName=no
+UninstallDisplayIcon={app}\_internal\assets\L2CT.ico
+Uninstallable=yes
+OutputDir={#ReleaseDir}
+OutputBaseFilename=Lineage-2-Chat-Translator-{#AppVersion}-Setup
+Compression=lzma2
+SolidCompression=yes
+WizardStyle=modern
+CloseApplications=yes
+RestartApplications=no
+AppMutex=Local\L2ProminenceChatTranslator
+SetupMutex=Local\Lineage2ChatTranslatorSetup
+SetupLogging=yes
+VersionInfoVersion={#AppVersion}.0
+VersionInfoDescription=Lineage 2 Chat Translator Setup
+VersionInfoCompany=Lineage 2 Chat Translator
+InfoBeforeFile=USER-README.txt
+
+[Tasks]
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
+
+[Files]
+; Extract the trusted helper outside the installed DLL search directory.
+Source: "{#AppSource}\_internal\assets\cleanup-program-files.ps1"; DestName: "l2-program-cleanup.ps1"; Flags: dontcopy
+#include AppFileList
+
+[Icons]
+Name: "{group}\Lineage 2 Chat Translator"; Filename: "{app}\Lineage2ChatTranslator.exe"; WorkingDir: "{app}"; IconFilename: "{app}\_internal\assets\L2CT.ico"; IconIndex: 0
+Name: "{group}\Configure Lineage 2 Chat Translator"; Filename: "{app}\Lineage2ChatTranslator.exe"; Parameters: "--configure"; WorkingDir: "{app}"; IconFilename: "{app}\_internal\assets\L2CT.ico"; IconIndex: 0
+Name: "{group}\Uninstall Lineage 2 Chat Translator"; Filename: "{uninstallexe}"; IconFilename: "{app}\_internal\assets\L2CT.ico"; IconIndex: 0
+Name: "{autodesktop}\Lineage 2 Chat Translator"; Filename: "{app}\Lineage2ChatTranslator.exe"; WorkingDir: "{app}"; Tasks: desktopicon; IconFilename: "{app}\_internal\assets\L2CT.ico"; IconIndex: 0
+
+[Run]
+Filename: "{app}\Lineage2ChatTranslator.exe"; Description: "Open Lineage 2 Chat Translator"; Flags: postinstall nowait skipifsilent; Check: ModelIsReady
+
+[Messages]
+ConfirmUninstall=Remove %1 and all of its downloaded models, local runtime, saved settings and logs?%n%nThis cannot be undone. Your Lineage II game files will not be removed.
+
+[Code]
+function SetDllDirectory(PathName: String): BOOL;
+  external 'SetDllDirectoryW@kernel32.dll stdcall';
+
+var
+  ModelSetupAttempted: Boolean;
+  ModelSetupComplete: Boolean;
+  AutomaticUpdate: Boolean;
+  ProgramCleanupComplete: Boolean;
+
+function CleanRetiredProgramFiles: Boolean;
+var
+  ExitCode, I: Integer;
+  ResultPath, HelperPath, PowerShellPath, Details: String;
+  Lines: TArrayOfString;
+begin
+  { Never start the translator to clean its own DLLs: its loader may pin them.
+    The system helper runs from Inno's private temporary directory, after file
+    replacement, and exits before model setup, self-test or app restart. }
+  ResultPath := ExpandConstant('{tmp}\l2-program-cleanup-result.json');
+  HelperPath := ExpandConstant('{tmp}\l2-program-cleanup.ps1');
+  PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  WizardForm.StatusLabel.Caption := 'Cleaning up obsolete program files...';
+  try
+    ExtractTemporaryFile('l2-program-cleanup.ps1');
+    ExitCode := -1;
+    { Inno 6 disables WOW64 redirection for Exec in our required 64-bit install
+      mode, so the system-directory constant selects native PowerShell. }
+    Result := Exec(PowerShellPath,
+      '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + HelperPath +
+      '" -InstallRoot "' + ExpandConstant('{app}') + '" -Version "{#AppVersion}" -ResultPath "' + ResultPath + '"',
+      ExpandConstant('{tmp}'), SW_HIDE, ewWaitUntilTerminated, ExitCode) and (ExitCode = 0);
+    Details := '';
+    if LoadStringsFromFile(ResultPath, Lines) then
+      for I := 0 to GetArrayLength(Lines) - 1 do
+        Details := Details + Lines[I] + #13#10;
+    Log('Program file cleanup: ' + Details);
+    if not Result then
+      SuppressibleMsgBox('The new version is installed, but obsolete program files could not be cleaned up.' + #13#10#13#10 +
+        Details + #13#10 +
+        'Close the translator and run this installer again to retry cleanup. Models and settings are kept.',
+        mbError, MB_OK, IDOK);
+  finally
+    DeleteFile(ResultPath);
+    DeleteFile(HelperPath);
+  end;
+end;
+
+function InitializeSetup: Boolean;
+var
+  I: Integer;
+begin
+  { Updates started by older frozen launchers can inherit their _internal DLL
+    search directory. Drop it before starting any installer child process. }
+  if not SetDllDirectory('') then begin
+    SuppressibleMsgBox('Windows could not prepare the installer environment. Close the translator and retry this installer.',
+      mbError, MB_OK, IDOK);
+    Result := False;
+    Exit;
+  end;
+  AutomaticUpdate := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), '/AUTOUPDATE=1') = 0 then
+      AutomaticUpdate := True;
+  Result := True;
+  if AutomaticUpdate and not WizardSilent then begin
+    SuppressibleMsgBox('Automatic updates must be started from the translator Settings.', mbError, MB_OK, IDOK);
+    Result := False;
+  end else if CheckForMutexes('Local\Lineage2ChatTranslatorUpdate') and not AutomaticUpdate then begin
+    SuppressibleMsgBox('An update is already in progress. Wait for it to finish before running another installer.', mbError, MB_OK, IDOK);
+    Result := False;
+  end;
+end;
+
+function InitializeUninstall: Boolean;
+begin
+  Result := not CheckForMutexes('Local\Lineage2ChatTranslatorUpdate');
+  if not Result then
+    SuppressibleMsgBox('An update is in progress. Wait for it to finish before uninstalling.', mbError, MB_OK, IDOK);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := '';
+  if AutomaticUpdate and (not FileExists(ExpandConstant('{app}\Lineage2ChatTranslator.exe')) or
+                         not FileExists(ExpandConstant('{app}\unins000.exe'))) then
+    Result := 'The existing translator installation could not be found. Run the normal installer to repair it.';
+end;
+
+function ModelIsReady: Boolean;
+begin
+  Result := ModelSetupComplete;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ExitCode: Integer;
+  Started, Retry: Boolean;
+begin
+  if CurStep = ssPostInstall then begin
+    ProgramCleanupComplete := CleanRetiredProgramFiles;
+    if not ProgramCleanupComplete then Exit;
+  end;
+  if (CurStep = ssPostInstall) and not WizardSilent then begin
+    ModelSetupAttempted := True;
+    repeat
+      WizardForm.StatusLabel.Caption := 'Setting up the local translation model...';
+      Started := Exec(ExpandConstant('{app}\Lineage2ChatTranslator.exe'),
+        '--install-model', '', SW_SHOWNORMAL, ewWaitUntilTerminated, ExitCode);
+      ModelSetupComplete := Started and (ExitCode = 0);
+      Retry := False;
+      if not ModelSetupComplete then
+        Retry := MsgBox('Model setup was not completed. Retry now?' + #13#10#13#10 +
+          'The launcher is installed. If you cancel, use Configure Lineage 2 Chat Translator from the Start menu to finish later.',
+          mbError, MB_RETRYCANCEL) = IDRETRY;
+    until ModelSetupComplete or not Retry;
+  end;
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if (CurPageID = wpFinished) and not ProgramCleanupComplete then
+    WizardForm.FinishedLabel.Caption := 'The new version is installed, but program-file cleanup needs a retry. Close the translator and run this installer again.'
+  else if (CurPageID = wpFinished) and ModelSetupAttempted and not ModelSetupComplete then
+    WizardForm.FinishedLabel.Caption := 'The launcher is installed, but model setup was not completed. Open Configure Lineage 2 Chat Translator from the Start menu to finish setup before translating.';
+end;
+
+function GetCustomSetupExitCode: Integer;
+begin
+  Result := 0;
+  if not ProgramCleanupComplete then Result := 4
+  else if ModelSetupAttempted and not ModelSetupComplete then Result := 2;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ExitCode, I: Integer;
+  ResultPath, Details: String;
+  Lines: TArrayOfString;
+  Started: Boolean;
+begin
+  if CurUninstallStep = usUninstall then begin
+    { Retained by Inno until exit, including after the cleanup helper exits. }
+    CreateMutex('Local\Lineage2ChatTranslatorUninstall');
+    UninstallProgressForm.StatusLabel.Caption := 'Removing the local model, runtime, settings and logs...';
+    { Inno provides a private temporary directory for this uninstall run. }
+    ResultPath := ExpandConstant('{tmp}\l2-uninstall-result.txt');
+    try
+      Started := Exec(ExpandConstant('{app}\Lineage2ChatTranslator.exe'),
+        '--uninstall-cleanup --cleanup-result "' + ResultPath + '"',
+        '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
+      if not Started or (ExitCode <> 0) then begin
+        Details := '';
+        if LoadStringsFromFile(ResultPath, Lines) then
+          for I := 0 to GetArrayLength(Lines) - 1 do
+            Details := Details + Lines[I] + #13#10;
+        MsgBox('Uninstall could not finish cleaning up the local data.' + #13#10#13#10 +
+          Details + #13#10 + 'The launcher has been kept so you can resolve the issue and retry uninstalling.',
+          mbError, MB_OK);
+        Abort;
+      end;
+    finally
+      DeleteFile(ResultPath);
+    end;
+  end;
+end;

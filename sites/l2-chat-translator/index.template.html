@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#15191e">
+  <meta name="description" content="Lineage 2 Chat Translator for Windows. Download, requirements, setup instructions and chat-log compatibility.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Lineage 2 Chat Translator">
+  <meta property="og:description" content="Windows download, requirements and setup instructions for the local chat translator.">
+  <meta property="og:url" content="https://lineage-2-chat-translator.vargas87706341.chatgpt.site/">
+  <link rel="canonical" href="https://lineage-2-chat-translator.vargas87706341.chatgpt.site/">
+  <link rel="icon" type="image/png" href="/assets/L2CT.png" sizes="32x32">
+  <title>Lineage 2 Chat Translator</title>
+  <style>
+    :root{color-scheme:dark;font-family:"Segoe UI",system-ui,sans-serif;color:#e1e5e9;background:#15191e}
+    *{box-sizing:border-box}
+    body{max-width:780px;margin:0 auto;padding:36px 24px;font-size:15px;line-height:1.6}
+    h1{font-size:26px;line-height:1.3;margin:0 0 10px;font-weight:600}
+    h2{font-size:17px;margin:0 0 12px;font-weight:600}
+    p{margin:0 0 12px}
+    a{color:#9ecbff;text-underline-offset:3px}
+    a:hover{text-decoration-thickness:2px}
+    a:focus-visible,summary:focus-visible{outline:2px solid #9ecbff;outline-offset:4px}
+    header{padding-bottom:24px}
+    .title-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+    .title-row h1{margin:0}
+    .title-row img{width:32px;height:32px;flex:none}
+    section{padding:22px 0;border-top:1px solid #363e47}
+    .download{display:inline-block;padding:9px 14px;background:#283c50;border:1px solid #6483a1;border-radius:3px;color:#f1f6fb;text-decoration:none;font-weight:600;margin:0 0 16px}
+    .download:hover{background:#334c65}
+    dl{display:grid;grid-template-columns:110px minmax(0,1fr);gap:4px 16px;margin:0 0 12px}
+    dt{color:#aeb7c0}
+    dd{margin:0}
+    .muted,footer{color:#aeb7c0;font-size:13px}
+    ol,ul{padding-left:23px;margin:0}
+    li+li{margin-top:8px}
+    code{font-family:Consolas,ui-monospace,monospace;font-size:.92em;overflow-wrap:anywhere}
+    details{margin-top:10px}
+    summary{cursor:pointer;width:fit-content}
+    .app-preview{margin:18px 0 0}
+    .overlay-example{background:#10100f;border:1px solid #625841;border-radius:4px;overflow:hidden;font:13px/1.6 Tahoma,"Segoe UI",sans-serif}
+    .overlay-bar{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;padding:7px 11px;background:#201f1a;color:#d4c59a;font-size:12px;border-bottom:1px solid #625841}
+    .overlay-model{color:#a59e8b;font-size:11px;margin-right:auto}
+    .overlay-controls{color:#a59e8b;font-size:10px;white-space:nowrap}
+    .overlay-messages{padding:27px 12px 13px}
+    .overlay-messages p{margin:0 0 4px;overflow-wrap:anywhere}
+    .overlay-messages p:last-child{margin:0}
+    .chat-party{color:#0cff0c}.chat-all{color:#f0f0ed}.chat-trade{color:#f15353}
+    .chat-time{color:#a59e8b;font-size:11px}
+    .chat-language,.chat-name{text-decoration:underline;text-underline-offset:2px}
+    .chat-name{font-weight:600}
+    .reply-example{margin-top:16px;padding:15px;background:#101820;border:1px solid #3a4754;border-radius:4px;font-size:13px}
+    .reply-example h3{font-size:13px;font-weight:600;margin:0 0 12px}
+    .reply-row{display:grid;grid-template-columns:70px minmax(0,1fr);gap:10px;align-items:baseline;margin-top:9px}
+    .reply-row>span{color:#aeb7c0;font-size:12px}
+    .example-field{padding:7px 10px;background:#1b2632;border:1px solid #465464;border-radius:2px;overflow-wrap:anywhere}
+    .copy-status{margin:8px 0 0 80px;color:#9de3ac;font-size:11px}
+    figcaption{margin-top:10px;color:#aeb7c0;font-size:12px}
+    .release-entry{padding:16px 0;border-top:1px solid #2b333c}
+    .release-entry h3{display:flex;align-items:center;gap:10px;font-size:15px;margin:0 0 7px}
+    .release-entry ul{font-size:14px}
+    .current-release{font-size:11px;font-weight:400;color:#b9d8f7;border:1px solid #48627d;border-radius:3px;padding:1px 6px}
+    .earlier-releases{margin-top:2px}
+    .earlier-releases summary{font-size:14px;margin-bottom:14px;color:#9ecbff}
+    footer{border-top:1px solid #363e47;padding-top:18px}
+    .skip{position:absolute;left:12px;top:-70px;background:#15191e;padding:8px}
+    .skip:focus{top:8px}
+    @media(max-width:480px){body{padding:24px 18px}h1{font-size:23px}dl{grid-template-columns:85px minmax(0,1fr);gap:6px 12px}.overlay-controls{display:none}.overlay-example{font-size:12px}.reply-example{padding:12px}.reply-row{grid-template-columns:1fr;gap:3px}.copy-status{margin-left:0}}
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header>
+    <div class="title-row"><img src="/assets/L2CT.png" width="32" height="32" alt=""><h1>Lineage 2 Chat Translator</h1></div>
+    <p>Translates chat from your client’s log in a separate overlay. Runs locally through Ollama.</p>
+    <p class="muted"><a href="https://discord.gg/V4ph4Ww5m">Discord</a> — Post feedback and report bugs.</p>
+  </header>
+  <main id="main">
+    <section aria-labelledby="download-title">
+      <h2 id="download-title">Download</h2>
+      <a class="download" href="/downloads/{{INSTALLER}}" download>Download for Windows</a>
+      <dl>
+        <dt>Version</dt><dd>{{VERSION}}</dd>
+        <dt>System</dt><dd>Windows 10/11, 64-bit</dd>
+        <dt>Installer</dt><dd>{{SIZE_MB}} MB</dd>
+        <dt>Model</dt><dd>{{MODEL_NAME}} — {{MODEL_STATUS}}</dd>
+        <dt>Model storage</dt><dd>About {{MODEL_DOWNLOAD_GB}} GB, plus Ollama and temporary setup files</dd>
+      </dl>
+      <p class="muted">The model is downloaded during setup. A GPU is recommended; speed depends on your hardware and game load.</p>
+      <p class="muted">{{SIGNING_NOTICE}}</p>
+    </section>
+    <section id="setup" aria-labelledby="setup-title">
+      <h2 id="setup-title">Setup</h2>
+      <ol>
+        <li>Run the installer and choose the application folder.</li>
+        <li>Select a model, its storage folder, and your Lineage II <code>system</code> folder. Complete the download and configuration.</li>
+        <li>Open the translator and your game. Position the overlay; new chat is translated as it appears in the log.</li>
+      </ol>
+      <p class="muted">In the installed launcher, open Settings to check for updates. When a newer version is available, click Install update &amp; restart. Models and settings are kept.</p>
+      <p class="muted">Click Channels on the overlay to slide open its filter tray. Choose the chat channels you want to see—for example, Say and Party. Your selection is saved and applies immediately. Drag the top-right grip to resize the overlay.</p>
+    </section>
+    <section id="replies" aria-labelledby="reply-title">
+      <h2 id="reply-title">Replies</h2>
+      <p>Click a language code in the overlay to select a reply language, or a player name to address that player. Type in English and press Enter. The translation is copied to the clipboard for you to paste into the game.</p>
+      <p class="muted">Recognized universal trade listings show <code>[--]</code>; choose their reply language manually. Change the game folder or translation preferences in the launcher’s Settings.</p>
+      <figure class="app-preview">
+        <div class="overlay-example" aria-label="Illustrative translation overlay with sample messages">
+          <div class="overlay-bar"><strong>Translations</strong><span class="overlay-model">{{MODEL_NAME}}</span><span class="overlay-controls" aria-hidden="true">Lock &nbsp; Channels ▴ &nbsp; Settings &nbsp; × &nbsp; ◥</span></div>
+          <div class="overlay-messages">
+            <p class="chat-party"><span class="chat-time">[19:42:06]</span><span class="chat-language">[RU]</span><span class="chat-name">[Arven]</span>: Looking for a healer [12~19] (8/9)</p>
+            <p class="chat-all"><span class="chat-time">[19:43:12]</span><span class="chat-language">[ES]</span><span class="chat-name">[Nira]</span>: We’re meeting at the Giran gate.</p>
+            <p class="chat-trade"><span class="chat-time">[19:43:20]</span><span class="chat-language">[--]</span><span class="chat-name">[Rook]</span>: WTS [Sword of Delusion] 12kk</p>
+          </div>
+        </div>
+        <div class="reply-example" aria-label="Illustrative English-to-Spanish direct reply">
+          <h3>Reply to Nira in Spanish</h3>
+          <div class="reply-row"><span>English</span><div class="example-field">Can I join your party?</div></div>
+          <div class="reply-row"><span>Spanish</span><div class="example-field">&quot;Nira ¿Puedo unirme al grupo?</div></div>
+          <p class="copy-status">Copied to clipboard</p>
+        </div>
+        <figcaption>Illustrative preview with fictional messages. Overlay size, text size, and opacity are adjustable in the app.</figcaption>
+      </figure>
+    </section>
+    <section aria-labelledby="notes-title">
+      <h2 id="notes-title">Compatibility and notes</h2>
+      <ul>
+        <li>Chat logs have been verified with Reborn Legacy and Origins. Other clients need a supported <code>Network.log</code>; choosing a folder does not enable game logging.</li>
+        <li>The app reads existing logs. It does not access game memory, modify game files, or send messages. Server rules still apply.</li>
+        <li>Translations can misread slang or missing context. Known item links use an offline English item database; unknown IDs keep their original names. Custom server items may differ.</li>
+        <li>Party recruitment descriptions are translated while their level ranges and player counts stay unchanged. Recognized web addresses keep their original spelling.</li>
+        <li>Updates preserve settings and downloaded models, and clean up verified obsolete program files and temporary downloads. Uninstalling removes the app and its managed models, runtime, settings, and logs.</li>
+        <li>Chat and replies are processed locally. Downloads and update checks contact external servers; those servers can see your IP address. Update checks include the app version, not chat text. Clipboard history or sync follows your Windows settings.</li>
+      </ul>
+    </section>
+    <section id="changelog" aria-labelledby="changelog-title">
+      <h2 id="changelog-title">Changelog</h2>
+      {{CHANGELOG}}
+    </section>
+  </main>
+  <footer>
+    <p>Independent utility. Not affiliated with the game’s publisher or the servers listed above.</p>
+  </footer>
+</body>
+</html>

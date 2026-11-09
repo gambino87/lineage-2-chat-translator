@@ -1,0 +1,9 @@
+Interactive installation includes model setup, translation verification and
+cleanup before the completion page. If model setup is canceled, the installer
+reports it as incomplete; Configure Lineage 2 Chat Translator can resume later.
+
+Game folders remain editable in Settings > System folder. Model configuration is
+available from the Start menu. Upgrades preserve downloads and preferences.
+
+Full uninstall removes the application, registered models/runtime, preferences,
+logs and owned installation leftovers. Lineage II game files are not removed.

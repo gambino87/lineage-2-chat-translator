@@ -1,0 +1,585 @@
+{
+  "schema_version": 1,
+  "product": "Lineage 2 Chat Translator",
+  "version": "1.7.11",
+  "purpose": "Source published for transparency; not a claim of byte-for-byte binary reproducibility.",
+  "published_installer": {
+    "file": "Lineage-2-Chat-Translator-1.7.11-Setup.exe",
+    "bytes": 11001626,
+    "sha256": "f504bf55a26c46d4ee2be3eaaa75dfad7ad1ea8f0b78211f7dfadfaab911db96",
+    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.7.11-Setup.exe"
+  },
+  "release_toolchain": {
+    "python": "3.12.10",
+    "pyinstaller": "6.22.3",
+    "inno_setup": "6.7.3"
+  },
+  "application_sources": [
+    {
+      "path": "installer_main.py",
+      "sha256": "9218c0e242c3b842d172c8946b5e846178f7baaa61051920b4a14aaf139937ac"
+    },
+    {
+      "path": "installer_runtime.py",
+      "sha256": "87ccbd83d82f92327bbe805acee9ecc36404ec30119f453cc3cfe27ded2c5eef"
+    },
+    {
+      "path": "app_paths.py",
+      "sha256": "8db7add728422bf12875eeded92d39e43dd4a861534c3cb9e4afa24d4056411d"
+    },
+    {
+      "path": "app_version.py",
+      "sha256": "6e1f0510a9f8b2d4d3c2047914302b19199055db2f50527dfd3db097063e599e"
+    },
+    {
+      "path": "app_icon.py",
+      "sha256": "5c21884a05a48b848567c83d51c1a9931fae8e6d7dcebc1b3cc09a357d5ad007"
+    },
+    {
+      "path": "translator_app.py",
+      "sha256": "41196d73c0936eb24aff0a65d602abea2f246cb5f4fe6513b9fb787309be87cb"
+    },
+    {
+      "path": "translator_core.py",
+      "sha256": "220065fdfb713b77371a4d9283e83ec880381ffc6a0dfaf303f639d02b850bd5"
+    },
+    {
+      "path": "game_slang.py",
+      "sha256": "dc9030d8b08f5109e56d41d0aa9163af6893e5b600308cc95a1d9c88f1d29780"
+    },
+    {
+      "path": "item_catalog.py",
+      "sha256": "445ee410f2ddd4fd85b048bf6a0ebb368964fd8a34e80a44683d463027999f4e"
+    },
+    {
+      "path": "game_log_setup.py",
+      "sha256": "6a12f1f8f4eed26a74796150f11ce9e824adec4544284b8547350527aac49430"
+    },
+    {
+      "path": "chat_overlay.py",
+      "sha256": "a9ed481ad1189eb353c5ce85ba3a93309407abb2d1cac3e1e9d4fd199ae91be8"
+    },
+    {
+      "path": "overlay_tray.py",
+      "sha256": "ee9283c0a3a6c8549b58ca277109c99e03a549c8596e5ca57c6c36f5b8089d31"
+    },
+    {
+      "path": "reply_composer.py",
+      "sha256": "9bbb38ccb18843e112fa349ab20bba53890e325547e6893d35cda0abb0cc35fb"
+    },
+    {
+      "path": "uninstall_data.py",
+      "sha256": "68c4650c9bed041029ee222f541ebf78199b2c5413089ce39fa8d9183ef26508"
+    },
+    {
+      "path": "app_updater.py",
+      "sha256": "a7701dc07c66921f30f7aca025c5399d874ada071c4bd84f95849b7aa1aa47e9"
+    },
+    {
+      "path": "update_controls.py",
+      "sha256": "7b15650fc479296dd91462fe8cb10c95b13413739a9b7c517f4fbd23ac856246"
+    },
+    {
+      "path": "installation_cleanup.py",
+      "sha256": "712d73ee9e823639f2f997113ec8440dc1278426f1eb25b88ed1714097c32c1c"
+    }
+  ],
+  "application_assets": [
+    {
+      "path": "assets/L2CT.ico",
+      "sha256": "2c296e6fc876fc2d025aa0c46172b4ccc39481ac36053116863c0a17a3c39624"
+    },
+    {
+      "path": "assets/L2CT.png",
+      "sha256": "f422dfebb4b52532f4c9d954cbd85185e340a4eb0ecc5e89ade0359e5bfb6707"
+    },
+    {
+      "path": "assets/item_catalog.json",
+      "sha256": "c68b6b2180ccc0fe79100baa772acf4161b1a812f976638fc38d27fdc5b5c9d9"
+    },
+    {
+      "path": "assets/ITEM-CATALOG-NOTICE.txt",
+      "sha256": "7ed01899c8023f347aa444d39cb1523efb3f0b0cee3f84fd98eee6730eed036d"
+    },
+    {
+      "path": "assets/apply-update.ps1",
+      "sha256": "89ba66234f2bdd62a2786e3cfe16c481d696fa550e758a8b8b26e25b6793dea0"
+    },
+    {
+      "path": "assets/cleanup-program-files.ps1",
+      "sha256": "b9f1e9add97131b89511cd63c90cab3c7eaee3c308cbcd3e93eedf7d096bb617"
+    }
+  ],
+  "files": [
+    {
+      "path": ".gitattributes",
+      "sha256": "a61bbe6a11034dec3bf2161ff671c7cd55f6cdc23deba55725de8fcf02836f23"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "60489b424e2a64e6995f9abf6dae9964210a078478b78d0b286df11594c4393f"
+    },
+    {
+      "path": "LICENSE-NOTICE.md",
+      "sha256": "8616b91db1fd58c31992a906a3a681d7ab7a2fb8b21c74e6704801212717d115"
+    },
+    {
+      "path": "README.md",
+      "sha256": "33495499577894211134b2e0828174a7d6c09b02b2ce98675b98cd6e0374d1b8"
+    },
+    {
+      "path": "Setup Ollama.ps1",
+      "sha256": "a1e113c4cf5c66c11a8bc7024ccc9ed06141c5964a20e63633cebc9018790709"
+    },
+    {
+      "path": "Start Translator.cmd",
+      "sha256": "ae7872baf46b9bdce2fd52f53ac7d6d73bebc92c33acc5232b2a4bd84ea519e5"
+    },
+    {
+      "path": "Start Translator.ps1",
+      "sha256": "ccdc9b4bd9cbebfb5c50e0d4f46d45c278e9c87e92049cdea3ddb4ae7ead1695"
+    },
+    {
+      "path": "app_icon.py",
+      "sha256": "5c21884a05a48b848567c83d51c1a9931fae8e6d7dcebc1b3cc09a357d5ad007"
+    },
+    {
+      "path": "app_paths.py",
+      "sha256": "8db7add728422bf12875eeded92d39e43dd4a861534c3cb9e4afa24d4056411d"
+    },
+    {
+      "path": "app_updater.py",
+      "sha256": "a7701dc07c66921f30f7aca025c5399d874ada071c4bd84f95849b7aa1aa47e9"
+    },
+    {
+      "path": "app_version.py",
+      "sha256": "6e1f0510a9f8b2d4d3c2047914302b19199055db2f50527dfd3db097063e599e"
+    },
+    {
+      "path": "assets/ITEM-CATALOG-NOTICE.txt",
+      "sha256": "7ed01899c8023f347aa444d39cb1523efb3f0b0cee3f84fd98eee6730eed036d"
+    },
+    {
+      "path": "assets/L2CT.ico",
+      "sha256": "2c296e6fc876fc2d025aa0c46172b4ccc39481ac36053116863c0a17a3c39624"
+    },
+    {
+      "path": "assets/L2CT.png",
+      "sha256": "f422dfebb4b52532f4c9d954cbd85185e340a4eb0ecc5e89ade0359e5bfb6707"
+    },
+    {
+      "path": "assets/apply-update.ps1",
+      "sha256": "89ba66234f2bdd62a2786e3cfe16c481d696fa550e758a8b8b26e25b6793dea0"
+    },
+    {
+      "path": "assets/cleanup-program-files.ps1",
+      "sha256": "b9f1e9add97131b89511cd63c90cab3c7eaee3c308cbcd3e93eedf7d096bb617"
+    },
+    {
+      "path": "assets/item_catalog.json",
+      "sha256": "c68b6b2180ccc0fe79100baa772acf4161b1a812f976638fc38d27fdc5b5c9d9"
+    },
+    {
+      "path": "chat_overlay.py",
+      "sha256": "a9ed481ad1189eb353c5ce85ba3a93309407abb2d1cac3e1e9d4fd199ae91be8"
+    },
+    {
+      "path": "game_log_setup.py",
+      "sha256": "6a12f1f8f4eed26a74796150f11ce9e824adec4544284b8547350527aac49430"
+    },
+    {
+      "path": "game_slang.py",
+      "sha256": "dc9030d8b08f5109e56d41d0aa9163af6893e5b600308cc95a1d9c88f1d29780"
+    },
+    {
+      "path": "game_slang_research.json",
+      "sha256": "03222997e69445ca0067ff62ab1bd9ceb8f30bbdd6e7f1f00d39cb137a7debb2"
+    },
+    {
+      "path": "installation_cleanup.py",
+      "sha256": "712d73ee9e823639f2f997113ec8440dc1278426f1eb25b88ed1714097c32c1c"
+    },
+    {
+      "path": "installer_main.py",
+      "sha256": "9218c0e242c3b842d172c8946b5e846178f7baaa61051920b4a14aaf139937ac"
+    },
+    {
+      "path": "installer_runtime.py",
+      "sha256": "87ccbd83d82f92327bbe805acee9ecc36404ec30119f453cc3cfe27ded2c5eef"
+    },
+    {
+      "path": "item_catalog.py",
+      "sha256": "445ee410f2ddd4fd85b048bf6a0ebb368964fd8a34e80a44683d463027999f4e"
+    },
+    {
+      "path": "ollama_service.ps1",
+      "sha256": "dba81764ae9a77c3b38cfcc3e11bb188201b8cf2e4c889edf50a3af8584938bd"
+    },
+    {
+      "path": "overlay_tray.py",
+      "sha256": "ee9283c0a3a6c8549b58ca277109c99e03a549c8596e5ca57c6c36f5b8089d31"
+    },
+    {
+      "path": "packaging/DISCORD.md",
+      "sha256": "e962234fd7d2fc7f2a79bcca3f1a9b3cd75fe44fee5602a0220b534432d30c40"
+    },
+    {
+      "path": "packaging/HOSTING.md",
+      "sha256": "bf80af1f6a238373674c614a8ef857ce5cb2ca0f18d9223f3f1898fd8c945dff"
+    },
+    {
+      "path": "packaging/INSTALL-COMPLETE.txt",
+      "sha256": "ad9954e91db0d77465b92334f504025cac4d67448045ac0b0ecbd8eea95eaeaa"
+    },
+    {
+      "path": "packaging/README.md",
+      "sha256": "17e663d064fb65ee4ea28b4a7a20819dcb0424fb0ad852315596ea7595eebcd9"
+    },
+    {
+      "path": "packaging/THIRD-PARTY-NOTICES.txt",
+      "sha256": "cabdf4bcc2792dc485bff6cfe446858c08888e09873ba06066a6ed2dcf40fb4f"
+    },
+    {
+      "path": "packaging/USER-README.txt",
+      "sha256": "945baebfbe08b737066c30cf47f46b587eef5ba68063127e9dcf427a70cce796"
+    },
+    {
+      "path": "packaging/bootstrap-tools.ps1",
+      "sha256": "9d3ec0a1daa5fbbf13bdd82ed7dbe0adcf9b7c935ca0531b953e57e88a49e338"
+    },
+    {
+      "path": "packaging/build.py",
+      "sha256": "5371efacafe4e9ec5399872ec08e0704b0219679097140a3adb024bd3f182db8"
+    },
+    {
+      "path": "packaging/build_environment.py",
+      "sha256": "2576f52ab3cc0273066af56e21a0802936e956ed48a89188d76961554071bf91"
+    },
+    {
+      "path": "packaging/download-page.html",
+      "sha256": "c4baa8af5d4e33f35d3243c5b57995d8e024b94abeceea4d1ec988c00d536094"
+    },
+    {
+      "path": "packaging/export_main_server.py",
+      "sha256": "d3fa20495fa4bb6103fe640c92fcefe29351f023b2c713dabde8fdfae8436840"
+    },
+    {
+      "path": "packaging/installer.iss",
+      "sha256": "6f6bb12cf3aa3a411c98265f1abf7f32a12bb1f7b640cf489de8e075daac1e54"
+    },
+    {
+      "path": "packaging/licenses/INNO-SETUP.txt",
+      "sha256": "2e5346868c2a18434489824e11d65c3031620f792fefc415d05f19cd441abf5c"
+    },
+    {
+      "path": "packaging/licenses/L2J-ITEM-DATA.txt",
+      "sha256": "5735febb4249f2fea35481266e47668eb890404f83714ec3d12f68e80c95d72f"
+    },
+    {
+      "path": "packaging/licenses/PYINSTALLER.txt",
+      "sha256": "0598064c7d2718e38d7914a7d08343b2fa008e3bea9ebba2aa7a6ffa5900dd64"
+    },
+    {
+      "path": "packaging/licenses/PYTHON.txt",
+      "sha256": "e502c6b880ff58d614901495a9009c136539cd0b1e2a2abb8fc00b934c203419"
+    },
+    {
+      "path": "packaging/licenses/TCL.txt",
+      "sha256": "c0a69a2bfd757361ec7e6143973b103c90409316b49e9c88db26ad6388e79f16"
+    },
+    {
+      "path": "packaging/licenses/TK.txt",
+      "sha256": "0d1e4405f6273f091732764ed89b57066be63ce64869be6c71ea337dc4f2f9b5"
+    },
+    {
+      "path": "packaging/main-server/configure_discord.py",
+      "sha256": "d69afb288f3df70ad95fd160929fbec48f5227fa585c946f82e363c1346d8fb9"
+    },
+    {
+      "path": "packaging/main-server/deploy_release.py",
+      "sha256": "8259eadfe305a053c7fc639c4755b06061f46a3e5283d8711e21ed716cc61d9a"
+    },
+    {
+      "path": "packaging/main-server/discord_release.py",
+      "sha256": "5645b5049f1753a751c4f52440e76d944a696c8f71463f49f0e683b9c28531a1"
+    },
+    {
+      "path": "packaging/main-server/http-bootstrap.conf",
+      "sha256": "4a4ce0b9a5b066292058fcef633562f39ec2bd5108961cdbc47312589f4be075"
+    },
+    {
+      "path": "packaging/main-server/https.conf",
+      "sha256": "f4fb6128a4c1f37957ad5062a27527043050774c6677e84ced1b3410965424a9"
+    },
+    {
+      "path": "packaging/main-server/renew-nginx.sh",
+      "sha256": "7fb61d0244f033d33681a077acbbd1b78b860cc85737836a37d645df16338c35"
+    },
+    {
+      "path": "packaging/main-server/security-headers.conf",
+      "sha256": "7641e53eae334d258bf568ce0229dbcf70feb4260ebe26c833712925b43b16b2"
+    },
+    {
+      "path": "packaging/make-icon.ps1",
+      "sha256": "4b101140e8c35bf2d36467e993484b100696d348768effc295b4600137aad664"
+    },
+    {
+      "path": "packaging/payload_layout.py",
+      "sha256": "256f68c974c0f23f3029ccb35e3a8716ed309bd1eedf0f4e2a472de692fdda9b"
+    },
+    {
+      "path": "packaging/release_site.py",
+      "sha256": "91f058d8f260444d61b74bc518e2df692f0f52671046b7db558f2e606c417f1f"
+    },
+    {
+      "path": "packaging/requirements-build.txt",
+      "sha256": "12443442c4b7ef74a1a733560ed9256de202d1ab0c7a290e8d6f8ccd46e18c4c"
+    },
+    {
+      "path": "packaging/verify_dll_upgrade.py",
+      "sha256": "9c71f4b48d3b7f0af2e2a6ba6bd8528cc5f3382b79fabec707af6d993bf6f4c7"
+    },
+    {
+      "path": "packaging/verify_locked_dll_cleanup.py",
+      "sha256": "7b79ed14baab5c672c465c127e4c8e10a7f81b4984413b32a64d9e76b46784a2"
+    },
+    {
+      "path": "reply_composer.py",
+      "sha256": "9bbb38ccb18843e112fa349ab20bba53890e325547e6893d35cda0abb0cc35fb"
+    },
+    {
+      "path": "sites/l2-chat-translator/.openai/hosting.json",
+      "sha256": "99b7449687d0005b542e2c2e6e11cfe4d28bb3b4e549a607ee0620fab08e94f9"
+    },
+    {
+      "path": "sites/l2-chat-translator/README.md",
+      "sha256": "394a732a53738f26e061a48029024deb76a36228c4f9e60f8478fcb282ac3205"
+    },
+    {
+      "path": "sites/l2-chat-translator/changelog.json",
+      "sha256": "442aab949695c3259048f3c9e32979465013ac16796141e428d8cb8869252433"
+    },
+    {
+      "path": "sites/l2-chat-translator/index.template.html",
+      "sha256": "10b6e3c9c5a2aeaa13e4f477697328727890d04d7876d0ba656f5270e14df81e"
+    },
+    {
+      "path": "tests/test_app_update_integration.py",
+      "sha256": "d33f89e2796196709f312cc1b2d028aa865b9e2daa410795871efa6350643e8a"
+    },
+    {
+      "path": "tests/test_app_updater.py",
+      "sha256": "c64f463b2e7ba6b65af16f9eacea57a7a62c125f35f3c28d2a3a1e57d8f099f6"
+    },
+    {
+      "path": "tests/test_build_environment.py",
+      "sha256": "2dd1631a1bbe5129ed25173879b8e185820469f4777ff0ab92eb11109db287e8"
+    },
+    {
+      "path": "tests/test_chat_overlay.py",
+      "sha256": "b48e5fb6549881e3f21ef9f32c62c2bc391533f2b97c539aaf849707ea166849"
+    },
+    {
+      "path": "tests/test_chinese_staff_slang.py",
+      "sha256": "7463d363a7134cb9a3d5225117f4744ac88b515c72023660cc7f076e8e499519"
+    },
+    {
+      "path": "tests/test_discord_deploy_hook.py",
+      "sha256": "9ce96d6d19a3669f2c848bb18bf9e30cc3c45d95835bc44307d8c77efb32daca"
+    },
+    {
+      "path": "tests/test_discord_release.py",
+      "sha256": "de29514d3007655acc30a46db3eac8eb25c045407e2a38910ea6138897939837"
+    },
+    {
+      "path": "tests/test_discord_setup.py",
+      "sha256": "67404b5af73e93b9180af1b07564653f30fee57fc1143d98228d123ea01b57a3"
+    },
+    {
+      "path": "tests/test_dll_upgrade.py",
+      "sha256": "076b3bd865c9ee49f44cc2b221a5ec235e80255e7bae53dc1564ff96db73e333"
+    },
+    {
+      "path": "tests/test_external_cleanup.py",
+      "sha256": "0f1e5e43534de6c59091e8ccdf501e370a791be67221e668ade675b4567fff1c"
+    },
+    {
+      "path": "tests/test_game_log_setup.py",
+      "sha256": "57e3b8afef333357639dbdf20256566b19e2fb7b4afc9aad0ac6dd20341c9a55"
+    },
+    {
+      "path": "tests/test_game_slang.py",
+      "sha256": "f9e5769f96afcd803920e3c912bd3e0cd2e8222d6be5b9e6d89ca601df1a5e02"
+    },
+    {
+      "path": "tests/test_install_lifecycle.py",
+      "sha256": "658004e059447c8fd69e398a9f533630fbb21f4550324deb863fc50c793747cc"
+    },
+    {
+      "path": "tests/test_installation_cleanup.py",
+      "sha256": "39c64f64a6a84a2e54fb96d4b1ebcd9eb3a60e38576637c215f0666eb44c3cb6"
+    },
+    {
+      "path": "tests/test_installer_main.py",
+      "sha256": "827495e2a9275d06fa036e46a280caaa03fb51f3c5df4543fb2fd95a72435a80"
+    },
+    {
+      "path": "tests/test_installer_runtime.py",
+      "sha256": "e6a1176bb7bce0a81661b5cc0c0af2247df3f5818ef1fbebc0c6146778e52ec3"
+    },
+    {
+      "path": "tests/test_item_catalog.py",
+      "sha256": "07ef00dda540693e2749304a08d43b39ad87ba34bcfe4685e0064068cf861019"
+    },
+    {
+      "path": "tests/test_item_link_catalog.py",
+      "sha256": "092af90a2869812f95abaf26f02b2af577ed9879de6a87130bcd574169713a95"
+    },
+    {
+      "path": "tests/test_item_recovery.py",
+      "sha256": "f9f22d3e66b7e4afbfd08d47db42ecb1cb8a14cc12c53b98ce90d5b1de2a1d33"
+    },
+    {
+      "path": "tests/test_language_detection.py",
+      "sha256": "404975728367c7ef33ddf43013447b298c2da5e87dbfbfce44e1207bd65e0c81"
+    },
+    {
+      "path": "tests/test_locked_dll_cleanup.py",
+      "sha256": "bdf9620de8116d39ea6d96983c4dda120da308287ee60774b5d77e97423d42f2"
+    },
+    {
+      "path": "tests/test_main_server_deploy.py",
+      "sha256": "fedb1e4e85d1289fe59e211d2de54a9f4be2cb8aa0abdb97ff8438b5a8f0ddec"
+    },
+    {
+      "path": "tests/test_main_server_export.py",
+      "sha256": "65206fae1ce1aa55fde08c6aae0486456e546050ec9190a57529c976a37bdca6"
+    },
+    {
+      "path": "tests/test_ollama_service.py",
+      "sha256": "1e2234064184380641ec067d1474e0fcb4c00d5d4f62a53c62c0c7fb04dee828"
+    },
+    {
+      "path": "tests/test_overlay_channel_filters.py",
+      "sha256": "ad1bf724f3a497c733b4a96833c77b8ad5bec7ed5d8c2ecb3a9b43cb000d7dd9"
+    },
+    {
+      "path": "tests/test_overlay_integration.py",
+      "sha256": "332aca1021ac6d4197f4daca5555ec40468907aab59cdc57cc2e9ec1dc2f97bc"
+    },
+    {
+      "path": "tests/test_overlay_tray.py",
+      "sha256": "7dfb5c837bc79cbe9d8460a31129a4c3363d12617471a0b0956ac2b46c036571"
+    },
+    {
+      "path": "tests/test_overlay_tray_integration.py",
+      "sha256": "0627309912f1f7bba12f42237d74026be5ffc333196e5df1da0100d9f2a33936"
+    },
+    {
+      "path": "tests/test_party_links.py",
+      "sha256": "e6daccd43677a03862357a066645271e170f028d8ee5906641125354407a3610"
+    },
+    {
+      "path": "tests/test_payload_layout.py",
+      "sha256": "faa68b7f9fe71b501334d51f21be2d910cde7b4443cc1e873676b2aad993c268"
+    },
+    {
+      "path": "tests/test_portuguese_price_slang.py",
+      "sha256": "9c30a3671e1f4fd0a86bc9862f93e7c5bcd534b481086d27bf4b17cb9c26e37d"
+    },
+    {
+      "path": "tests/test_price_recovery.py",
+      "sha256": "ccc2cf03396c6fa2263c958e9ab0ab544215bba968d038fab60432767e3729eb"
+    },
+    {
+      "path": "tests/test_release_site.py",
+      "sha256": "7d0e3e17affce769b420c4ec707cc856abfb0910c17cb6627de3145d2ac2483e"
+    },
+    {
+      "path": "tests/test_reply_composer.py",
+      "sha256": "c6d9e1f97ea0fd6dca2b3978670e240ea28f882bdf027447c9efafb55c906d00"
+    },
+    {
+      "path": "tests/test_service_shutdown.py",
+      "sha256": "96525243f44eabcc27d6fb47a9af3f42a2a0845955f3725bb80621f76dca9d59"
+    },
+    {
+      "path": "tests/test_source_url_protection.py",
+      "sha256": "c2b481b0812ef10b7ba98c468147b9797dead44c31c55d56ae629995498a5fcc"
+    },
+    {
+      "path": "tests/test_startup_visibility.py",
+      "sha256": "92a99aefb5409b0c3676f7d66fcb592a453e7fe5f784ed6b1a3358bd339feec2"
+    },
+    {
+      "path": "tests/test_translator_core.py",
+      "sha256": "292f1baaaed1286f8495a6ead8f28fe133ac25246a11fa1c3d8d1130f5726a20"
+    },
+    {
+      "path": "tests/test_uninstall_data.py",
+      "sha256": "86585693a92335969c87e6589918284c41601e2660de55f78dcafec5d3632b63"
+    },
+    {
+      "path": "tests/test_universal_trade.py",
+      "sha256": "b915940e64876c0d76568f23504155e9cdafcf91ac814a31b17c2f23878d3990"
+    },
+    {
+      "path": "tests/test_update_controls.py",
+      "sha256": "0a8f6798b24d39106bf0adb025345ff3ee34d8d2b2d34c2908bc65cb94b7c1f2"
+    },
+    {
+      "path": "tests/test_url_restore.py",
+      "sha256": "4c16e9d2538424c714b61255d167185c3ca96e25c23e4c043ed999091272f86f"
+    },
+    {
+      "path": "tests/test_url_restore_pipeline.py",
+      "sha256": "2c42e0bf6b552e83824858b440787c3ab9bf2dc7368794dc56d389710e6ecaaa"
+    },
+    {
+      "path": "tests/test_whisper_integration.py",
+      "sha256": "ab9d51293651b0ec66bad10fb923cc3f66e9a740dbe66009d07ee7a28371d70a"
+    },
+    {
+      "path": "tools/import_item_catalog.py",
+      "sha256": "46f22c9f263cfcb78f36060cac4fea180eff9b557185ce8875d3b742105e9a53"
+    },
+    {
+      "path": "translator_app.py",
+      "sha256": "41196d73c0936eb24aff0a65d602abea2f246cb5f4fe6513b9fb787309be87cb"
+    },
+    {
+      "path": "translator_core.py",
+      "sha256": "220065fdfb713b77371a4d9283e83ec880381ffc6a0dfaf303f639d02b850bd5"
+    },
+    {
+      "path": "uninstall_data.py",
+      "sha256": "68c4650c9bed041029ee222f541ebf78199b2c5413089ce39fa8d9183ef26508"
+    },
+    {
+      "path": "update_controls.py",
+      "sha256": "7b15650fc479296dd91462fe8cb10c95b13413739a9b7c517f4fbd23ac856246"
+    },
+    {
+      "path": "verify_local.py",
+      "sha256": "2c924871800e8b91e6294d7b197b4df24bda196f8ba78b0f29088146eda5f683"
+    }
+  ],
+  "publication_adapted_files": [
+    "packaging/HOSTING.md",
+    "packaging/USER-README.txt",
+    "tests/test_chat_overlay.py",
+    "tests/test_overlay_integration.py",
+    "tests/test_reply_composer.py",
+    "tests/test_source_url_protection.py",
+    "tests/test_translator_core.py",
+    "tests/test_whisper_integration.py"
+  ],
+  "publication_adaptations": "Replace identifying test/example player aliases, a streamer path, and the operator's private SSH-key location; correct the user guide version heading to 1.7.11. Application modules and six assets are unchanged.",
+  "validation": {
+    "tests_run": 740,
+    "tests_passed": 732,
+    "tests_skipped": 8,
+    "application_only_build_passed": true,
+    "packaged_headless_self_test_passed": true
+  }
+}

@@ -1,0 +1,161 @@
+[
+  {
+    "version": "1.7.11",
+    "changes": [
+      "Recognized universal trade listings now show [--] in the overlay instead of a guessed language. Linked items, known English item names, prices and trade shorthand are recognized locally.",
+      "Trade messages containing natural-language text keep their detected language. Clicking [--] or the sender still focuses the reply box and lets you choose a reply language."
+    ]
+  },
+  {
+    "version": "1.7.10",
+    "changes": [
+      "Matched Party chat text to the bright green in the supplied in-game reference."
+    ]
+  },
+  {
+    "version": "1.7.9",
+    "changes": [
+      "Added a Channels tray that slides upward from the overlay, letting you change saved chat filters without opening Settings.",
+      "Moved the resize grip to the top-right corner. Dragging it keeps the bottom-left corner anchored.",
+      "The channel tray follows the overlay, stays on-screen near the top edge, and closes when the overlay is hidden or locked."
+    ]
+  },
+  {
+    "version": "1.7.8",
+    "changes": [
+      "Added selectable overlay chat channels, including Say, Party, Clan, Alliance, Whisper, Shout, Trade, World/global, Hero and Command channel.",
+      "Channel selections apply immediately to recent messages and are saved for the next launch; All and None buttons make selection easier.",
+      "Hidden channels no longer contribute to the overlay's new-message count. The launcher transcript keeps all received messages."
+    ]
+  },
+  {
+    "version": "1.7.7",
+    "changes": [
+      "Added a small Discord link to the launcher and website for feedback and bug reports."
+    ]
+  },
+  {
+    "version": "1.7.6",
+    "changes": [
+      "Fixed a false missing or duplicated URL error when chat mixes normal links with spaced addresses such as Kick. com /channel.",
+      "Preserved multiple and repeated web addresses, their spelling and spacing, and URL paths containing game abbreviations or prices.",
+      "Added checks for changed, missing, duplicated and reordered links in translations and replies."
+    ]
+  },
+  {
+    "version": "1.7.5",
+    "changes": [
+      "Fixed ucrtbase.dll remaining after an update when the translator had loaded it.",
+      "Obsolete-file cleanup now runs independently after the translator closes and finishes before it reopens.",
+      "Added a Windows DLL-lock regression check; models, settings, and changed or unrecognized files are preserved."
+    ]
+  },
+  {
+    "version": "1.7.4",
+    "changes": [
+      "Reduced the packaged DLL count from 52 to nine by using the runtime already supplied by Windows 10/11.",
+      "Updates automatically remove the 43 unchanged compatibility DLLs left by earlier versions, saving about 2.35 MB of installed files.",
+      "Isolated the build from unrelated development tools and added dependency-origin, packaged-library and upgrade-cleanup checks."
+    ]
+  },
+  {
+    "version": "1.7.3",
+    "changes": [
+      "Manual and automatic updates now remove obsolete program files when they still match a previously shipped copy.",
+      "Models, settings, game files, and modified or unrecognized files are preserved; interrupted cleanup can be retried by running the installer again.",
+      "Installer builds use an exact current-file list and required license list, excluding historical installers, development data, and backup files."
+    ]
+  },
+  {
+    "version": "1.7.2",
+    "changes": [
+      "Party recruitment links now show translated descriptions instead of [Linked item].",
+      "Party level ranges and player counts keep their exact text; linked item names still use the English item database.",
+      "Added checks for missing, changed, duplicated, or reordered party details, including messages containing both party and item links."
+    ]
+  },
+  {
+    "version": "1.7.1",
+    "changes": [
+      "Disabled inherited Ollama request logging and extra browser origins when starting the translator's local service.",
+      "Added bounds for chat records, model responses, update records, and runtime downloads; hardened reply text and archive path handling.",
+      "Pinned localhost requests to a numeric local address and hardware checks to the Windows system executable.",
+      "Replaced unclear operational numbers with named limits and added comments explaining translation, cleanup, and update behavior."
+    ]
+  },
+  {
+    "version": "1.7.0",
+    "changes": [
+      "Added an Updates control in Settings that checks for newer releases and offers Install update & restart.",
+      "Updates verify the download, stop Ollama, install the launcher, remove temporary update files, and reopen automatically.",
+      "Existing models, settings, game-folder selection, and overlay preferences are kept during updates.",
+      "Added retry messages and checks to prevent overlapping launches, installations, or uninstall operations."
+    ]
+  },
+  {
+    "version": "1.6.0",
+    "changes": [
+      "Linked items now use their item IDs to find English names in an offline database of 19,199 standard items.",
+      "Fixed Chinese item titles such as Shining Knife and Sword of Solidarity staying Chinese in English chat.",
+      "Preserved enchant levels and item annotations, and fixed adjacent links leaking formatting text.",
+      "Added a structure for verified item names in other languages; unknown IDs keep their original titles."
+    ]
+  },
+  {
+    "version": "1.5.7",
+    "changes": [
+      "Added the L2CT icon to the application, installer, shortcuts, and windows."
+    ]
+  },
+  {
+    "version": "1.5.6",
+    "changes": [
+      "Clicking a language code or player name in the overlay activates the English reply box for immediate typing."
+    ]
+  },
+  {
+    "version": "1.5.5",
+    "changes": [
+      "Removed Try a message from Settings.",
+      "Simplified reply headings to show the selected language and, for direct replies, the recipient."
+    ]
+  },
+  {
+    "version": "1.5.4",
+    "changes": [
+      "Added a Starting translator progress window while Ollama starts and the selected model is checked."
+    ]
+  },
+  {
+    "version": "1.5.3",
+    "changes": [
+      "Configured installations now open the translator directly, without showing setup on every launch."
+    ]
+  },
+  {
+    "version": "1.5.2",
+    "changes": [
+      "Added visible shutdown progress while the dedicated Ollama service stops. The launcher stays open until cleanup finishes."
+    ]
+  },
+  {
+    "version": "1.5.0",
+    "changes": [
+      "Installation now waits for model setup and verification before completion.",
+      "Uninstall removes the application and its managed models, runtime, settings, logs, and setup leftovers."
+    ]
+  },
+  {
+    "version": "1.4.4",
+    "changes": [
+      "Moved game-folder selection into setup. The chat-log path can still be changed later in the launcher."
+    ]
+  },
+  {
+    "version": "1.4.3",
+    "changes": [
+      "Closing the main translator now stops its dedicated Ollama service.",
+      "Improved Portuguese trade-price slang and specific Chinese equipment terms."
+    ]
+  }
+]

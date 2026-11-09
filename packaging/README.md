@@ -1,0 +1,153 @@
+# Build the Windows installer
+
+Use Windows 10/11 x64 and Python 3.12 x64 with Tcl/Tk. From the project root:
+
+```powershell
+pwsh -NoProfile -File packaging/bootstrap-tools.ps1
+.build-tools/venv/Scripts/python.exe packaging/build.py
+```
+
+The bootstrap installs pinned Python build dependencies into a project-local
+virtual environment. It extracts a portable Inno compiler package, verifies its
+digest and upstream Authenticode/ECDSA signatures, and collects upstream license
+notices. It does not install the Inno application or register file associations.
+
+Each build uses a fresh `.build/<version>-<UTC timestamp>/source` folder containing
+only explicitly listed application modules, icon assets, the item catalog with
+its attribution notice, and the trusted update and cleanup helpers. Personal settings, logs,
+review data, development scripts, tests and model weights cannot enter this
+source staging directory. PyInstaller discovers Python/Tcl/Tk dependencies.
+
+Native dependency discovery uses isolated Python (`-I`), an explicit PATH limited
+to the pinned interpreter/venv and Windows directories, and a separate cache for
+each build. `build_environment.py` validates binary origins against those roots
+and excludes only Windows-provided `api-ms-win-core-*`, `api-ms-win-crt-*` and
+`ucrtbase.dll` before collection. The nine required application/VC runtime DLLs
+remain bundled. Every collected DLL/PYD must match the complete audited inventory
+and its source checksum. Unexpected native files or changed origins fail the build.
+
+The frozen self-test uses an empty working directory and OS-only PATH, with no
+Python, venv or development-tool fallback. It exercises Tcl, TLS, hashing and
+compression, verifies that UCRT loaded from Windows System32, and rejects an
+obsolete app-local ucrtbase.dll even if the system copy is also loaded. The Windows
+10/11 minimum is unchanged. See Microsoft's [UCRT deployment guidance](https://learn.microsoft.com/en-us/cpp/windows/universal-crt-deployment?view=msvc-170).
+
+`verify_dll_upgrade.py` additionally validates the 52-to-nine transition using
+isolated copies under `.build`: overlay the new payload, run the real cleanup,
+check all 43 retired DLLs, verify current/preserved bytes, and run the upgraded
+frozen self-test. It never modifies the registered installation. This headless
+check does not claim interactive testing across every supported Windows version.
+
+The frozen payload is checked against its expected root, assets and license
+layout. License staging copies only the six required notices. Inno receives an
+exact generated file list rather than a recursive wildcard, and the payload is
+checked again after compilation. Historical installers and development data
+cannot enter through an old build folder or an extra license/asset backup.
+
+The build verifies earlier release installers against their manifests, then
+generates `_internal/assets/obsolete-program-files.json`: current file paths and
+hashes of retired program files, not old binaries or user data. Windows path
+comparisons are case-insensitive, including ancestor conflicts. The generated
+plan is included in the payload manifest and the packaged self-test validates it.
+
+After current files are installed, both manual and automatic installs extract
+`assets/cleanup-program-files.ps1` from the trusted installer into Inno's private
+temporary directory. The installer first clears any app-specific DLL search
+directory inherited from an older updater. Native Windows PowerShell runs the
+helper hidden from the neutral temporary directory; the installer waits for it before model setup or app restart. The
+frozen translator never performs this cleanup: loading it can pin the same old
+DLL it needs to remove. Its deprecated cleanup switch now returns a retry message.
+
+The helper holds the app instance guard, binds its target to the registered
+installation, validates the complete retirement plan and removes only unchanged
+retired files whose hashes match an earlier release. It rejects links, junctions,
+path escapes and current-file overlaps, and only removes empty nested folders.
+Models, settings, logs, uninstaller files and changed/unrecognized files are
+preserved. A failure returns a nonzero installer result with a retry instruction;
+rerunning safely retries missing or previously locked files. This is independent
+of the updater's cleanup of its owned temporary download and helper files.
+
+`verify_locked_dll_cleanup.py` tests the actual Windows DLL-lock case in isolated
+copies under `.build`: a child process maps the old runtime, deletion is refused
+while loaded, and cleanup succeeds after the child exits. It checks both a full
+old payload and a partial upgrade with only ucrtbase.dll left, verifies current
+and preserved bytes, and runs the new frozen headless self-test. It does not
+close or replace the user's running translator or modify its registry entries.
+
+`assets/L2CT.png` is the supplied artwork. `assets/L2CT.ico` contains Windows icon
+sizes from 16 through 256 pixels; regenerate it with `packaging/make-icon.ps1`
+after replacing the PNG. Its native-size frame preserves the original PNG bytes.
+Both assets are explicitly staged, bundled and recorded with hashes. The ICO is
+embedded in the program and installer and referenced by the installed shortcuts.
+Tk roots use the bundled icon as the default for their child windows.
+
+`assets/item_catalog.json` is a separate attributed item-name dataset; its source
+revision and XML checksums are embedded. `tools/import_item_catalog.py` reproduces
+the catalog from its pinned public source. The bundled self-test checks item
+counts and resolves the reported Chinese links without a model or network.
+The item-data license is included as `licenses/L2J-ITEM-DATA.txt`.
+
+`assets/apply-update.ps1` is copied from the installed application for update
+handoff; it is never fetched as executable script from the website. The packaged
+self-test checks that this helper is included. Update tests use fake downloads,
+processes and windows; no installed application is replaced by the build. A live
+upgrade test requires explicit permission and a controlled installed copy.
+
+The script invokes the frozen app with `--self-test --output <file>` and compiles
+the installer only after it exits successfully. It does not create windows,
+download a runtime/model, start a service, or install the resulting application.
+Outputs are written to `release/<version>/`. `.build/latest-build.json` points
+to the exact frozen app and build folder for further headless validation.
+
+## Release installer and homepage together
+
+For a new app release, increment `app_version.py` and add an entry to
+`sites/l2-chat-translator/changelog.json`. Use a list of objects with `version`
+and `changes` (a list of plain-text notes), newest first, keeping earlier entries.
+The newest changelog version must match the app version. The build checks this
+before compiling; Site preparation also checks and renders the release history.
+The normal build first runs the regression suite, then builds and checks the
+installer and prepares `sites/l2-chat-translator/dist/` from the same release
+manifest. Homepage version, all installer links, size, checksum, signing status
+and default model details are generated together. Checksums remain in the download
+metadata, without a technical verification section on the homepage. Edit feature descriptions in
+`sites/l2-chat-translator/index.template.html`, not the generated `dist/index.html`.
+
+To prepare/check an existing unchanged release without rebuilding it:
+
+```powershell
+.build-tools/venv/Scripts/python.exe packaging/release_site.py
+.build-tools/venv/Scripts/python.exe packaging/release_site.py --check
+```
+
+Preparation rejects stale source/icon hashes, failed packaged self-tests,
+changed installer bytes and unexpected public files. Older versioned downloads
+are retained. A prepared/published version cannot be rebuilt under the same name.
+The existing release manifests are required to verify retained downloads.
+
+The build **prepares** files; it does not publish them. Export the verified bundle
+with `packaging/export_main_server.py` and publish atomically to the main server
+following `HOSTING.md`. Run the check above immediately before export. Deploy the
+homepage and installer together, then verify the public installer checksum.
+The original Sites mirror is separate and retains its existing identity/audience.
+
+Interactive installation waits for `--install-model` before its completion page.
+That mode returns only after successful model verification, owned archive cleanup,
+preference saving and service shutdown, or returns nonzero if setup is canceled.
+Uninstall invokes `--uninstall-cleanup` after the standard removal confirmation
+and before program files are removed. The helper holds the app instance lock;
+failure aborts program removal so cleanup can be retried. Data deletion is scoped
+by per-user registries and ownership records, with path/link checks.
+
+Inno event ordering and failure handling follow the official
+[event documentation](https://jrsoftware.org/ishelp/topic_scriptevents.htm),
+[Exec](https://jrsoftware.org/ishelp/topic_isxfunc_exec.htm) and
+[Abort](https://jrsoftware.org/ishelp/topic_isxfunc_abort.htm) references.
+
+An existing official compiler can be supplied with `--iscc C:/path/ISCC.exe`.
+`--skip-installer` builds and checks only the frozen application.
+
+Primary references: [PyInstaller usage](https://pyinstaller.org/en/stable/usage.html),
+[Inno compiler CLI](https://jrsoftware.org/ishelp/topic_compilercmdline.htm),
+[per-user installation](https://jrsoftware.org/ishelp/topic_setup_privilegesrequired.htm),
+[download verification](https://jrsoftware.org/isdl-verify.php).

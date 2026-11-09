@@ -1,0 +1,192 @@
+"""Main-server exports use synthetic public files; no apps or network access."""
+import hashlib
+import importlib.util
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+import zipfile
+
+
+_SPEC = importlib.util.spec_from_file_location(
+    "l2_main_server_export", Path(__file__).resolve().parents[1] / "packaging/export_main_server.py"
+)
+exporter = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(exporter)
+
+
+class MainServerExportTests(unittest.TestCase):
+    OLD_ORIGIN = "https://old.example.test"
+    SOURCES = ("app_version.py", "installer_runtime.py")
+    ASSETS = ("assets/L2CT.ico", "assets/L2CT.png")
+    TEMPLATE = '''<!doctype html><meta property="og:url" content="https://old.example.test/">
+<link rel="canonical" href="https://old.example.test/">
+<title>v{{VERSION}}</title><a href="/downloads/{{INSTALLER}}">Download</a>
+<img src="/assets/L2CT.png"><a href="https://old.example.test/help">External unchanged</a>
+<p>{{SIZE_MB}} MB; {{MODEL_NAME}} {{MODEL_DOWNLOAD_GB}} GB {{MODEL_STATUS}}</p>
+<p>{{SIGNING_NOTICE}}</p><section>{{CHANGELOG}}</section>'''
+
+    def setUp(self):
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.site = self.root / "sites/l2-chat-translator"
+        (self.site / ".openai").mkdir(parents=True)
+        (self.site / ".openai/hosting.json").write_text(json.dumps({
+            "project_id": "synthetic-project", "static": {"directory": "dist"}
+        }), encoding="utf-8")
+        (self.site / "index.template.html").write_text(self.TEMPLATE, encoding="utf-8")
+        (self.root / "assets").mkdir()
+        for name in self.ASSETS:
+            (self.root / name).write_bytes(b"synthetic icon")
+        (self.root / "installer_runtime.py").write_text(
+            'DEFAULT_MODEL = "test:9b"\n'
+            'MODEL_CATALOG = {DEFAULT_MODEL: {"label": "Test 9B — Tested", '
+            '"download_gb": 6.6, "tested": True}}\n', encoding="utf-8"
+        )
+        self.enterContext(patch.object(exporter, "SOURCES", self.SOURCES))
+        self.enterContext(patch.object(exporter, "ASSETS", self.ASSETS))
+        self.make_release("1.2.3", b"synthetic installer\x00\xff\r\n")
+        self.prepare()
+
+    def make_release(self, version, content):
+        (self.root / "app_version.py").write_text(f'VERSION = "{version}"\n', encoding="utf-8")
+        folder = self.root / "release" / version
+        folder.mkdir(parents=True)
+        name = f"Lineage-2-Chat-Translator-{version}-Setup.exe"
+        (folder / name).write_bytes(content)
+        installer = {"file": name, "bytes": len(content), "sha256": hashlib.sha256(content).hexdigest()}
+        manifest = {
+            "product": "Lineage 2 Chat Translator", "version": version,
+            "built_at_utc": "2026-11-08T00:00:00+00:00", "platform": "windows-x64",
+            "authenticode_signed": False, "default_model": "test:9b",
+            "models_bundled": False, "runtime_bundled": False,
+            "packaged_self_test": {"ok": True, "frozen": True, "version": version},
+            "sources": [{"path": name, "sha256": exporter.release_site.digest(self.root / name)}
+                        for name in self.SOURCES],
+            "assets": [{"path": name, "sha256": exporter.release_site.digest(self.root / name)}
+                       for name in self.ASSETS],
+            "installer": installer,
+        }
+        (folder / "release-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        (folder / "SHA256SUMS.txt").write_text(f"{installer['sha256']}  {name}\n", encoding="ascii")
+        notes_path = self.site / "changelog.json"
+        notes = json.loads(notes_path.read_text()) if notes_path.exists() else []
+        notes.insert(0, {"version": version, "changes": ["Synthetic release."]})
+        notes_path.write_text(json.dumps(notes), encoding="utf-8")
+        return installer
+
+    def prepare(self):
+        return exporter.release_site.prepare_site(self.root, self.site, self.SOURCES, self.ASSETS)
+
+    def export(self, **kwargs):
+        return exporter.export_release(root=self.root, site=self.site, **kwargs)
+
+    def snapshot(self):
+        return {path.relative_to(self.site / "dist").as_posix(): path.read_bytes()
+                for path in (self.site / "dist").rglob("*") if path.is_file()}
+
+    def test_export_rewrites_only_metadata_origins_and_keeps_installer_bytes(self):
+        before = self.snapshot()
+        result = self.export()
+        manifest = json.loads(Path(result["manifest"]).read_text())
+        with zipfile.ZipFile(result["archive"]) as archive:
+            after = {name: archive.read(name) for name in archive.namelist()}
+        self.assertEqual(set(before), set(after))
+        expected = before["index.html"].replace(
+            b'content="https://old.example.test/"', b'content="https://40.160.140.227/"'
+        ).replace(b'href="https://old.example.test/"', b'href="https://40.160.140.227/"')
+        self.assertEqual(after["index.html"], expected)
+        self.assertIn(b'href="/downloads/', after["index.html"])
+        self.assertIn(b'src="/assets/L2CT.png"', after["index.html"])
+        self.assertIn(b'href="https://old.example.test/help"', after["index.html"])
+        for name in before.keys() - {"index.html"}:
+            self.assertEqual(after[name], before[name], name)
+        self.assertEqual(before, self.snapshot(), "The existing Site must not be modified.")
+        self.assertEqual(manifest["version"], "1.2.3")
+        self.assertEqual(manifest["base_url"], "https://40.160.140.227")
+        self.assertEqual(manifest["installer"], result["installer"])
+        self.assertRegex(manifest["release_id"], r"^1\.2\.3-[a-f0-9]{12}$")
+        self.assertEqual(len(manifest["files"]), len(before))
+        exporter.verify_archive(Path(result["archive"]), manifest)
+        self.assertFalse(result["deployed"])
+
+    def test_previous_version_download_is_preserved(self):
+        old = self.snapshot()
+        current = self.make_release("1.2.4", b"second synthetic installer")
+        self.prepare()
+        result = self.export()
+        with zipfile.ZipFile(result["archive"]) as archive:
+            old_name = "downloads/Lineage-2-Chat-Translator-1.2.3-Setup.exe"
+            self.assertEqual(archive.read(old_name), old[old_name])
+            self.assertEqual(archive.read("downloads/" + current["file"]), b"second synthetic installer")
+        self.assertEqual(result["installer"], current)
+
+    def test_repeated_export_has_same_id_and_bytes_but_different_origin_changes_id(self):
+        first = self.export()
+        first_zip = Path(first["archive"]).read_bytes()
+        first_manifest = Path(first["manifest"]).read_bytes()
+        second = self.export()
+        self.assertEqual(first["release_id"], second["release_id"])
+        self.assertEqual(first_zip, Path(second["archive"]).read_bytes())
+        self.assertEqual(first_manifest, Path(second["manifest"]).read_bytes())
+        changed = self.export(base_url="https://new.example.test/")
+        self.assertNotEqual(first["release_id"], changed["release_id"])
+
+    def test_invalid_base_urls_rejected_before_outputs_are_created(self):
+        output = self.root / "export-test"
+        for value in ("http://40.160.140.227", "ftp://host", "https://user:pass@host",
+                      "https://host/path", "https://host?x=1", "https://host#fragment",
+                      "https://host\n", "https://host:99999", "https://bad<host>",
+                      "https://", "https://host:"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.export(base_url=value, output_dir=output)
+        self.assertFalse(output.exists())
+
+    def test_rewrite_preserves_whitespace_attribute_order_and_url_suffix(self):
+        source = b'''<link href='https://old.test/guide?a=1&amp;b=2#x' rel='canonical' />\r\n<meta content="https://old.test/path" property="og:url">'''
+        rewritten = exporter.rewrite_homepage(source, "https://40.160.140.227")
+        self.assertEqual(rewritten, source.replace(b"https://old.test", b"https://40.160.140.227"))
+
+    def test_missing_or_duplicate_metadata_is_rejected(self):
+        for page in (b"<html></html>", (self.TEMPLATE + '<meta property="og:url" content="https://other.test/">').encode()):
+            with self.subTest(page=page), self.assertRaisesRegex(ValueError, "exactly one"):
+                exporter.rewrite_homepage(page, exporter.DEFAULT_BASE_URL)
+
+    def test_private_file_and_stale_source_rejected_without_overwriting_previous_export(self):
+        result = self.export()
+        paths = [Path(result["archive"]), Path(result["manifest"])]
+        before = [path.read_bytes() for path in paths]
+        private = self.site / "dist/settings.json"
+        private.write_text("private-marker", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Unexpected public file"):
+            self.export()
+        private.unlink()
+        (self.root / "app_version.py").write_text('VERSION = "1.2.3"\n# changed source', encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Stale installer"):
+            self.export()
+        self.assertEqual([path.read_bytes() for path in paths], before)
+
+    def test_failed_archive_verification_does_not_replace_outputs(self):
+        result = self.export()
+        paths = [Path(result["archive"]), Path(result["manifest"])]
+        before = [path.read_bytes() for path in paths]
+        with patch.object(exporter, "verify_archive", side_effect=ValueError("Synthetic corrupt archive")):
+            with self.assertRaisesRegex(ValueError, "corrupt"):
+                self.export()
+        self.assertEqual([path.read_bytes() for path in paths], before)
+
+    def test_archive_and_manifest_tampering_are_detected(self):
+        result = self.export()
+        path = Path(result["archive"])
+        manifest = json.loads(Path(result["manifest"]).read_text())
+        changed = json.loads(json.dumps(manifest))
+        changed["files"][0]["sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "Release ID"):
+            exporter.verify_archive(path, changed)
+        path.write_bytes(path.read_bytes() + b"changed")
+        with self.assertRaisesRegex(ValueError, "Archive checksum"):
+            exporter.verify_archive(path, manifest)
+
+
+if __name__ == "__main__":
+    unittest.main()
