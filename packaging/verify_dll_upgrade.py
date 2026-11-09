@@ -19,7 +19,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 BUILD_ROOT = ROOT / ".build"
 sys.path.insert(0, str(ROOT))
-from installation_cleanup import CLEANUP_PLAN_NAME, cleanup_program_files, read_cleanup_plan
+from installation_cleanup import CLEANUP_PLAN_NAME, CleanupError, cleanup_program_files, read_cleanup_plan
 
 EXPECTED_OLD_DLLS = 52
 EXPECTED_CURRENT_DLLS = 9
@@ -180,8 +180,8 @@ def verify_upgrade(previous_app: Path, current_app: Path, work_root: Path,
         self_test = _run_self_test(upgraded, fixture / "self-test.json", version, child_env)
         _require(_inventory(upgraded) == current, "The headless self-test changed program files.")
 
-        # A separate fixture verifies preservation without affecting the exact
-        # 43-removal case or the executable used for the headless check.
+        # A separate fixture verifies preservation AND a failed cleanup gate.
+        # Never execute this fixture: its retired library has unknown bytes.
         protected = fixture / "protected"
         _copy_payload(previous_app, protected, before)
         _copy_payload(current_app, protected, current)
@@ -201,19 +201,20 @@ def verify_upgrade(previous_app: Path, current_app: Path, work_root: Path,
             path = _plain_path(protected / relative)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(contents)
-        preservation = cleanup_program_files(protected, plan, version)
-        _require({p.casefold() for p in preservation["removed"]} == retired - {changed_key}
-                 and {p.casefold() for p in preservation["preserved"]} == {changed_key},
-                 "Changed retired DLL preservation failed.")
+        for _ in range(2):
+            try:
+                cleanup_program_files(protected, plan, version)
+            except CleanupError as exc:
+                _require(changed_path in str(exc) and "manually" in str(exc),
+                         "Modified retired DLL did not produce an actionable cleanup failure.")
+            else:
+                raise ValueError("Modified retired DLL was incorrectly accepted as a successful cleanup.")
         for relative, contents in sentinels.items():
             _require((protected / relative).read_bytes() == contents,
                      "Upgrade cleanup changed a protected synthetic file.")
         preserved_inventory = _inventory(protected)
         _require(all(preserved_inventory.get(key) == row for key, row in current.items()),
                  "Preservation test changed current program files.")
-        preserved_again = cleanup_program_files(protected, plan, version)
-        _require(not preserved_again["removed"] and preserved_again["preserved"] == preservation["preserved"],
-                 "Repeated preservation cleanup was not idempotent.")
         return {
             "ok": True, "version": version, "kind": "isolated frozen-payload upgrade simulation",
             "old_dll_count": len(old_dlls), "current_dll_count": len(current_dlls),
@@ -221,6 +222,7 @@ def verify_upgrade(previous_app: Path, current_app: Path, work_root: Path,
             "removed_dll_bytes": sum(before[key]["bytes"] for key in retired),
             "exact_current_payload_after_cleanup": True, "current_payload_files": len(current),
             "cleanup_idempotent": True, "modified_retired_dll_preserved": True,
+            "modified_retired_dll_blocks_cleanup": True, "modified_fixture_never_executed": True,
             "synthetic_protected_files_preserved": sorted(sentinels),
             "upgraded_frozen_self_test": self_test,
             "real_installation_touched": False, "windows_opened": False,

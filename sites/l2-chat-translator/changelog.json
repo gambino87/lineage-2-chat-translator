@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.7.13",
+    "changes": [
+      "Protected runtime and model folders against changes by other Windows accounts while retaining the installing user's full access. Older folders with unprotected ownership records require a one-time review in Configure; parent-folder permissions are unchanged.",
+      "Runtime checks now verify the frontend and GPU libraries against the installer's trusted inventory. Known official runtimes upgrade to the protected frontend without downloading models again; unknown executable changes stop startup.",
+      "Added private credentials and connection-owner checks to both Ollama and its internal inference service. A different local process taking over a port receives no chat or reply text.",
+      "Hardened update handoff and uninstall cleanup against replaced files and redirected folders. Modified obsolete DLLs are preserved and block automatic relaunch until the conflict is resolved.",
+      "Update downloads now have a time limit covering connection setup and response headers. Startup notices use readable commands instead of encoded scripts."
+    ]
+  },
+  {
     "version": "1.7.12",
     "changes": [
       "Preserved devo, the nickname for Devotion Tunic and Devotion Stockings, in recognized trade messages and translated replies without expanding or translating it.",

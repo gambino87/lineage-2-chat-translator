@@ -14,6 +14,7 @@ from installer_runtime import DEFAULT_MODEL
 
 class InstallLifecycleTests(unittest.TestCase):
     def setUp(self):
+        self.enterContext(patch.object(setup, "storage_requires_confirmation", return_value=False))
         # Startup side effects belong to updater integration tests. Keep this
         # older lifecycle suite isolated from the real profile and OS notices.
         for name, value in (("update_in_progress", False), ("uninstall_in_progress", False),
@@ -503,6 +504,18 @@ class InstallLifecycleTests(unittest.TestCase):
         cleanup.assert_called_once_with(setup.SETTINGS_PATH.parent)
         lock.return_value.close.assert_called_once()
         self.assertIn("completed", result.read_text(encoding="utf-8-sig"))
+
+    def test_uninstall_reports_retained_unconfirmed_history_by_exit_code(self):
+        result = self.root / "result.txt"
+        retained = self.root / "unconfirmed-storage-records.json"
+        report = {"ok": True, "unconfirmed_records_preserved": [str(retained)],
+                  "unconfirmed_preferences_preserved": []}
+        with patch.object(setup, "SingleInstance"), \
+             patch.object(setup, "uninstall_data", return_value=report), \
+             patch.object(setup.tk, "Tk", side_effect=AssertionError("No window allowed")):
+            self.assertEqual(setup.main(["--uninstall-cleanup", "--cleanup-result", str(result)]),
+                             setup.UNINSTALL_REVIEW_EXIT_CODE)
+        self.assertIn(str(retained), result.read_text(encoding="utf-8-sig"))
 
     def test_old_in_process_cleanup_route_refuses_without_touching_installation(self):
         result = self.root / "program-result.txt"

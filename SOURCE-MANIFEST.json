@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "product": "Lineage 2 Chat Translator",
-  "version": "1.7.12",
+  "version": "1.7.13",
   "purpose": "Source published for transparency; not a claim of byte-for-byte binary reproducibility.",
   "published_installer": {
-    "file": "Lineage-2-Chat-Translator-1.7.12-Setup.exe",
-    "bytes": 11028076,
-    "sha256": "9d324299599bca9ec3b955765ca68374533f659ed33f7fd33561ff7815f2c791",
-    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.7.12-Setup.exe"
+    "file": "Lineage-2-Chat-Translator-1.7.13-Setup.exe",
+    "bytes": 21400669,
+    "sha256": "5ee5c561c83962037abeba68fc1f581e5e25d40b257d46b39488c8f4ccd0e587",
+    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.7.13-Setup.exe"
   },
   "release_toolchain": {
     "python": "3.12.10",
@@ -17,11 +17,11 @@
   "application_sources": [
     {
       "path": "installer_main.py",
-      "sha256": "631f2734f138c8568efab74fefb2a35bf4e3d886883e3ac6274d807349578af2"
+      "sha256": "2ec0dfa4cf2253dd7485c75c64bff9f5b8a13fde297b17c939dbc27fe5059aa8"
     },
     {
       "path": "installer_runtime.py",
-      "sha256": "2cad92b62aa176144fae195e4d48ce5bee9101b36864da0f1509f219ec615c29"
+      "sha256": "7d2aabe945e839ab6b3a02ee92ab704cc81ea7956614eb859b7067a373c09c94"
     },
     {
       "path": "app_paths.py",
@@ -29,7 +29,7 @@
     },
     {
       "path": "app_version.py",
-      "sha256": "2d5918e92a32471b180c89a4e6263d02426834f361f265936dfa93d554a81ffb"
+      "sha256": "c91e3711361f1cdcaac6b956b18c66827b8188136fffda7b5ad86d79ab8ed3e2"
     },
     {
       "path": "app_icon.py",
@@ -41,7 +41,7 @@
     },
     {
       "path": "translator_core.py",
-      "sha256": "9ed3f125911414e5d8caa6f788f33da7847a562879525f5b9c764b56e3d2330b"
+      "sha256": "abf82927e94337273d3998310e0441d1cc57d5565171f6e298371f7b98892cec"
     },
     {
       "path": "game_slang.py",
@@ -69,11 +69,11 @@
     },
     {
       "path": "uninstall_data.py",
-      "sha256": "986ecb3aba3e53ff0d7f16ab4c5ebb9f7ea040883438cff0b5c2404dfd9a0274"
+      "sha256": "b665e0a974e0211df54cbbd242f17af333422ace32b87f819cfc83531d4089c7"
     },
     {
       "path": "app_updater.py",
-      "sha256": "64ca20e66f7666d51724023d1459dbc9c236aea0604235f11104a2f077e72c23"
+      "sha256": "c2d9fde79225bd977409572c9d463303ac5b64a893f07719a1ebb84548eb6591"
     },
     {
       "path": "update_trust.py",
@@ -85,7 +85,23 @@
     },
     {
       "path": "installation_cleanup.py",
-      "sha256": "712d73ee9e823639f2f997113ec8440dc1278426f1eb25b88ed1714097c32c1c"
+      "sha256": "d74ec2eb3cf274062d5ef6212ffe9c777567587151930b5ca34b84b537f3194e"
+    },
+    {
+      "path": "local_service.py",
+      "sha256": "e68458b49a3d52861b0531d873017500f1d670c813133596f6178d639a8c9782"
+    },
+    {
+      "path": "runtime_integrity.py",
+      "sha256": "9506e46ce39129323160d5cf0511fe01abfcc42d13fc8e5e179c8a2f04baaa17"
+    },
+    {
+      "path": "secure_storage.py",
+      "sha256": "45cb0b339d47171864e1785414c21797c31135a131a5287555a3967b87b91872"
+    },
+    {
+      "path": "update_network.py",
+      "sha256": "3388205d283a410ed39001a915406ed43dd068f9923de7d83faecfd7017f4b6d"
     }
   ],
   "application_assets": [
@@ -107,15 +123,19 @@
     },
     {
       "path": "assets/apply-update.ps1",
-      "sha256": "7406fe6a7b668e0fe2053252b93e3cf6dfe36e667839366bb3dc39fea713a268"
+      "sha256": "949585579832f581d243b7a2f0eb42cc1fe73b910f87684ba51f24845c7de7e5"
     },
     {
       "path": "assets/cleanup-program-files.ps1",
-      "sha256": "b9f1e9add97131b89511cd63c90cab3c7eaee3c308cbcd3e93eedf7d096bb617"
+      "sha256": "c5e4e86c110e0c4c55aab80f6e1e56938415a69400d4c14000b1c2f5684772f1"
     },
     {
       "path": "assets/protect-install-directory.ps1",
       "sha256": "84a52cc0261dd1ee4815749014d49309867c3fa4df24e97af39cfa2030184535"
+    },
+    {
+      "path": "assets/secure-ollama-manifest.json",
+      "sha256": "e5080513ef2a7c3085e6a87afc0ca14cb995d95557217b31d711379e6be2c9d1"
     }
   ],
   "publication_adapted_files": [
@@ -147,11 +167,11 @@
     },
     {
       "path": "README.md",
-      "sha256": "31fd68f0efe02772b88256d21e56dc0703854ead3797becda995c96de6a94565"
+      "sha256": "2c2aab1843dbfa265bf77b48f0f130f204c662ff7558de92a080baff3794595a"
     },
     {
       "path": "Setup Ollama.ps1",
-      "sha256": "a1e113c4cf5c66c11a8bc7024ccc9ed06141c5964a20e63633cebc9018790709"
+      "sha256": "bda0db0773a3adca01683c60330cde487817319d99404076beb838df55fffc1b"
     },
     {
       "path": "Start Translator.cmd",
@@ -159,7 +179,7 @@
     },
     {
       "path": "Start Translator.ps1",
-      "sha256": "ccdc9b4bd9cbebfb5c50e0d4f46d45c278e9c87e92049cdea3ddb4ae7ead1695"
+      "sha256": "b7f51a393ccfe3c5ee59467a6ec5237ce328f43e0936ac75d9d0b3872664984d"
     },
     {
       "path": "app_icon.py",
@@ -171,11 +191,11 @@
     },
     {
       "path": "app_updater.py",
-      "sha256": "64ca20e66f7666d51724023d1459dbc9c236aea0604235f11104a2f077e72c23"
+      "sha256": "c2d9fde79225bd977409572c9d463303ac5b64a893f07719a1ebb84548eb6591"
     },
     {
       "path": "app_version.py",
-      "sha256": "2d5918e92a32471b180c89a4e6263d02426834f361f265936dfa93d554a81ffb"
+      "sha256": "c91e3711361f1cdcaac6b956b18c66827b8188136fffda7b5ad86d79ab8ed3e2"
     },
     {
       "path": "assets/ITEM-CATALOG-NOTICE.txt",
@@ -191,11 +211,11 @@
     },
     {
       "path": "assets/apply-update.ps1",
-      "sha256": "7406fe6a7b668e0fe2053252b93e3cf6dfe36e667839366bb3dc39fea713a268"
+      "sha256": "949585579832f581d243b7a2f0eb42cc1fe73b910f87684ba51f24845c7de7e5"
     },
     {
       "path": "assets/cleanup-program-files.ps1",
-      "sha256": "b9f1e9add97131b89511cd63c90cab3c7eaee3c308cbcd3e93eedf7d096bb617"
+      "sha256": "c5e4e86c110e0c4c55aab80f6e1e56938415a69400d4c14000b1c2f5684772f1"
     },
     {
       "path": "assets/item_catalog.json",
@@ -204,6 +224,10 @@
     {
       "path": "assets/protect-install-directory.ps1",
       "sha256": "84a52cc0261dd1ee4815749014d49309867c3fa4df24e97af39cfa2030184535"
+    },
+    {
+      "path": "assets/secure-ollama-manifest.json",
+      "sha256": "e5080513ef2a7c3085e6a87afc0ca14cb995d95557217b31d711379e6be2c9d1"
     },
     {
       "path": "chat_overlay.py",
@@ -223,19 +247,23 @@
     },
     {
       "path": "installation_cleanup.py",
-      "sha256": "712d73ee9e823639f2f997113ec8440dc1278426f1eb25b88ed1714097c32c1c"
+      "sha256": "d74ec2eb3cf274062d5ef6212ffe9c777567587151930b5ca34b84b537f3194e"
     },
     {
       "path": "installer_main.py",
-      "sha256": "631f2734f138c8568efab74fefb2a35bf4e3d886883e3ac6274d807349578af2"
+      "sha256": "2ec0dfa4cf2253dd7485c75c64bff9f5b8a13fde297b17c939dbc27fe5059aa8"
     },
     {
       "path": "installer_runtime.py",
-      "sha256": "2cad92b62aa176144fae195e4d48ce5bee9101b36864da0f1509f219ec615c29"
+      "sha256": "7d2aabe945e839ab6b3a02ee92ab704cc81ea7956614eb859b7067a373c09c94"
     },
     {
       "path": "item_catalog.py",
       "sha256": "445ee410f2ddd4fd85b048bf6a0ebb368964fd8a34e80a44683d463027999f4e"
+    },
+    {
+      "path": "local_service.py",
+      "sha256": "e68458b49a3d52861b0531d873017500f1d670c813133596f6178d639a8c9782"
     },
     {
       "path": "ollama_service.ps1",
@@ -251,7 +279,7 @@
     },
     {
       "path": "packaging/HOSTING.md",
-      "sha256": "ca587c82f3b844a90652b9c9652fa0412a75fe1f65b08d12465810a50063395f"
+      "sha256": "0ee409f0c4ec41a365568769a94eec82b2a825a046e1b1a3f86e00948c5b8607"
     },
     {
       "path": "packaging/INSTALL-COMPLETE.txt",
@@ -263,11 +291,11 @@
     },
     {
       "path": "packaging/README.md",
-      "sha256": "5012c9d670d981fbed2b690ce7f905b3f7ffd74ffe0f34cbecfe3f4ae4ac74de"
+      "sha256": "33f48f1d59a20bf22a1ffb20aefa52a54454052a8531740a16b544d8a31859ef"
     },
     {
       "path": "packaging/THIRD-PARTY-NOTICES.txt",
-      "sha256": "cabdf4bcc2792dc485bff6cfe446858c08888e09873ba06066a6ed2dcf40fb4f"
+      "sha256": "16c40b4560c7fbd4ba469b824f196c2b8ef8bb347771e3385e786a0aae6c414e"
     },
     {
       "path": "packaging/UPDATE-SIGNING.md",
@@ -275,7 +303,7 @@
     },
     {
       "path": "packaging/USER-README.txt",
-      "sha256": "868c498ab68953ef639aef87c21230013c7497cb2d7ee1dc8d11060a7f187a95"
+      "sha256": "a6e46006c3121c273c670698f6eef6548365260c966e2eed2298fa56af2996d5"
     },
     {
       "path": "packaging/bootstrap-tools.ps1",
@@ -283,7 +311,7 @@
     },
     {
       "path": "packaging/build.py",
-      "sha256": "cd2c915de185b11b451b23e6625ea3a6d1578f08781ad8682008d70517f58966"
+      "sha256": "d34645321439f0327b566a8a2b0e46d5f70f12fc34afeb150dc601650596de84"
     },
     {
       "path": "packaging/build_environment.py",
@@ -299,7 +327,7 @@
     },
     {
       "path": "packaging/installer.iss",
-      "sha256": "a73e221fae7d4b59d297a80376080bf387d7469466d6a8889402b895ff13ee17"
+      "sha256": "ace42bd90c539f84e245e3993dc788e66e9d602ed786e2304d6d56a7c212a417"
     },
     {
       "path": "packaging/licenses/INNO-SETUP.txt",
@@ -308,6 +336,10 @@
     {
       "path": "packaging/licenses/L2J-ITEM-DATA.txt",
       "sha256": "5735febb4249f2fea35481266e47668eb890404f83714ec3d12f68e80c95d72f"
+    },
+    {
+      "path": "packaging/licenses/OLLAMA.txt",
+      "sha256": "177536daa30f0ebbd2dc01c29dd02343f6c5b311c7681329eedfad639c4c35ad"
     },
     {
       "path": "packaging/licenses/PYINSTALLER.txt",
@@ -359,7 +391,7 @@
     },
     {
       "path": "packaging/payload_layout.py",
-      "sha256": "256f68c974c0f23f3029ccb35e3a8716ed309bd1eedf0f4e2a472de692fdda9b"
+      "sha256": "19d36f25961cbd3499d5b46843a135121006bf98047f7fdcc82e8464d56d9cd8"
     },
     {
       "path": "packaging/public-source/LICENSE-NOTICE.md",
@@ -367,11 +399,11 @@
     },
     {
       "path": "packaging/public-source/README.template.md",
-      "sha256": "52c12623c6d84818c2841d15c8689f04da35d642c4a73b7dcb526a0d38361f3e"
+      "sha256": "6920797214e372340b35cb58f1040ff15ee5760a5a7d814b50c93aba4634b552"
     },
     {
       "path": "packaging/public-source/allowlist.json",
-      "sha256": "ef9d45c7d062590672b25d9191e5d5cbece9d164dc9c44ce5aa784511234d0d7"
+      "sha256": "1a4c45323fd17141f3d4cdb93539188a6b35e7dd210a9b058b4c2cc57b623871"
     },
     {
       "path": "packaging/public-source/gitattributes.txt",
@@ -383,11 +415,59 @@
     },
     {
       "path": "packaging/release_site.py",
-      "sha256": "e10a8b6049b26bbaa480029b07f60a778860b4df49cae787999a36747a409a96"
+      "sha256": "dbf38635bafafd6e1616361fffe2060fc415aba35473c21b6481bcf586c0e613"
     },
     {
       "path": "packaging/requirements-build.txt",
       "sha256": "12443442c4b7ef74a1a733560ed9256de202d1ab0c7a290e8d6f8ccd46e18c4c"
+    },
+    {
+      "path": "packaging/secure-ollama/README.md",
+      "sha256": "4ff4817185035a46ae02eca32ec83620d4c93faea0d3160196c17fdd57058746"
+    },
+    {
+      "path": "packaging/secure-ollama/THIRD-PARTY-LICENSES.txt",
+      "sha256": "177536daa30f0ebbd2dc01c29dd02343f6c5b311c7681329eedfad639c4c35ad"
+    },
+    {
+      "path": "packaging/secure-ollama/build-lock.json",
+      "sha256": "daffdf4f8783847a9115cfb12f679127ffaabecfd1b00bec75d63a552174eb51"
+    },
+    {
+      "path": "packaging/secure-ollama/build_secure_ollama.py",
+      "sha256": "320f4a49741419dd4b92e8abb44a801a179edbc0d1a8aa3662df46a69dbfc707"
+    },
+    {
+      "path": "packaging/secure-ollama/overlay/l2ctsecurity/process_other.go",
+      "sha256": "fceb0fdfaf2d0f315977f0dc2b72d373297e5116f5ca289b1d1668b4fcc9e6e9"
+    },
+    {
+      "path": "packaging/secure-ollama/overlay/l2ctsecurity/process_windows.go",
+      "sha256": "0336a3816cd46e8c44674bb7ef1d80980b77890617dbf96beefa92cdc4d14a05"
+    },
+    {
+      "path": "packaging/secure-ollama/overlay/l2ctsecurity/process_windows_test.go",
+      "sha256": "ac3d4fcd0e867cc4872dced6e747040f0d4afc794c63dcf3d4899c79ddc6b4d6"
+    },
+    {
+      "path": "packaging/secure-ollama/overlay/l2ctsecurity/security.go",
+      "sha256": "766d5de7a859569695ad0a4a678edacec04f611c997e08cebf0f6e3e7e3e61b2"
+    },
+    {
+      "path": "packaging/secure-ollama/overlay/l2ctsecurity/security_test.go",
+      "sha256": "c98a1b98706cc2be378f1e3a2d731c2aa520c9eba2d2770a6196861105039bf8"
+    },
+    {
+      "path": "packaging/secure-ollama/patch_source.py",
+      "sha256": "dfc5f974511d1b97ef7dbf14cd19b9512c645fe178f9952fe1d4a84006c47070"
+    },
+    {
+      "path": "packaging/secure-ollama/smoke_test.py",
+      "sha256": "365765cd2c1230b3abad4f4ca065f139ff603482c13bdddf5af4e51f4c6c51ba"
+    },
+    {
+      "path": "packaging/secure-ollama/upstream-runtime-manifest.json",
+      "sha256": "f17d0e534e6608068f3c47e267d7df8052a72994510bb715078e2b68cf5c9a3b"
     },
     {
       "path": "packaging/sign-release.ps1",
@@ -399,19 +479,27 @@
     },
     {
       "path": "packaging/source_release.py",
-      "sha256": "47040f1cbf189f9fa51c6b8638ee8b611cbab27fde325dfaee55bffc51c90cc3"
+      "sha256": "0da2c2df37cd6fcd2adb794eb29b86ca95c5a3b371d2de56ba3c5ea6c6265cab"
     },
     {
       "path": "packaging/verify_dll_upgrade.py",
-      "sha256": "9c71f4b48d3b7f0af2e2a6ba6bd8528cc5f3382b79fabec707af6d993bf6f4c7"
+      "sha256": "114e4ba85226d5302a0edc6b0dcdef091b43060dddabf8bb6bdef2ae4997a272"
     },
     {
       "path": "packaging/verify_locked_dll_cleanup.py",
-      "sha256": "7b79ed14baab5c672c465c127e4c8e10a7f81b4984413b32a64d9e76b46784a2"
+      "sha256": "9b45016a3fe2d4ae087762a40f2d45625ade7a1ce550b0d94f7e6a4fa3a3fa1e"
     },
     {
       "path": "reply_composer.py",
       "sha256": "9bbb38ccb18843e112fa349ab20bba53890e325547e6893d35cda0abb0cc35fb"
+    },
+    {
+      "path": "runtime_integrity.py",
+      "sha256": "9506e46ce39129323160d5cf0511fe01abfcc42d13fc8e5e179c8a2f04baaa17"
+    },
+    {
+      "path": "secure_storage.py",
+      "sha256": "45cb0b339d47171864e1785414c21797c31135a131a5287555a3967b87b91872"
     },
     {
       "path": "sites/l2-chat-translator/.openai/hosting.json",
@@ -423,19 +511,19 @@
     },
     {
       "path": "sites/l2-chat-translator/changelog.json",
-      "sha256": "e144540288d507a7f7d0e3456a37e9b77809edc3316bf5af9a1cf4eabd4ee7d9"
+      "sha256": "09a4527cc9385300f8342bfc1c93b84b6ea6eb7f4fae8a01f736ac3887d37ee6"
     },
     {
       "path": "sites/l2-chat-translator/index.template.html",
-      "sha256": "3e389818fa5eb8ad503a0d79b408c54e46c68bdbda83a5c80939187a1b17e994"
+      "sha256": "f378c6e55e48b98753ed3d4e954ab77c2562f4c7133d1658f543624236fca836"
     },
     {
       "path": "tests/test_app_update_integration.py",
-      "sha256": "d33f89e2796196709f312cc1b2d028aa865b9e2daa410795871efa6350643e8a"
+      "sha256": "b95aef0d6e6aa8d48724cb7822bf24484dc14a2148fe35a74833cb12841ba539"
     },
     {
       "path": "tests/test_app_updater.py",
-      "sha256": "48a69949bd33c42f834cbe604aa5e72b260981199866ffd472b10a723fa8469a"
+      "sha256": "5ebe3d4b05b78b320a42e0a49ccfb923914d879ebf6ee822c875d5de2da63a3c"
     },
     {
       "path": "tests/test_build_environment.py",
@@ -463,11 +551,11 @@
     },
     {
       "path": "tests/test_dll_upgrade.py",
-      "sha256": "076b3bd865c9ee49f44cc2b221a5ec235e80255e7bae53dc1564ff96db73e333"
+      "sha256": "b40c3243c835847adb3dff7baf6659ef37219299ac5b7d2689d9ebfeffccce59"
     },
     {
       "path": "tests/test_external_cleanup.py",
-      "sha256": "0f1e5e43534de6c59091e8ccdf501e370a791be67221e668ade675b4567fff1c"
+      "sha256": "1ada746eca9ab699325fbe220ebe894a9c8500d7d2293293bb1e6a9c860a0c78"
     },
     {
       "path": "tests/test_game_log_setup.py",
@@ -483,19 +571,19 @@
     },
     {
       "path": "tests/test_install_lifecycle.py",
-      "sha256": "a5b61d52c06ef99b9867f5a3afeeab4ee7edcd5913e5dac51b6b7160baf0e458"
+      "sha256": "bb68a7a732b222ff126cfcd2ebb5a7c2c5b8d6aebedc8e7b911bdaf6c5b66941"
     },
     {
       "path": "tests/test_installation_cleanup.py",
-      "sha256": "39c64f64a6a84a2e54fb96d4b1ebcd9eb3a60e38576637c215f0666eb44c3cb6"
+      "sha256": "c4f02e9130015317103a106eaa043ec449b3c875e25887c1e9c7d664acc1f131"
     },
     {
       "path": "tests/test_installer_main.py",
-      "sha256": "517ea75c5028913a856eeb17c3a75279f31a59a4b3a2f6a3431cc8e627b18ab9"
+      "sha256": "502df4cd51809258589b410ab26d261b72bdcef1e1ed2580c536c3a3cde3798b"
     },
     {
       "path": "tests/test_installer_runtime.py",
-      "sha256": "2b39c16d7cb3cbf38d0e2312a995a25773f7a24da2eb0eec31537f4e2941ea10"
+      "sha256": "3af43994ffa5d24282f3b6e0a7c65102444920f9e129ce8ad372fd5b22139d73"
     },
     {
       "path": "tests/test_item_catalog.py",
@@ -514,8 +602,12 @@
       "sha256": "404975728367c7ef33ddf43013447b298c2da5e87dbfbfce44e1207bd65e0c81"
     },
     {
+      "path": "tests/test_local_service.py",
+      "sha256": "5e259f46070ebc3210a9b4409c87ff43688f0a62cb372000f6c7d20142103d69"
+    },
+    {
       "path": "tests/test_locked_dll_cleanup.py",
-      "sha256": "bdf9620de8116d39ea6d96983c4dda120da308287ee60774b5d77e97423d42f2"
+      "sha256": "dfd41226d509dc17cc00d813c7f4c3d60589bd3c48ed182565ab3327e33d09fa"
     },
     {
       "path": "tests/test_main_server_deploy.py",
@@ -527,7 +619,7 @@
     },
     {
       "path": "tests/test_ollama_service.py",
-      "sha256": "1e2234064184380641ec067d1474e0fcb4c00d5d4f62a53c62c0c7fb04dee828"
+      "sha256": "55c11d8a5d075953ce3b7bbf01b5503468389044fd75c62fd9ccec9d17d234a9"
     },
     {
       "path": "tests/test_overlay_channel_filters.py",
@@ -570,6 +662,14 @@
       "sha256": "c6d9e1f97ea0fd6dca2b3978670e240ea28f882bdf027447c9efafb55c906d00"
     },
     {
+      "path": "tests/test_runtime_integrity.py",
+      "sha256": "1aa72dec2dc77c594efae098c306f021ab1cbb203809010c039b3332217878c1"
+    },
+    {
+      "path": "tests/test_secure_storage.py",
+      "sha256": "e6b93b6d600799def1c567efec954b10982f48df20892b5a1b4ea8ece95f9111"
+    },
+    {
       "path": "tests/test_service_shutdown.py",
       "sha256": "96525243f44eabcc27d6fb47a9af3f42a2a0845955f3725bb80621f76dca9d59"
     },
@@ -583,7 +683,7 @@
     },
     {
       "path": "tests/test_startup_visibility.py",
-      "sha256": "49df648a9be9404b950bb8cd7f80af0e4c48bf2f134aa78a747a5011e6ecb207"
+      "sha256": "516c5f1a6352d4b11589388aecba433f830165e03375809f8e6af049cb445e4f"
     },
     {
       "path": "tests/test_translator_core.py",
@@ -591,7 +691,7 @@
     },
     {
       "path": "tests/test_uninstall_data.py",
-      "sha256": "894b0e59fa7d273c0b9da6777ea0f5e1033f0aa9cc0d9ad49e08f229f7a081e3"
+      "sha256": "8e93921c3db083bed6aa06512b00a1af0277cc270a1bb8a301b555e193adf279"
     },
     {
       "path": "tests/test_universal_trade.py",
@@ -602,8 +702,12 @@
       "sha256": "0a8f6798b24d39106bf0adb025345ff3ee34d8d2b2d34c2908bc65cb94b7c1f2"
     },
     {
+      "path": "tests/test_update_network.py",
+      "sha256": "07c0632321797cc11a879deb8a8227f1a336adae9c11ad8e52bb9e375ef2b6e7"
+    },
+    {
       "path": "tests/test_update_runner.py",
-      "sha256": "759795b3bbca6b851f3ef5d5415c8c29168480762e83089e86fe10c3248526b1"
+      "sha256": "ca513f99ea419c6b3f3d6e06180373b13e2e9774146a1ce52ec2acdc07240b08"
     },
     {
       "path": "tests/test_update_trust.py",
@@ -631,15 +735,19 @@
     },
     {
       "path": "translator_core.py",
-      "sha256": "9ed3f125911414e5d8caa6f788f33da7847a562879525f5b9c764b56e3d2330b"
+      "sha256": "abf82927e94337273d3998310e0441d1cc57d5565171f6e298371f7b98892cec"
     },
     {
       "path": "uninstall_data.py",
-      "sha256": "986ecb3aba3e53ff0d7f16ab4c5ebb9f7ea040883438cff0b5c2404dfd9a0274"
+      "sha256": "b665e0a974e0211df54cbbd242f17af333422ace32b87f819cfc83531d4089c7"
     },
     {
       "path": "update_controls.py",
       "sha256": "7b15650fc479296dd91462fe8cb10c95b13413739a9b7c517f4fbd23ac856246"
+    },
+    {
+      "path": "update_network.py",
+      "sha256": "3388205d283a410ed39001a915406ed43dd068f9923de7d83faecfd7017f4b6d"
     },
     {
       "path": "update_trust.py",

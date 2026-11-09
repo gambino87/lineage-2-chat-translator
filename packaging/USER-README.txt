@@ -1,7 +1,29 @@
-LINEAGE 2 CHAT TRANSLATOR 1.7.12
+LINEAGE 2 CHAT TRANSLATOR 1.7.13
 
 Windows 10/11, 64-bit. Python is included; no separate Python installation is needed.
 The supplied L2CT artwork is used for the program, shortcuts and window icons.
+
+LOCAL SERVICE AND FILE ACCESS
+
+Your Windows account keeps full access to application data. You can inspect,
+change or remove it yourself after closing the translator. The app protects only
+its own folders from other accounts; it does not change parent-folder permissions.
+Normal temporary file locks remain while the service or an update is using files.
+Older storage with unprotected ownership records requires one explicit review in
+Configure. Confirm the displayed model folder only if it belongs to this app.
+Other unconfirmed historical folders are preserved for manual review; an edited
+old cleanup record is never treated as permission to delete unrelated files.
+Ownership records remain readable JSON. If you manually edit them or move their
+folder, Configure asks you to review that location again before automatic cleanup.
+This does not prevent normal edits to your translation preferences.
+
+The installer includes a protected Ollama frontend. Setup downloads the official
+GPU libraries and your selected model separately. Existing verified runtimes are
+upgraded without downloading models again. Unrecognized executable/library changes
+are preserved and stop startup; use a clean data folder or restore official files.
+Both local service connections require private launch credentials and verify the
+connected process before sending chat. These protections do not defend against
+malware running as your Windows account or an administrator.
 
 FEEDBACK AND BUG REPORTS
 

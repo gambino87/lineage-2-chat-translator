@@ -23,6 +23,7 @@ $handoffPollMs = 50
 $parentExitTimeoutMs = 180000
 $restartRequiredExitCode = 3010  # Inno's configured reboot-required result.
 $maxResultMessageChars = 7800  # Leaves room for a bounded failure explanation.
+$maxInstallerLogBytes = 2 * 1024 * 1024
 $stagePrefix = 'update-'
 $allowedFiles = @('owner.json', 'job.json', 'installer.part', 'installer.exe', 'apply-update.ps1',
                   'release.json', 'release.sig',
@@ -35,6 +36,7 @@ $parentExited = $false
 $helperMutex = $null
 $mutexHeld = $false
 $originalProcess = $null
+$pathLocks = $null
 $restartExecutable = $null
 $restartPermitted = $true
 $status = 'error'
@@ -42,6 +44,137 @@ $message = 'The update did not complete. Saved models and settings have not been
 
 function Assert-Condition([bool]$Condition, [string]$Description) {
     if (-not $Condition) { throw $Description }
+}
+
+function New-UpdatePathLocks {
+    # Transfer path stability from the parent before writing ready.json. Handles
+    # stay alive after the parent exits, through installation and staged cleanup.
+    if ($null -eq ('L2Update.PathLocks' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+namespace L2Update {
+    public sealed class PathLocks : IDisposable {
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Info {
+            public uint Attributes, C0, C1, A0, A1, W0, W1, Volume, SizeHigh, SizeLow, Links, IndexHigh, IndexLow;
+        }
+        [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+        private static extern SafeFileHandle CreateFileW(string path, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template);
+        [DllImport("kernel32.dll", SetLastError=true)]
+        private static extern bool GetFileInformationByHandle(SafeFileHandle handle, out Info info);
+        [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+        private static extern uint GetFinalPathNameByHandleW(SafeFileHandle handle, StringBuilder value, uint length, uint flags);
+        [DllImport("kernel32.dll", SetLastError=true)]
+        private static extern bool SetFileInformationByHandle(SafeFileHandle handle, int kind, ref int value, uint size);
+        private readonly Dictionary<string, SafeFileHandle> held = new Dictionary<string, SafeFileHandle>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Info> released = new Dictionary<string, Info>(StringComparer.OrdinalIgnoreCase);
+        private static string Key(string path) { return Path.GetFullPath(path).TrimEnd('\\'); }
+        private static Info Inspect(SafeFileHandle handle, string path) {
+            Info info;
+            if (!GetFileInformationByHandle(handle, out info)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            var actual = new StringBuilder(32768);
+            uint length = GetFinalPathNameByHandleW(handle, actual, (uint)actual.Capacity, 0);
+            if (length == 0 || length >= actual.Capacity) throw new IOException("Cannot resolve an update directory safely.");
+            string final = actual.ToString();
+            if (final.StartsWith(@"\\?\")) final = final.Substring(4);
+            if (!String.Equals(Key(final), Key(path), StringComparison.OrdinalIgnoreCase) ||
+                (info.Attributes & 0x400) != 0 || (info.Attributes & 0x10) == 0)
+                throw new IOException("The updater will not follow linked or redirected folders.");
+            return info;
+        }
+        private static SafeFileHandle Open(string path, uint access) {
+            var handle = CreateFileW(path, access, 3, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero);
+            if (handle.IsInvalid) { handle.Dispose(); throw new Win32Exception(Marshal.GetLastWin32Error()); }
+            try { Inspect(handle, path); return handle; } catch { handle.Dispose(); throw; }
+        }
+        public void HoldDirectoryPath(string path) {
+            var pending = new Stack<string>();
+            for (var cursor = new DirectoryInfo(Path.GetFullPath(path)); cursor != null; cursor = cursor.Parent)
+                pending.Push(cursor.FullName);
+            while (pending.Count > 0) {
+                string next = pending.Pop(), key = Key(next);
+                if (!held.ContainsKey(key)) {
+                    var handle = Open(next, 0x20001);
+                    try {
+                        Info expected;
+                        if (released.TryGetValue(key, out expected)) {
+                            Info current = Inspect(handle, next);
+                            if (expected.Volume != current.Volume || expected.IndexHigh != current.IndexHigh || expected.IndexLow != current.IndexLow)
+                                throw new IOException("The installation directory changed during setup. The translator was left closed.");
+                        }
+                        held.Add(key, handle);
+                        handle = null;
+                        released.Remove(key);
+                    } finally { if (handle != null) handle.Dispose(); }
+                }
+            }
+        }
+        public void ReleaseForInstaller(string path) {
+            string key = Key(path);
+            SafeFileHandle handle;
+            if (!held.TryGetValue(key, out handle)) throw new IOException("The installation directory was not held.");
+            released.Add(key, Inspect(handle, path));
+            held.Remove(key);
+            handle.Dispose();
+        }
+        public bool IsHeld(string path) { return held.ContainsKey(Key(path)); }
+        public void RemoveEmptyDirectory(string path) {
+            string key = Key(path);
+            SafeFileHandle original;
+            if (!held.TryGetValue(key, out original)) throw new IOException("Cleanup directory was not held.");
+            Info expected = Inspect(original, path);
+            // A delete-capable handle cannot coexist with the no-delete guard.
+            // Retain all parents, then reopen and compare the exact object ID
+            // before setting disposition. A raced replacement is never deleted.
+            held.Remove(key);
+            original.Dispose();
+            var replacement = Open(path, 0x30001);
+            try {
+                Info current = Inspect(replacement, path);
+                if (expected.Volume != current.Volume || expected.IndexHigh != current.IndexHigh || expected.IndexLow != current.IndexLow)
+                    throw new IOException("Cleanup directory changed; it was left untouched.");
+                held.Add(key, replacement);
+                replacement = null;
+                int remove = 1;
+                if (!SetFileInformationByHandle(held[key], 4, ref remove, 4)) throw new Win32Exception(Marshal.GetLastWin32Error());
+                held[key].Dispose();
+                held.Remove(key);
+            } finally { if (replacement != null) replacement.Dispose(); }
+        }
+        public void Dispose() {
+            foreach (var handle in held.Values) handle.Dispose();
+            held.Clear();
+        }
+    }
+}
+'@
+    }
+    return [L2Update.PathLocks]::new()
+}
+
+function Assert-PrivateUpdateDirectory([string]$Path) {
+    Assert-Condition ($null -ne $pathLocks -and $pathLocks.IsHeld($Path)) 'Update directory is not held safely.'
+    $acl = [IO.Directory]::GetAccessControl($Path)
+    $sidType = [Security.Principal.SecurityIdentifier]
+    $current = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    Assert-Condition ($acl.GetOwner($sidType).Value -ceq $current) 'Update directory is owned by another Windows account.'
+    $trusted = @($current, 'S-1-5-18', 'S-1-5-32-544')
+    $rules = @($acl.GetAccessRules($true, $true, $sidType))
+    Assert-Condition ($acl.AreAccessRulesProtected -and $rules.Count -eq $trusted.Count) 'Update directory permissions need repair. Use the website installer.'
+    $seen = @{}
+    foreach ($rule in $rules) {
+        $sid = $rule.IdentityReference.Value
+        Assert-Condition ($trusted -contains $sid -and -not $seen.ContainsKey($sid) -and
+            $rule.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow -and
+            $rule.FileSystemRights -eq [Security.AccessControl.FileSystemRights]::FullControl) 'Update directory permissions allow unexpected access.'
+        $seen[$sid] = $true
+    }
 }
 
 function Assert-PlainPath([string]$Value) {
@@ -87,6 +220,27 @@ function Read-BoundedBytes([string]$Path, [int]$Maximum = $maxRecordBytes) {
     $content = [byte[]]::new($count)
     [Array]::Copy($buffer, $content, $count)
     return ,$content
+}
+
+function Get-InstallerCleanupExplanation {
+    # Recover display-only details before deleting the temporary log. Exit code
+    # and signature checks govern behavior; wording never decides whether to run.
+    try {
+        $bytes = Read-BoundedBytes ([IO.Path]::Combine($stage, 'installer.log')) $maxInstallerLogBytes
+        $memory = [IO.MemoryStream]::new($bytes, $false)
+        $reader = [IO.StreamReader]::new($memory, [Text.Encoding]::UTF8, $true)
+        try { $text = $reader.ReadToEnd() } finally { $reader.Dispose(); $memory.Dispose() }
+        foreach ($line in ($text -split '[\r\n]+')) {
+            if ($line -match 'Program file cleanup:\s*(\{.+\})\s*$') {
+                $report = $Matches[1] | ConvertFrom-Json
+                if ($report.ok -is [bool] -and -not $report.ok -and $report.version -ceq $job.version -and
+                    $report.error -is [string] -and $report.error.Length -gt 0 -and $report.error.Length -le 2048) {
+                    return ' ' + ($report.error -replace '[\x00-\x1f\x7f]', ' ')
+                }
+            }
+        }
+    } catch { }  # Missing/oversized logs cannot weaken the failed-install guard.
+    return ''
 }
 
 function Assert-SignedRelease {
@@ -215,11 +369,11 @@ function Remove-OwnedStage {
     }
     Remove-Item -LiteralPath ([IO.Path]::Combine($stage, 'owner.json')) -Force
     try {
-        Remove-Item -LiteralPath $stage -Force  # Deliberately not recursive.
+        $pathLocks.RemoveEmptyDirectory($stage)  # Exact held directory; never recursive.
     } catch {
         # Leave an ownership record if a transient directory handle prevents
         # removing the now-empty stage, so the next startup can retry cleanup.
-        if ([IO.Directory]::Exists($stage)) {
+        if ($pathLocks.IsHeld($stage) -and [IO.Directory]::Exists($stage)) {
             Assert-PlainPath $stage | Out-Null
             Write-Record ([IO.Path]::Combine($stage, 'owner.json')) @{
                 app_id=$appIdentity; schema_version=1; nonce=$job.nonce
@@ -229,7 +383,7 @@ function Remove-OwnedStage {
     }
     $updatesDirectory = [IO.Path]::GetDirectoryName($stage)
     if (@(Get-ChildItem -LiteralPath $updatesDirectory -Force).Count -eq 0) {
-        Remove-Item -LiteralPath $updatesDirectory -Force
+        $pathLocks.RemoveEmptyDirectory($updatesDirectory)
     }
 }
 
@@ -239,6 +393,10 @@ try {
     $stage = [IO.Path]::GetDirectoryName($checkedJob)
     $stageName = [IO.Path]::GetFileName($stage)
     Assert-Condition ($stageName -cmatch '^update-[a-f0-9]{32}$') 'Invalid update stage name.'
+    $pathLocks = New-UpdatePathLocks
+    $pathLocks.HoldDirectoryPath($stage)
+    Assert-PrivateUpdateDirectory $stage
+    Assert-PrivateUpdateDirectory ([IO.Path]::GetDirectoryName($stage))
     $job = Read-Record $checkedJob
     $owner = Read-Record ([IO.Path]::Combine($stage, 'owner.json')) $maxSmallRecordBytes
     Assert-Condition (($job.app_id -eq $appIdentity) -and ($job.schema_version -eq 1) -and
@@ -258,6 +416,8 @@ try {
     Assert-Condition (($job.installer_bytes -ge $minInstallerBytes) -and ($job.installer_bytes -le $maxInstallerBytes) -and
         ($job.installer_sha256 -cmatch '^[a-f0-9]{64}$')) 'Invalid installer identity.'
     $executable = Assert-Installation $job.executable
+    $pathLocks.HoldDirectoryPath([IO.Path]::GetDirectoryName($executable))
+    Assert-PrivateUpdateDirectory ([IO.Path]::GetDirectoryName($executable))
     $safeStage = $true
     Assert-InstalledVersion $executable
     Assert-SignedRelease
@@ -299,6 +459,13 @@ try {
     $installerLock = Open-VerifiedInstaller $installer
     $installerProcess = $null
     try {
+        # Once installation starts, a failed install/cleanup may leave loadable
+        # retired files. Do not run even the installed self-test until Inno has
+        # confirmed its integrity/cleanup gates succeeded.
+        $restartPermitted = $false
+        # Inno's trusted permission helper needs a delete-capable handle. Keep
+        # parents pinned and bind the root's object ID across this handoff.
+        $pathLocks.ReleaseForInstaller([IO.Path]::GetDirectoryName($executable))
         $installerProcess = Start-VerifiedProcess $installer $arguments $false
         # Inno shows its normal progress window; it never closes unrelated apps.
         $installerProcess.WaitForExit()
@@ -307,7 +474,11 @@ try {
             $restartPermitted = $false
             throw 'The installer requested a Windows restart. Restart Windows before opening the translator again.'
         }
-        Assert-Condition ($exitCode -eq 0) ('The installer did not complete (code ' + $exitCode + ').')
+        Assert-Condition ($exitCode -eq 0) ('The installer did not complete (code ' + $exitCode + '). The translator was left closed.' +
+            (Get-InstallerCleanupExplanation) + ' Rerun the website installer before opening it.')
+        $pathLocks.HoldDirectoryPath([IO.Path]::GetDirectoryName($executable))
+        Assert-PrivateUpdateDirectory ([IO.Path]::GetDirectoryName($executable))
+        $restartPermitted = $true
     } finally {
         if ($installerProcess) { $installerProcess.Dispose() }
         $installerLock.Dispose()
@@ -363,6 +534,7 @@ if ($restartExecutable) {
         } catch { }
     }
 }
+if ($pathLocks) { $pathLocks.Dispose() }
 if ($committed -and $parentExited -and -not $restartExecutable) {
     # Only an actual failed update needs a final visible handoff to the user.
     try {

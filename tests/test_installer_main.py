@@ -15,6 +15,8 @@ from installer_runtime import DEFAULT_MODEL
 
 class InstallerConfigurationTests(unittest.TestCase):
     def setUp(self):
+        self.enterContext(patch.object(setup, "storage_requires_confirmation", return_value=False))
+        self.confirmation_identity = self.enterContext(patch.object(setup, "storage_confirmation_identity", return_value=[7, 8, 9]))
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
         self.root = Path(self.folder.name)
@@ -49,6 +51,32 @@ class InstallerConfigurationTests(unittest.TestCase):
         window._show_setup = Mock()
         window.events = Mock()
         return window
+
+    def test_legacy_storage_decline_does_not_start_worker_or_change_files(self):
+        window = self.install_window()
+        with patch.object(setup, "storage_requires_confirmation", return_value=True), \
+             patch.object(setup.messagebox, "askyesno", return_value=False) as question, \
+             patch.object(window, "_start_work") as work:
+            window.install()
+        work.assert_not_called()
+        self.register_data_root.assert_not_called()
+        self.assertIn(str(self.root / "data"), question.call_args.args[1])
+        self.assertEqual(question.call_args.kwargs["default"], "no")
+
+    def test_legacy_confirmation_authorizes_only_displayed_data_root(self):
+        window = self.install_window()
+        def approve(*args, **kwargs):
+            self.confirmation_identity.assert_called_once_with(self.root / "data", setup.SETTINGS_PATH.parent)
+            return True
+        with patch.object(setup, "storage_requires_confirmation", return_value=True), \
+             patch.object(setup.messagebox, "askyesno", side_effect=approve), \
+             patch.object(setup, "RuntimeManager"), patch.object(setup, "OllamaClient"), \
+             patch.object(setup, "save_configuration"), \
+             patch.object(window, "_operation_result"), \
+             patch.object(window, "_start_work", side_effect=lambda work, **kwargs: work(threading.Event())):
+            window.install()
+        self.register_data_root.assert_called_once_with(self.root / "data", setup.SETTINGS_PATH.parent,
+                                                       confirmed_root=self.root / "data", confirmed_identity=[7, 8, 9])
 
     def test_configuration_writer_defaults_do_not_copy_personal_preferences(self):
         setup.save_configuration(self.root / "data", DEFAULT_MODEL, "", self.settings, self.location)

@@ -31,9 +31,11 @@ SOURCES = (
     "translator_app.py", "translator_core.py", "game_slang.py", "item_catalog.py",
     "game_log_setup.py", "chat_overlay.py", "overlay_tray.py", "reply_composer.py", "uninstall_data.py",
     "app_updater.py", "update_trust.py", "update_controls.py", "installation_cleanup.py",
+    "local_service.py", "runtime_integrity.py", "secure_storage.py", "update_network.py",
 )
 ASSETS = ("assets/L2CT.ico", "assets/L2CT.png", "assets/item_catalog.json", "assets/ITEM-CATALOG-NOTICE.txt",
-          "assets/apply-update.ps1", "assets/cleanup-program-files.ps1", "assets/protect-install-directory.ps1")
+          "assets/apply-update.ps1", "assets/cleanup-program-files.ps1", "assets/protect-install-directory.ps1",
+          "assets/secure-ollama-manifest.json")
 
 
 def digest(path: Path) -> str:
@@ -59,6 +61,17 @@ def main() -> None:
         if not (ROOT / name).is_file():
             raise SystemExit(f"Required source has not been created: {name}")
     input_hashes = {name: digest(ROOT / name) for name in (*SOURCES, *ASSETS)}
+    # This is a generated dependency, not source and not model weights. Its
+    # public build recipe and trusted hash are part of the source snapshot.
+    from runtime_integrity import verify_bundled_frontend, load_manifest
+    protected_frontend = verify_bundled_frontend()
+    runtime_inventory = load_manifest()
+    backend_sources = PACKAGING / "secure-ollama"
+    for name, expected in runtime_inventory.get("patch_inputs", {}).items():
+        path = backend_sources / name
+        if (not path.resolve().is_relative_to(backend_sources.resolve())
+                or not path.is_file() or digest(path) != expected):
+            raise SystemExit("Protected backend source changed. Rebuild it and review its inventory before packaging.")
     text = (ROOT / "app_version.py").read_text(encoding="utf-8")
     match = re.search(r'\bVERSION\s*=\s*[\'"]([0-9]+\.[0-9]+\.[0-9]+)[\'"]', text)
     if not match:
@@ -114,6 +127,12 @@ def main() -> None:
     ], cwd=source, env=build_env)
     app = appdist / "Lineage2ChatTranslator"
     native_summary = verify_bundled_binaries(app, json.loads(audit_path.read_text(encoding="utf-8")))
+    backend_directory = app / "_internal" / "secure-runtime"
+    backend_directory.mkdir()
+    shutil.copy2(protected_frontend, backend_directory / "ollama.exe")
+    backend_record = next(row for row in runtime_inventory["files"] if row["path"] == "ollama.exe")
+    if digest(backend_directory / "ollama.exe") != backend_record["sha256"]:
+        raise SystemExit("Protected backend changed during the build.")
     for name in ("USER-README.txt", "THIRD-PARTY-NOTICES.txt"):
         shutil.copy2(PACKAGING / name, app / name)
     copy_licenses(licenses, app / "licenses")
@@ -152,7 +171,9 @@ def main() -> None:
         "platform": "windows-x64", "authenticode_signed": False,
         "toolchain": {"python": sys.version.split()[0], "pyinstaller": package_version("pyinstaller"), "inno_setup": "6.7.3"},
         "default_model": read_model_catalog(source)["DEFAULT_MODEL"], "models_bundled": False,
-        "runtime_bundled": False,
+        "runtime_bundled": True,
+        "bundled_runtime_components": ["authenticated_frontend"],
+        "runtime_libraries_bundled": False,
         "sources": [{"path": name, "sha256": input_hashes[name]} for name in SOURCES],
         "assets": [{"path": name, "sha256": input_hashes[name]} for name in ASSETS],
         "payload": frozen_files,

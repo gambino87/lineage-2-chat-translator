@@ -82,13 +82,13 @@ class ExternalCleanupTests(unittest.TestCase):
     def test_unchanged_files_removed_modified_and_private_data_preserved(self):
         old = self.write("_internal/retired/sub/old.dll")
         license_file = self.write("licenses/retired/LICENSE.txt")
-        modified = self.write("_internal/modified.dll", b"local modification")
+        modified = self.write("_internal/modified.txt", b"local modification")
         settings = self.write("settings.json", b"private settings")
         model = self.write("models/model.bin", b"private model")
-        result = self.run_cleanup(self.plan(self.entry("_internal/retired/sub/old.dll"), self.entry("licenses/retired/LICENSE.txt"), self.entry("_internal/modified.dll")))
+        result = self.run_cleanup(self.plan(self.entry("_internal/retired/sub/old.dll"), self.entry("licenses/retired/LICENSE.txt"), self.entry("_internal/modified.txt")))
         self.assertTrue(result["ok"], result)
         self.assertEqual(result["removed_count"], 2)
-        self.assertEqual(result["preserved"], ["_internal/modified.dll"])
+        self.assertEqual(result["preserved"], ["_internal/modified.txt"])
         self.assertFalse(old.exists())
         self.assertFalse(license_file.exists())
         self.assertFalse((self.root / "_internal/retired").exists())
@@ -106,6 +106,17 @@ class ExternalCleanupTests(unittest.TestCase):
         result = self.run_cleanup(self.plan(self.entry("_internal/old.dll", ["0" * 64, OLD_HASH])))
         self.assertTrue(result["ok"], result)
         self.assertFalse(old.exists())
+
+    def test_modified_retired_binaries_block_cleanup_until_owner_removes_them(self):
+        for name in ('_internal/ucrtbase.dll', '_internal/old.PYD'):
+            with self.subTest(name=name):
+                changed = self.write(name, b'harmless modified fixture; never loaded')
+                result = self.run_cleanup(self.plan(self.entry(name)))
+                self.assertFalse(result['ok'], result)
+                self.assertIn('manually', result['error'])
+                self.assertEqual(changed.read_bytes(), b'harmless modified fixture; never loaded')
+                changed.unlink()  # The owner retains ordinary file control.
+                self.assertTrue(self.run_cleanup()['ok'])
 
     def test_full_plan_rejected_before_deletion_for_unsafe_targets(self):
         old = self.write("_internal/old.dll")
@@ -188,8 +199,8 @@ $result=[pscustomobject]@{ok=$true;version='1.7.5';removed=@();preserved=@();err
         self.assertIn("too large", result["error"])
         old = self.write("_internal/large.dll")
         result = self.run_cleanup(self.plan(self.entry("_internal/large.dll")), extra="$script:CleanupFileBytes=4")
-        self.assertTrue(result["ok"], result)
-        self.assertEqual(result["preserved"], ["_internal/large.dll"])
+        self.assertFalse(result["ok"], result)
+        self.assertIn('manually', result['error'])
         self.assertTrue(old.exists())
 
     def test_directory_target_preflight_prevents_partial_deletion(self):

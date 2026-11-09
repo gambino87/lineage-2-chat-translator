@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path, PureWindowsPath
 import re
+import secrets
 import shutil
 import socket
 import stat
@@ -25,6 +26,11 @@ import time
 from typing import Callable
 from urllib import error, request
 import zipfile
+
+from local_service import ServiceIdentityError, get_session, register_session, forget_session
+from secure_storage import StorageError, guard_private_tree, safe_remove_tree
+from runtime_integrity import (BACKEND_VERSION, pin_runtime, verified_runtime,
+                               verify_bundled_frontend, load_manifest)
 
 
 OLLAMA_VERSION = "0.40.14"
@@ -214,12 +220,19 @@ def _controlled_connect(connection, operation):
 
 
 class _ControlledHTTPConnection(http.client.HTTPConnection):
-    def __init__(self, *args, operation, **kwargs):
+    def __init__(self, *args, operation, session=None, **kwargs):
         self.operation = operation
+        self.session = session
         super().__init__(*args, **kwargs)
 
     def connect(self):
-        _controlled_connect(self, self.operation)
+        try:
+            _controlled_connect(self, self.operation)
+            if self.session is not None:
+                self.session.authorize(self.sock)
+        except Exception:
+            self.close()
+            raise
 
 
 class _ControlledHTTPSConnection(http.client.HTTPSConnection):
@@ -239,13 +252,17 @@ class _ControlledHTTPSConnection(http.client.HTTPSConnection):
 
 
 class _ControlledHTTPHandler(request.HTTPHandler):
-    def __init__(self, operation):
+    def __init__(self, operation, session=None):
         super().__init__()
         self.operation = operation
+        self.session = session
 
     def http_open(self, req):
+        session = self.session() if self.session else None
+        if session is not None:
+            req.add_unredirected_header("Authorization", session.header())
         return self.do_open(lambda *args, **kwargs: _ControlledHTTPConnection(
-            *args, operation=self.operation(), **kwargs), req)
+            *args, operation=self.operation(), session=session, **kwargs), req)
 
 
 class _ControlledHTTPSHandler(request.HTTPSHandler):
@@ -278,6 +295,32 @@ def _sha256(path: Path, check: Callable[[], None] | None = None) -> str:
                 check()
             digest.update(block)
     return digest.hexdigest()
+
+
+def _service_environment(models_dir: Path, service_home: Path, credential: str) -> dict:
+    """Keep user GPU visibility/proxies, but never inherit alternate code paths."""
+    import ctypes
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    directories = []
+    for name in ("GetSystemDirectoryW", "GetWindowsDirectoryW"):
+        function = getattr(kernel, name)
+        function.argtypes = [ctypes.c_wchar_p, ctypes.c_uint]
+        function.restype = ctypes.c_uint
+        buffer = ctypes.create_unicode_buffer(WINDOWS_PATH_BUFFER_CHARS)
+        length = function(buffer, len(buffer))
+        if not 0 < length < len(buffer):
+            raise SetupError("Windows could not provide the protected service search paths.")
+        directories.append(buffer.value)
+    environment = {key: value for key, value in os.environ.items()
+                   if not key.upper().startswith(("OLLAMA_", "GGML_", "LLAMA_", "L2CT_"))
+                   and key.upper() not in {"PATH", "USERPROFILE", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"}}
+    environment.update({"PATH": os.pathsep.join(directories), "USERPROFILE": str(service_home),
+                        "OLLAMA_HOST": f"127.0.0.1:{PORT}", "OLLAMA_NO_CLOUD": "1",
+                        "OLLAMA_MODELS": str(models_dir), "OLLAMA_CONTEXT_LENGTH": str(MODEL_CONTEXT_TOKENS),
+                        "OLLAMA_NUM_PARALLEL": "1", "OLLAMA_MAX_LOADED_MODELS": "1", "OLLAMA_KEEP_ALIVE": MODEL_KEEP_ALIVE,
+                        "OLLAMA_DEBUG": "0", "OLLAMA_DEBUG_LOG_REQUESTS": "0", "OLLAMA_ORIGINS": "",
+                        "L2CT_OLLAMA_API_KEY": credential})
+    return environment
 
 
 def _model_tag(tag: str) -> str:
@@ -341,10 +384,13 @@ class RuntimeManager:
                  *, cancel_event: threading.Event | None = None):
         if not str(data_root).strip():
             raise SetupError("Choose a folder for the runtime and model files.")
-        self.data_root = Path(data_root).expanduser().resolve()
+        # Keep the lexical path until the no-follow storage guard checks every
+        # component; resolve() here would hide a junction chosen by another user.
+        self.data_root = Path(os.path.abspath(Path(data_root).expanduser()))
         self.runtime_dir = self.data_root / "ollama"
         self.models_dir = self.data_root / "models"
         self.logs_dir = self.data_root / "logs"
+        self.service_home = self.data_root / "service-home"
         self.executable = self.runtime_dir / "ollama.exe"
         self.receipt_path = self.runtime_dir / "verified-install.json"
         self.progress = progress or (lambda message: None)
@@ -352,10 +398,34 @@ class RuntimeManager:
         self._ignore_cancel = False
         self._network = None
         self._opener = request.build_opener(request.ProxyHandler({}), _NoRedirect(),
-                                           _ControlledHTTPHandler(lambda: self._network))
+                                           _ControlledHTTPHandler(lambda: self._network, lambda: get_session(ENDPOINT)))
         # Retain the child handle, not just its PID: configuration must never
         # assume that reusing an existing listener makes it ours to stop.
         self._owned_service: subprocess.Popen | None = None
+        self._session = None
+        self._storage_guard = None
+        self._runtime_locks = None
+
+    def _protect_storage(self):
+        """Keep the owner's private tree stable through the service lifetime."""
+        if self._storage_guard is not None:
+            return
+        from uninstall_data import authorize_data_root
+        guard = guard_private_tree(self.data_root, create=True,
+                                   authorize_existing=authorize_data_root, allow_locked_ancestors=True)
+        try:
+            guard.__enter__()
+        except OSError as exc:
+            raise SetupError(str(exc)) from exc
+        self._storage_guard = guard
+
+    def _release_storage(self):
+        if self._runtime_locks is not None:
+            self._runtime_locks.close()
+            self._runtime_locks = None
+        if self._storage_guard is not None:
+            self._storage_guard.__exit__(None, None, None)
+            self._storage_guard = None
 
     def check_cancelled(self):
         if not self._ignore_cancel and self.cancel_event is not None and self.cancel_event.is_set():
@@ -394,16 +464,33 @@ class RuntimeManager:
             client._request = original
 
     def _verified_runtime(self) -> bool:
-        """Require the pinned archive receipt and an unchanged Ollama executable."""
+        """The signed application's inventory is the authority, not local JSON."""
         self.check_cancelled()
+        return self._runtime_locks is not None or verified_runtime(self.runtime_dir, check=self.check_cancelled)
+
+    def _verified_legacy_runtime(self) -> bool:
+        return verified_runtime(self.runtime_dir, legacy=True, check=self.check_cancelled)
+
+    def _copy_protected_frontend(self, directory):
+        """Replace only known vendor bytes; the selected model files stay intact."""
+        from secure_storage import locked_file
+        source = verify_bundled_frontend()
+        expected = next(row for row in load_manifest()["files"] if row["path"] == "ollama.exe")
+        fd, temporary_name = tempfile.mkstemp(prefix=".frontend-", suffix=".tmp", dir=directory)
+        temporary = Path(temporary_name)
         try:
-            receipt = json.loads(self.receipt_path.read_text(encoding="utf-8-sig"))
-            return (receipt.get("version") == OLLAMA_VERSION
-                    and receipt.get("archiveSha256") == ARCHIVE_SHA256
-                    and self.executable.is_file()
-                    and receipt.get("executableSha256", "").lower() == _sha256(self.executable, self.check_cancelled))
-        except (OSError, ValueError, AttributeError):
-            return False
+            digest = hashlib.sha256()
+            with os.fdopen(fd, "wb") as output, locked_file(source) as input_file:
+                while block := input_file.read(TRANSFER_CHUNK_BYTES):
+                    self.check_cancelled()
+                    output.write(block)
+                    digest.update(block)
+            if digest.hexdigest() != expected["sha256"] or temporary.stat().st_size != expected["bytes"]:
+                raise SetupError("The protected runtime copy failed verification.")
+            temporary.replace(directory / "ollama.exe")
+        finally:
+            if temporary.exists():
+                safe_remove_tree(temporary)
 
     def _check_disk(self, required: int) -> None:
         self.check_cancelled()
@@ -515,12 +602,21 @@ class RuntimeManager:
     def ensure_runtime(self) -> Path:
         """Reuse a verified runtime or stage a verified archive without overwrites."""
         self.check_cancelled()
+        self._protect_storage()
         if self._verified_runtime():
-            self.progress(f"Verified portable Ollama {OLLAMA_VERSION} is already installed.")
+            self.progress(f"Verified protected Ollama {BACKEND_VERSION} is already installed.")
+            if self._runtime_locks is None:
+                self._runtime_locks = pin_runtime(self.runtime_dir, check=self.check_cancelled)
             self.cleanup_installation()
             return self.executable
         if self.runtime_dir.exists():
-            raise SetupError(f"An existing runtime at {self.runtime_dir} could not be verified. Choose a new empty storage folder, or restore its verified-install.json receipt. Setup will not overwrite it.")
+            if not self._verified_legacy_runtime():
+                raise SetupError(f"An existing runtime at {self.runtime_dir} could not be verified against the trusted file inventory. Choose a new empty storage folder or restore the official runtime files. Setup will not overwrite unknown changes.")
+            self.progress("Upgrading the verified local runtime's connection security; your models are retained…")
+            self._copy_protected_frontend(self.runtime_dir)
+            self._runtime_locks = pin_runtime(self.runtime_dir, check=self.check_cancelled)
+            self.cleanup_installation()
+            return self.executable
         self._check_disk(RUNTIME_PEAK_BYTES)
         archive = self.data_root / f"ollama-windows-amd64-{OLLAMA_VERSION}.zip"
         self._check_setup_child(archive)
@@ -536,8 +632,11 @@ class RuntimeManager:
             executable = staging / "ollama.exe"
             if not executable.is_file():
                 raise SetupError("The verified archive did not contain ollama.exe.")
+            with pin_runtime(staging, legacy=True, check=self.check_cancelled):
+                pass
+            self._copy_protected_frontend(staging)
             receipt = {
-                "version": OLLAMA_VERSION, "source": ARCHIVE_URL,
+                "version": BACKEND_VERSION, "source": ARCHIVE_URL,
                 "archiveSha256": ARCHIVE_SHA256, "executableSha256": _sha256(executable, self.check_cancelled),
                 "installedAtUtc": datetime.now(timezone.utc).isoformat(),
             }
@@ -548,11 +647,12 @@ class RuntimeManager:
                 raise SetupError("The runtime staging location is invalid.")
             self.check_cancelled()
             staging.rename(self.runtime_dir)
+            self._runtime_locks = pin_runtime(self.runtime_dir, check=self.check_cancelled)
             self.cleanup_installation()
         finally:
             if staging.exists() and staging.parent == self.data_root and staging.name.startswith(".ollama-stage-"):
                 self._check_setup_child(staging, tree=True)
-                shutil.rmtree(staging)
+                safe_remove_tree(staging)
         return self.executable
 
     def _port_open(self) -> bool:
@@ -615,11 +715,11 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
     def _open_api(self, path: str, payload: dict | None = None, *, method: str | None = None,
                   timeout: float = API_TIMEOUT_SECONDS, expected_pid: int | None = None,
                   budget_seconds: float | None = None):
-        """Verify the loopback owner before each API request; never use a proxy."""
+        """Authenticate the actual request connection, never only a probe."""
         budget = timeout if budget_seconds is None else budget_seconds
         with self._network_scope(budget, "The local service request") as operation:
-            owner = self._verify_owner(timeout=min(OWNER_CHECK_SECONDS, timeout, operation.remaining()))
-            if expected_pid is not None and owner.get("pid") != expected_pid:
+            session = get_session(ENDPOINT)
+            if expected_pid is not None and session.identity.pid != expected_pid:
                 raise SetupError("The dedicated service changed during shutdown. No replacement service was stopped.")
             body = None if payload is None else json.dumps(payload).encode("utf-8")
             req = request.Request(ENDPOINT + path, data=body, method=method, headers={"Content-Type": "application/json"})
@@ -661,6 +761,10 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
         # A second check below handles a listener appearing during installation.
         if self._port_open():
             self._verify_owner()
+            try:
+                get_session(ENDPOINT)
+            except ServiceIdentityError as exc:
+                raise SetupError("A previous local service is still running without this launcher's authentication. Close the old translator, or use Stop local service in Configure, then retry.") from exc
         self.ensure_runtime()
         if not self._port_open():
             # The listener can disappear while the runtime is being checked.
@@ -671,21 +775,20 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
                 self._owned_service = None
             self.logs_dir.mkdir(parents=True, exist_ok=True)
             self.models_dir.mkdir(parents=True, exist_ok=True)
+            self.service_home.mkdir(parents=True, exist_ok=True)
             self.progress("Starting the dedicated local translation service…")
-            env = dict(os.environ)
+            credential = secrets.token_hex(32)
             # Ambient developer settings must not persist chat request bodies or
             # grant arbitrary websites access to the local model. Empty origins
             # retains Ollama's built-in local origins, without inherited extras.
-            env.update({"OLLAMA_HOST": f"127.0.0.1:{PORT}", "OLLAMA_NO_CLOUD": "1",
-                        "OLLAMA_MODELS": str(self.models_dir), "OLLAMA_CONTEXT_LENGTH": str(MODEL_CONTEXT_TOKENS),
-                        "OLLAMA_NUM_PARALLEL": "1", "OLLAMA_MAX_LOADED_MODELS": "1", "OLLAMA_KEEP_ALIVE": MODEL_KEEP_ALIVE,
-                        "OLLAMA_DEBUG": "0", "OLLAMA_DEBUG_LOG_REQUESTS": "0", "OLLAMA_ORIGINS": ""})
+            env = _service_environment(self.models_dir, self.service_home, credential)
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
             with (self.logs_dir / f"ollama-{stamp}.stdout.log").open("ab") as stdout, (self.logs_dir / f"ollama-{stamp}.stderr.log").open("ab") as stderr:
                 self.check_cancelled()
                 process = subprocess.Popen([str(self.executable), "serve"], cwd=self.runtime_dir, env=env, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), close_fds=True)
                 # Keep ownership even if readiness/version checks fail below.
                 self._owned_service = process
+                self._session = register_session(ENDPOINT, process, self.executable, credential)
             for _ in range(int(SERVICE_STARTUP_SECONDS / SERVICE_STARTUP_POLL_SECONDS)):
                 self.check_cancelled()
                 if process.poll() is not None:
@@ -700,8 +803,8 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
                 process.terminate()
                 raise SetupError(f"The local service did not start within one minute. See {self.logs_dir}.")
         version = self._request_api("/api/version", timeout=10).get("version")
-        if version != OLLAMA_VERSION:
-            raise SetupError(f"The dedicated service reports version {version}; expected {OLLAMA_VERSION}. Close the old service and retry.")
+        if version != BACKEND_VERSION:
+            raise SetupError(f"The dedicated service reports version {version}; expected {BACKEND_VERSION}. Close the old service and retry.")
 
     def stop_owned_service(self) -> None:
         # Cancellation must never prevent teardown of the child it interrupted.
@@ -710,6 +813,10 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
         try:
             self._stop_owned_service()
         finally:
+            if self._owned_service is None:
+                forget_session(ENDPOINT, self._session)
+                self._session = None
+                self._release_storage()
             self._ignore_cancel = previous
 
     def _stop_owned_service(self) -> None:
@@ -772,6 +879,17 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
         if not handle:
             raise SetupError("Windows could not open the verified local service for stopping. Retry after closing the translator.")
         try:
+            # Explicit stop/uninstall may encounter a legacy service not started
+            # by this invocation. Its path alone is insufficient on shared PCs.
+            from local_service import _user_sid
+            current = kernel.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, os.getpid())
+            if not current:
+                raise SetupError("Windows could not verify this account. No process was stopped.")
+            try:
+                if _user_sid(handle) != _user_sid(current):
+                    raise ServiceOwnershipMismatch("The local service belongs to another Windows account. No process was stopped.")
+            finally:
+                kernel.CloseHandle(current)
             path = ctypes.create_unicode_buffer(WINDOWS_PATH_BUFFER_CHARS)
             length = wintypes.DWORD(len(path))
             if not kernel.QueryFullProcessImageNameW(handle, 0, path, ctypes.byref(length)):
@@ -838,7 +956,7 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
         if not self._port_open():
             self.progress("The dedicated local service is already stopped.")
             return
-        if not self._verified_runtime():
+        if not self._verified_runtime() and not self._verified_legacy_runtime():
             raise SetupError("The saved runtime could not be verified. No process was stopped.")
         owner = self._verify_owner(timeout=SHUTDOWN_OWNER_CHECK_SECONDS)
         process_id = owner.get("pid")
@@ -954,7 +1072,7 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
         self.check_cancelled()
         if tag not in MODEL_CATALOG:
             raise SetupError("Choose a supported model from the model list.")
-        self.data_root.mkdir(parents=True, exist_ok=True)
+        self._protect_storage()
         if not self._verified_runtime():
             self._check_disk(required_disk_bytes(tag))
         self.ensure_service()

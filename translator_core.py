@@ -611,7 +611,11 @@ class OllamaClient:
         self.model = _validate_model(model)
         self.target_language = target_language.strip()
         self._verified_model: str | None = None
-        self._opener = request.build_opener(request.ProxyHandler({}), _NoRedirect())
+        # The launcher registers its retained child identity and ephemeral key.
+        # Socket ownership is checked on every connection, including after the
+        # model details have been cached; a replacement listener gets no chat.
+        from local_service import PinnedHTTPHandler
+        self._opener = request.build_opener(request.ProxyHandler({}), _NoRedirect(), PinnedHTTPHandler(self.base_url))
 
     def _request(self, path: str, payload: dict | None = None, timeout: float = INFERENCE_TIMEOUT_SECONDS) -> dict:
         """Exchange bounded JSON; never include server response bodies in errors."""

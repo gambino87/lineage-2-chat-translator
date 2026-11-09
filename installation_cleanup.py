@@ -197,10 +197,19 @@ def _remove_empty_parents(root: Path, path: Path) -> list[str]:
     return removed
 
 
+def _safe_to_preserve(relative: str):
+    # Unknown bytes are never silently deleted. A leftover loadable binary can
+    # affect the newly installed runtime, so require explicit owner cleanup.
+    _require(Path(relative).suffix.casefold() not in {'.dll', '.pyd', '.exe'},
+             f'Retired program file {relative} differs from known releases and was left untouched. '
+             'Move or remove that file manually, then run this installer again before opening the translator.')
+
+
 def cleanup_program_files(install_root: Path, plan: dict, version: str) -> dict:
     """Delete retired files only when their complete bytes match a past release.
 
-    Modified files are preserved. Failures remain visible to the installer so a
+    Modified data files are preserved; modified loadable binaries block success.
+    Failures remain visible to the installer so a
     later install can retry; an already removed file is harmless on that retry.
     """
     plan = validate_plan(plan, version)
@@ -217,6 +226,7 @@ def cleanup_program_files(install_root: Path, plan: dict, version: str) -> dict:
         if before is None:
             continue
         if before.st_size > MAX_OBSOLETE_FILE_BYTES:
+            _safe_to_preserve(entry["path"])
             result["preserved"].append(entry["path"])
             continue
         with path.open("rb") as source:
@@ -238,6 +248,7 @@ def cleanup_program_files(install_root: Path, plan: dict, version: str) -> dict:
             continue
         _require(_same_file(before, after), "An obsolete file changed during verification.")
         if digest not in entry["hashes"]:
+            _safe_to_preserve(entry["path"])
             result["preserved"].append(entry["path"])
             continue
         path.unlink()

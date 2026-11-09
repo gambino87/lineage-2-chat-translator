@@ -10,6 +10,7 @@ from installer_runtime import DEFAULT_MODEL
 
 class StartupVisibilityTests(unittest.TestCase):
     def setUp(self):
+        self.enterContext(patch.object(setup, "storage_requires_confirmation", return_value=False))
         folder = self.enterContext(tempfile.TemporaryDirectory())
         self.settings = Path(folder) / "settings.json"
         self.location = Path(folder) / "runtime.json"
@@ -80,6 +81,18 @@ class StartupVisibilityTests(unittest.TestCase):
                 self.hardware.assert_called_once()  # Revealing again does not rescan.
                 self.runtime.assert_not_called()
                 self.start_frame.assert_not_called()
+
+    def test_untrusted_legacy_store_requires_visible_owner_review_before_start(self):
+        window = self.window()
+        window._start_work = Mock()
+        with patch.object(setup, "storage_requires_confirmation", return_value=True):
+            window.launch_existing()
+        self.runtime.assert_not_called()
+        self.client.assert_not_called()
+        window._start_work.assert_not_called()  # Only the read-only hardware summary may run.
+        self.assertFalse(window.launch_requested)
+        self.assertIn("Review your existing model folder", window.status.set.call_args.args[0])
+        self.assertEqual(setup.read_json(self.settings), self.saved)
 
     def test_incomplete_configuration_reveals_setup_without_starting_service(self):
         for saved, location in (({}, {}), ({"model": DEFAULT_MODEL}, {"data_root": "D:/Models"}),

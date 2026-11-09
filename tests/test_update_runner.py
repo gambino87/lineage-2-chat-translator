@@ -30,6 +30,130 @@ class UpdateRunnerTests(unittest.TestCase):
         self.assertLess(main.index('$installerLock = Open-VerifiedInstaller'), started)
         self.assertGreater(main.index('$installerLock.Dispose()'), started)
 
+    @unittest.skipUnless(os.name == 'nt', 'Windows PowerShell integration')
+    def test_failed_installer_cleanup_cannot_launch_installed_program(self):
+        source = app_updater.RUNNER_PATH.read_text(encoding='utf-8')
+        declarations = source.split('\ntry {\n    $checkedJob', 1)[0].replace(
+            'param([Parameter(Mandatory = $true)][string]$JobPath)', '')
+        # Exercise the actual installer-result branch with inert process doubles.
+        # No installer, installed EXE, registry, service or GUI is touched.
+        branch = source.split('    $installerProcess = $null\n', 1)[1].split(
+            "    $status = 'success'", 1)[0]
+        harness = r'''
+function Start-VerifiedProcess {
+    $fake=[pscustomobject]@{ExitCode=$script:fixtureExit}
+    $fake | Add-Member ScriptMethod WaitForExit {}
+    $fake | Add-Member ScriptMethod Dispose {}
+    return $fake
+}
+function Test-InstalledProgram { $script:probes++; return 'fixture-never-launched.exe' }
+function Assert-PrivateUpdateDirectory {}
+$pathLocks=[pscustomobject]@{}
+$pathLocks | Add-Member ScriptMethod ReleaseForInstaller {}
+$pathLocks | Add-Member ScriptMethod HoldDirectoryPath {}
+$executable='C:\fixture\launcher.exe'
+$job=[pscustomobject]@{version='99.8.7'}
+$installer='fixture-never-executed.exe'
+$arguments=@()
+foreach($code in @(4,1,3010,0)) {
+    $script:fixtureExit=$code
+    $script:probes=0
+    $restartPermitted=$true
+    $installerProcess=$null
+    $installerLock=[pscustomobject]@{}
+    $installerLock | Add-Member ScriptMethod Dispose {}
+    try {
+__BRANCH__
+    } catch {
+        # This is the shipped recovery condition, with a confirmed handoff and
+        # exited parent. False must prevent both its self-test and GUI restart.
+        if($restartPermitted) { $null=Test-InstalledProgram @('1.7.12','99.8.7') }
+    }
+    if($code -eq 0) {
+        if(-not $restartPermitted -or $script:probes -ne 1) {throw 'Successful installer did not permit one probe.'}
+    } elseif($restartPermitted -or $script:probes -ne 0) {throw 'Failed installer allowed installed code execution.'}
+}
+'installer-restart-guards-passed'
+'''.replace('__BRANCH__', branch)
+        with tempfile.TemporaryDirectory(prefix='l2-runner-result-') as folder:
+            script = Path(folder) / 'guard.ps1'
+            script.write_text(declarations + '\n' + harness, encoding='utf-8-sig')
+            powershell = Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
+            result = subprocess.run([str(powershell), '-NoLogo', '-NoProfile', '-NonInteractive',
+                                     '-ExecutionPolicy', 'Bypass', '-File', str(script)],
+                                    capture_output=True, timeout=20, creationflags=subprocess.CREATE_NO_WINDOW)
+        self.assertEqual(result.returncode, 0, result.stderr.decode(errors='replace'))
+        self.assertIn(b'installer-restart-guards-passed', result.stdout)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows native path-lock integration')
+    def test_runner_keeps_paths_stable_through_cleanup_and_rejects_root_substitution(self):
+        declarations = app_updater.RUNNER_PATH.read_text(encoding='utf-8').split(
+            '\ntry {\n    $checkedJob', 1)[0].replace(
+                'param([Parameter(Mandatory = $true)][string]$JobPath)', '')
+        harness = r'''
+function Protect-Fixture([string]$Path) {
+    $current=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $acl=[Security.AccessControl.DirectorySecurity]::new()
+    $acl.SetSecurityDescriptorSddlForm(('D:P(A;OICI;FA;;;{0})(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)' -f $current),[Security.AccessControl.AccessControlSections]::Access)
+    [IO.Directory]::SetAccessControl($Path,$acl)
+}
+$updates=[IO.Path]::Combine($TestDirectory,'updates')
+$stage=[IO.Path]::Combine($updates,'update-'+('a'*32))
+$install=[IO.Path]::Combine($TestDirectory,'installation')
+$null=[IO.Directory]::CreateDirectory($stage)
+$null=[IO.Directory]::CreateDirectory($install)
+Protect-Fixture $updates
+Protect-Fixture $stage
+Protect-Fixture $install
+$pathLocks=New-UpdatePathLocks
+try {
+    $pathLocks.HoldDirectoryPath($stage)
+    Assert-PrivateUpdateDirectory $updates
+    Assert-PrivateUpdateDirectory $stage
+    $blocked=$false
+    try {[IO.Directory]::Move($stage,$stage+'-moved')} catch {$blocked=$true}
+    if(-not $blocked) {throw 'Guard allowed stage replacement.'}
+    [IO.File]::WriteAllText([IO.Path]::Combine($stage,'installer.part'),'inert fixture')
+    [IO.File]::Move([IO.Path]::Combine($stage,'installer.part'),[IO.Path]::Combine($stage,'installer.exe'))
+    $pathLocks.HoldDirectoryPath($install)
+    Assert-PrivateUpdateDirectory $install
+    $pathLocks.ReleaseForInstaller($install)
+    [IO.Directory]::Move($install,$install+'-original')
+    $null=[IO.Directory]::CreateDirectory($install)
+    Protect-Fixture $install
+    $blocked=$false
+    try {$pathLocks.HoldDirectoryPath($install)} catch {$blocked=$true}
+    if(-not $blocked) {throw 'Replaced installation root was accepted.'}
+    [IO.Directory]::Delete($install)
+    [IO.Directory]::Move($install+'-original',$install)
+    $pathLocks.HoldDirectoryPath($install)
+    $job=[pscustomobject]@{nonce=('a'*32);version='99.8.7'}
+    $log=[IO.Path]::Combine($stage,'installer.log')
+    $report=@{ok=$false;version='99.8.7';error='Retired program file _internal/ucrtbase.dll differs. Remove it manually.'}
+    [IO.File]::WriteAllText($log,'2026-01-01 Program file cleanup: '+($report | ConvertTo-Json -Compress),[Text.Encoding]::Unicode)
+    if((Get-InstallerCleanupExplanation) -notmatch 'ucrtbase.dll.*manually') {throw 'Specific cleanup explanation was lost.'}
+    $maxInstallerLogBytes=8
+    if((Get-InstallerCleanupExplanation) -ne '') {throw 'Oversized diagnostic log was accepted.'}
+    $safeStage=$true
+    Write-Record ([IO.Path]::Combine($stage,'owner.json')) @{app_id=$appIdentity;nonce=$job.nonce}
+    Remove-OwnedStage
+    if([IO.Directory]::Exists($stage) -or [IO.Directory]::Exists($updates)) {throw 'Owned empty stage/cache remained.'}
+} finally {$pathLocks.Dispose()}
+[IO.File]::WriteAllText([IO.Path]::Combine($install,'owner-access.txt'),'owner still has full control')
+[IO.File]::Delete([IO.Path]::Combine($install,'owner-access.txt'))
+[IO.Directory]::Delete($install)
+'runner-path-locks-passed'
+'''
+        with tempfile.TemporaryDirectory(prefix='l2-runner-paths-') as folder:
+            script = Path(folder) / 'guard.ps1'
+            script.write_text('param([string]$TestDirectory)\n' + declarations + '\n' + harness, encoding='utf-8-sig')
+            powershell = Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
+            result = subprocess.run([str(powershell), '-NoLogo', '-NoProfile', '-NonInteractive',
+                                     '-ExecutionPolicy', 'Bypass', '-File', str(script), '-TestDirectory', folder],
+                                    capture_output=True, timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
+        self.assertEqual(result.returncode, 0, result.stderr.decode(errors='replace'))
+        self.assertIn(b'runner-path-locks-passed', result.stdout)
+
     @unittest.skipUnless(os.name == 'nt', 'Windows CNG/PowerShell integration')
     def test_real_runner_signature_binding_and_installer_locks(self):
         # Evaluate only declarations/functions. Never execute the runner's main

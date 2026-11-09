@@ -36,10 +36,33 @@ class LocalServiceTests(unittest.TestCase):
         self.assertEqual(values["OLLAMA_HOST"], "127.0.0.1:11435")
         self.assertEqual(values["OLLAMA_NO_CLOUD"], "1")
         self.assertEqual(values["OLLAMA_MODELS"], r"D:\Models")
-        # Both entrypoints must use this helper; a safe unused helper is not enough.
+        # Compatibility helpers no longer launch services. Source execution uses
+        # the installed app's authenticated lifecycle and managed shutdown.
+        start = (HELPER.parent / "Start Translator.ps1").read_text(encoding="utf-8-sig")
+        setup = (HELPER.parent / "Setup Ollama.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn("installer_main.py", start)
+        self.assertIn("--configure", start)
+        self.assertIn("'Start Translator.ps1') -Configure", setup)
+        for source in (start, setup):
+            self.assertNotIn("Get-PrivateOllamaEnvironment -ModelsDirectory", source)
+            self.assertNotIn("'ollama_service.ps1'", source)
+            self.assertNotIn("-ArgumentList 'serve'", source)
+            self.assertNotIn("Invoke-RestMethod", source)
+            self.assertNotIn("/api/pull", source)
+
+    def test_source_launchers_check_only_is_headless_and_read_only(self):
         for name in ("Start Translator.ps1", "Setup Ollama.ps1"):
-            source = (HELPER.parent / name).read_text(encoding="utf-8-sig")
-            self.assertIn("$environment = Get-PrivateOllamaEnvironment -ModelsDirectory $modelsDir", source)
+            with self.subTest(name=name):
+                result = subprocess.run(
+                    [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                     "-File", str(HELPER.parent / name), "-CheckOnly"],
+                    cwd=HELPER.parent, text=True, capture_output=True, timeout=30,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                report = json.loads(result.stdout)
+                self.assertFalse(report["windows_opened"])
+                self.assertFalse(report["services_started"])
 
     def select(self, rows):
         helper = str(HELPER).replace("'", "''")

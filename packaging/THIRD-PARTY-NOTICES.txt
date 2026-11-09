@@ -2,6 +2,13 @@ LINEAGE 2 CHAT TRANSLATOR - THIRD-PARTY NOTICES
 
 Bundled with this application:
 
+Ollama 0.40.14-l2ct.1 protected frontend, based on Ollama 0.40.14 (MIT).
+This project's maintained changes authenticate local API and runner connections.
+Source patches and the pinned build recipe: packaging/secure-ollama in the public
+source repository. Full upstream/runtime notices: licenses/OLLAMA.txt.
+https://github.com/ollama/ollama/blob/v0.40.14/LICENSE
+https://github.com/gambino87/lineage-2-chat-translator
+
 L2J Server Datapack item ID/name reference data (L2J Server contributors).
 The separate generated catalog is in assets/item_catalog.json, with provenance
 and locale coverage; attribution is in assets/ITEM-CATALOG-NOTICE.txt.
@@ -31,8 +38,9 @@ https://jrsoftware.org/files/is/license.txt
 
 Downloaded separately by configuration; not included in this installer:
 
-Ollama 0.40.14: MIT license; its portable archive includes upstream notices
-and GPU dependencies. https://github.com/ollama/ollama/blob/v0.40.14/LICENSE
+Ollama 0.40.14 native CPU/GPU dependencies: the official portable archive includes
+their upstream notices. Its frontend is replaced only after archive verification
+by the protected build included above. No model weights are bundled.
 
 Qwen3.5 models: Apache License 2.0.
 https://huggingface.co/Qwen/Qwen3.5-9B/blob/main/LICENSE

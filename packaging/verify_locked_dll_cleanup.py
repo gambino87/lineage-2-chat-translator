@@ -344,10 +344,13 @@ def verify_locked_upgrade(previous_app: Path, current_app: Path, work_root: Path
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content)
         preservation = _run_helper(script, protected, fixture / "protected.json", version, child_env)
-        _require(preservation["exit_code"] == 0
-                 and {p.casefold() for p in preservation["removed"]} == retired - {changed_key}
-                 and {p.casefold() for p in preservation["preserved"]} == {changed_key},
-                 "External cleanup failed to preserve the modified historical DLL.")
+        _require(preservation["exit_code"] == 1
+                 and before[changed_key]["path"] in str(preservation.get("error", ""))
+                 and "manually" in str(preservation.get("error", "")),
+                 "External cleanup did not reject the modified historical DLL with an actionable error.")
+        repeated_failure = _run_helper(script, protected, fixture / "protected-again.json", version, child_env)
+        _require(repeated_failure["exit_code"] == 1,
+                 "Retrying cleanup incorrectly accepted the still-modified historical DLL.")
         for relative, content in sentinels.items():
             _require((protected / relative).read_bytes() == content, "Cleanup modified a protected synthetic file.")
         protected_inventory = _inventory(protected)
@@ -365,6 +368,7 @@ def verify_locked_upgrade(previous_app: Path, current_app: Path, work_root: Path
             "removed_before_release": sorted(retired - remaining),
             "removed_after_release": after["removed"], "exact_current_payload_after_cleanup": True,
             "cleanup_idempotent": True, "modified_retired_dll_preserved": True,
+            "modified_retired_dll_blocks_cleanup": True, "modified_fixture_never_executed": True,
             "synthetic_protected_files_preserved": sorted(sentinels),
             "dirty_frozen_self_test": dirty_self_test,
             "upgraded_frozen_self_test": self_test,

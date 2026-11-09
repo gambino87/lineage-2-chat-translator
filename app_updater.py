@@ -9,6 +9,7 @@ host. A checksum is trusted only after that signature has been verified.
 from __future__ import annotations
 
 import ctypes
+from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
 import json
@@ -26,6 +27,8 @@ import uuid
 from app_paths import preferences_directory
 from app_version import VERSION
 from update_trust import SignatureError, SIGNATURE_BYTES, verify_release_signature
+from update_network import ControlledHTTPSHandler, NetworkCancelled, NetworkDeadline, NetworkOperation
+from secure_storage import guard_private_tree, locked_file as _locked_helper
 
 BASE_URL = 'https://40.160.140.227'
 RELEASE_URL = BASE_URL + '/downloads/release.json'
@@ -138,18 +141,20 @@ class _NoRedirect(request.HTTPRedirectHandler):
         raise UpdateError('The update server redirected the request. No update was downloaded.')
 
 
-def _opener():
+def _opener(operation=None):
     """Use OS certificate trust, bypass proxies, and reject every redirect."""
-    return request.build_opener(request.ProxyHandler({}),
-                                request.HTTPSHandler(context=ssl.create_default_context()), _NoRedirect())
+    context = ssl.create_default_context()
+    handler = (ControlledHTTPSHandler(operation, context=context) if operation is not None
+               else request.HTTPSHandler(context=context))
+    return request.build_opener(request.ProxyHandler({}), handler, _NoRedirect())
 
 
-def _open(url):
+def _open(url, operation=None):
     _require(url in (RELEASE_URL, SIGNATURE_URL) or re.fullmatch(
         re.escape(BASE_URL) + r'/downloads/Lineage-2-Chat-Translator-[0-9]+\.[0-9]+\.[0-9]+-Setup\.exe', url),
         'Only the official HTTPS release host is allowed.')
     try:
-        response = _opener().open(request.Request(url, headers={
+        response = _opener(operation).open(request.Request(url, headers={
             'Accept': 'application/json' if url == RELEASE_URL else 'application/octet-stream',
             'User-Agent': f'Lineage2ChatTranslator/{VERSION}'}), timeout=REQUEST_TIMEOUT_SECONDS)
         if response.status != 200 or response.geturl() != url:
@@ -157,15 +162,31 @@ def _open(url):
             raise UpdateError('The update server returned an unexpected response.')
         return response
     except (error.URLError, TimeoutError, OSError) as exc:
+        if operation is not None:
+            operation.check()
         raise UpdateError('Could not reach the update server. Check your internet connection and try again.') from exc
 
 
-def _fetch_record(url, maximum, deadline):
-    with _open(url) as response:
+@contextmanager
+def _network_scope(seconds, cancelled=None):
+    """Translate transport cancellation/deadlines into the public UI errors."""
+    try:
+        with NetworkOperation(seconds, cancelled) as operation:
+            yield operation
+    except NetworkCancelled as exc:
+        raise UpdateCancelled('Update canceled. The installed translator was not changed.') from exc
+    except NetworkDeadline as exc:
+        raise UpdateError('The update request took too long. Try again later.') from exc
+    except (error.URLError, TimeoutError, OSError) as exc:
+        raise UpdateError('Could not reach the update server. Check your internet connection and try again.') from exc
+
+
+def _fetch_record(url, maximum, operation):
+    with _open(url, operation) as response:
         content = bytearray()
         reader = getattr(response, 'read1', response.read)
         while len(content) <= maximum:
-            _require(time.monotonic() < deadline, 'The update check took too long. Try again later.')
+            operation.check()
             block = reader(min(METADATA_CHUNK_BYTES, maximum + 1 - len(content)))
             if not block:
                 break
@@ -204,9 +225,9 @@ def _signed_release(metadata, signature):
 def check_for_update(current_version=VERSION):
     """Fetch signed release details only; unsigned metadata never offers an update."""
     _version(current_version)
-    deadline = time.monotonic() + MAX_METADATA_SECONDS
-    metadata = _fetch_record(RELEASE_URL, MAX_METADATA_BYTES, deadline)
-    signature = _fetch_record(SIGNATURE_URL, SIGNATURE_BYTES, deadline)
+    with _network_scope(MAX_METADATA_SECONDS) as operation:
+        metadata = _fetch_record(RELEASE_URL, MAX_METADATA_BYTES, operation)
+        signature = _fetch_record(SIGNATURE_URL, SIGNATURE_BYTES, operation)
     release = _signed_release(metadata, signature)
     return _validate_release(release, current_version) if _version(release.version) > _version(current_version) else None
 
@@ -363,6 +384,30 @@ def _digest(path):
         return hashlib.file_digest(source, 'sha256').hexdigest()
 
 
+def _authorize_update_cache(root):
+    """Only repair ACLs for a cache entirely described by our ownership records."""
+    for child in root.iterdir():
+        stage, _ = _stage_info(child, root.parent)
+        _require(all(entry.name in _FILES and _plain_path(entry).is_file() for entry in stage.iterdir()),
+                 'Unrecognized files in the update folder were left untouched.')
+    return True
+
+
+@contextmanager
+def _new_update_stage(preferences):
+    root = _plain_path(preferences / 'updates')
+    with guard_private_tree(root, create=True, authorize_existing=_authorize_update_cache,
+                            allow_locked_ancestors=True):
+        cleanup_update_cache(preferences, strict=False)
+        # Cleanup cannot remove the held root; a new stage inherits its private
+        # ACL and receives an explicit protected ACL before any executable data.
+        nonce = uuid.uuid4().hex
+        stage = root / (STAGE_PREFIX + nonce)
+        with guard_private_tree(stage, create=True, allow_locked_ancestors=True):
+            _write_new_json(stage / 'owner.json', {'app_id': APP_ID, 'schema_version': 1, 'nonce': nonce})
+            yield stage, nonce
+
+
 def prepare_update(release, *, progress=None, cancelled=None):
     """Download and verify an update, but leave all execution to launch_update."""
     release = _validate_release(release)
@@ -371,60 +416,55 @@ def prepare_update(release, *, progress=None, cancelled=None):
     _cancelled(cancelled)
     preferences = _preferences()
     preferences.mkdir(parents=True, exist_ok=True)
-    cleanup_update_cache(preferences, strict=False)
-    root = _plain_path(preferences / 'updates')
-    root.mkdir(exist_ok=True)
-    nonce = uuid.uuid4().hex
-    stage = root / (STAGE_PREFIX + nonce)
-    stage.mkdir(exist_ok=False)
-    _write_new_json(stage / 'owner.json', {'app_id': APP_ID, 'schema_version': 1, 'nonce': nonce})
-    prepared = PreparedUpdate(release, stage)
+    prepared = None
     try:
-        part = stage / 'installer.part'
-        received, sha = 0, hashlib.sha256()
-        deadline = time.monotonic() + MAX_DOWNLOAD_SECONDS
-        with _open(BASE_URL + '/downloads/' + release.file) as response, part.open('xb') as output:
-            length = response.headers.get('Content-Length')
-            if length is not None:
-                _require(length.isdecimal() and int(length) == release.bytes, 'The installer download has an unexpected size.')
-            while True:
-                _cancelled(cancelled)
-                _require(time.monotonic() < deadline, 'The update download took too long. Try again later.')
-                block = getattr(response, 'read1', response.read)(DOWNLOAD_CHUNK_BYTES)
-                if not block:
-                    break
-                received += len(block)
-                _require(received <= release.bytes, 'The installer download exceeded its expected size.')
-                output.write(block)
-                sha.update(block)
-                if progress:
-                    progress(received, release.bytes)
-        _cancelled(cancelled)
-        _require(received == release.bytes and sha.hexdigest() == release.sha256,
-                 'The installer download did not match the published checksum. It was not run.')
-        with part.open('rb') as source:
-            _require(source.read(2) == b'MZ', 'The download is not a Windows installer.')
-        part.replace(stage / 'installer.exe')
-        (stage / 'release.json').write_bytes(release.metadata)
-        (stage / 'release.sig').write_bytes(release.signature)
-        runner = RUNNER_PATH.read_bytes()
-        _require(MIN_RUNNER_BYTES <= len(runner) <= MAX_RUNNER_BYTES, 'The bundled update helper is unavailable.')
-        (stage / 'apply-update.ps1').write_bytes(runner)
-        _write_new_json(stage / 'job.json', {
-            'app_id': APP_ID, 'schema_version': 1, 'nonce': nonce,
-            'parent_pid': os.getpid(), 'from_version': VERSION,
-            'version': release.version, 'installer_file': release.file,
-            'installer_bytes': release.bytes, 'installer_sha256': release.sha256,
-            'runner_sha256': hashlib.sha256(runner).hexdigest(),
-            'executable': str(executable), 'preferences': str(preferences),
-        })
-        _cancelled(cancelled)
-        return prepared
+        with _new_update_stage(preferences) as (stage, nonce):
+            prepared = PreparedUpdate(release, stage)
+            part = stage / 'installer.part'
+            received, sha = 0, hashlib.sha256()
+            with _network_scope(MAX_DOWNLOAD_SECONDS, cancelled) as operation, \
+                 _open(BASE_URL + '/downloads/' + release.file, operation) as response, part.open('xb') as output:
+                length = response.headers.get('Content-Length')
+                if length is not None:
+                    _require(length.isdecimal() and int(length) == release.bytes, 'The installer download has an unexpected size.')
+                while True:
+                    operation.check()
+                    block = getattr(response, 'read1', response.read)(DOWNLOAD_CHUNK_BYTES)
+                    if not block:
+                        break
+                    received += len(block)
+                    _require(received <= release.bytes, 'The installer download exceeded its expected size.')
+                    output.write(block)
+                    sha.update(block)
+                    if progress:
+                        progress(received, release.bytes)
+            _cancelled(cancelled)
+            _require(received == release.bytes and sha.hexdigest() == release.sha256,
+                     'The installer download did not match the published checksum. It was not run.')
+            with part.open('rb') as source:
+                _require(source.read(2) == b'MZ', 'The download is not a Windows installer.')
+            part.replace(stage / 'installer.exe')
+            (stage / 'release.json').write_bytes(release.metadata)
+            (stage / 'release.sig').write_bytes(release.signature)
+            runner = RUNNER_PATH.read_bytes()
+            _require(MIN_RUNNER_BYTES <= len(runner) <= MAX_RUNNER_BYTES, 'The bundled update helper is unavailable.')
+            (stage / 'apply-update.ps1').write_bytes(runner)
+            _write_new_json(stage / 'job.json', {
+                'app_id': APP_ID, 'schema_version': 1, 'nonce': nonce,
+                'parent_pid': os.getpid(), 'from_version': VERSION,
+                'version': release.version, 'installer_file': release.file,
+                'installer_bytes': release.bytes, 'installer_sha256': release.sha256,
+                'runner_sha256': hashlib.sha256(runner).hexdigest(),
+                'executable': str(executable), 'preferences': str(preferences),
+            })
+            _cancelled(cancelled)
+            return prepared
     except BaseException:
-        try:
-            discard_update(prepared)
-        except (UpdateError, OSError):
-            pass  # A changed/unrecognized folder is never deleted to hide an error.
+        if prepared is not None:
+            try:
+                discard_update(prepared)
+            except (UpdateError, OSError):
+                pass  # Unknown files are not deleted to hide an error.
         raise
 
 
@@ -465,8 +505,25 @@ def launch_update(prepared):
     cannot run the installer until that exact process exits.
     """
     _require(isinstance(prepared, PreparedUpdate), 'The prepared update is invalid.')
+    # Hold path components and script bytes across the hash-to-start boundary.
+    # The ready handshake is written by the parsed script itself, so the lock
+    # is released only after the child has loaded that exact verified script.
+    try:
+        root = _plain_path(_preferences() / 'updates')
+        with guard_private_tree(root, authorize_existing=_authorize_update_cache, allow_locked_ancestors=True):
+            stage, owner = _stage_info(prepared.stage)
+            with guard_private_tree(stage, allow_locked_ancestors=True), _locked_helper(stage / 'apply-update.ps1') as runner:
+                return _launch_update_locked(prepared, stage, owner, runner)
+    except BaseException:
+        try:
+            discard_update(prepared)
+        except (UpdateError, OSError):
+            pass
+        raise
+
+
+def _launch_update_locked(prepared, stage, owner, runner):
     release = _validate_release(prepared.release)
-    stage, owner = _stage_info(prepared.stage)
     staged_release = _signed_release(_read_bytes(stage / 'release.json'),
                                      _read_bytes(stage / 'release.sig', SIGNATURE_BYTES))
     _require(staged_release == release, 'The signed update details changed. The installer was not run.')
@@ -483,7 +540,7 @@ def launch_update(prepared):
              and _digest(stage / 'installer.exe') == release.sha256,
              'The downloaded installer changed. It was not run.')
     runner_hash = _digest(RUNNER_PATH)
-    _require(job.get('runner_sha256') == runner_hash and _digest(stage / 'apply-update.ps1') == runner_hash,
+    _require(job.get('runner_sha256') == runner_hash and hashlib.file_digest(runner, 'sha256').hexdigest() == runner_hash,
              'The update helper changed. It was not run.')
     _require(not any((stage / name).exists() for name in ('ready.json', 'commit.json', 'cancel')),
              'This update handoff was already attempted. Download the update again.')
@@ -520,20 +577,15 @@ def launch_update(prepared):
     except BaseException:
         # Terminate only the child we just created, before it has permission to
         # install anything. A late readiness response cannot turn into an update.
-        try:
-            (stage / 'cancel').touch(exist_ok=True)
-            if process is not None and process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=CHILD_STOP_TIMEOUT_SECONDS)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait(timeout=CHILD_STOP_TIMEOUT_SECONDS)
-        finally:
+        (stage / 'cancel').touch(exist_ok=True)
+        if process is not None and process.poll() is None:
+            process.terminate()
             try:
-                discard_update(prepared)
-            except (UpdateError, OSError):
-                pass
+                process.wait(timeout=CHILD_STOP_TIMEOUT_SECONDS)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=CHILD_STOP_TIMEOUT_SECONDS)
+        # The public wrapper releases path/file locks before cleanup.
         raise
 
 

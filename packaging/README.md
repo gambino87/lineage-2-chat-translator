@@ -4,6 +4,7 @@ Use Windows 10/11 x64 and Python 3.12 x64 with Tcl/Tk. From the project root:
 
 ```powershell
 pwsh -NoProfile -File packaging/bootstrap-tools.ps1
+.build-tools/venv/Scripts/python.exe packaging/secure-ollama/build_secure_ollama.py
 .build-tools/venv/Scripts/python.exe packaging/build.py
 ```
 
@@ -11,6 +12,34 @@ The bootstrap installs pinned Python build dependencies into a project-local
 virtual environment. It extracts a portable Inno compiler package, verifies its
 digest and upstream Authenticode/ECDSA signatures, and collects upstream license
 notices. It does not install the Inno application or register file associations.
+
+The protected Ollama frontend has a separate pinned source/toolchain build; see
+[its build and security notes](secure-ollama/README.md). Its generated executable
+is bundled under `_internal/secure-runtime/ollama.exe`, verified against the
+public `assets/secure-ollama-manifest.json`, and covered by the signed installer.
+The source repository contains its patch, build recipe, hashes and licenses, not
+the compiled executable. GPU libraries and model weights remain separate setup
+downloads. Building the backend does not start it or download models.
+
+Runtime files are validated against that bundled inventory, never against an
+editable receipt beside the executable. File handles and dedicated-folder ACLs
+remain held while the service runs. Owner access is retained; ordinary in-use
+file locks end on shutdown. Cleanup deletes checked Windows file objects through
+handles, refusing junctions and hard links instead of following them.
+
+Cleanup ownership is separate from executable authenticity. New records bind the
+chosen folder's Windows file identity to a current-user DPAPI integrity seal.
+Their ordinary JSON paths remain readable; owners can edit or delete the files,
+but changed ownership records must be reviewed again in Configure before they
+authorize deletion. Mutable legacy custom paths are never promoted just because
+a genuine runtime is present. One explicit confirmation adopts only the displayed
+dedicated folder; unconfirmed historical paths are archived for manual review.
+
+The launcher and patched backend use ephemeral credentials and verify each
+actual connected socket's process before transmitting requests. The main API,
+model runners and temporary discovery runners are authenticated. This separates
+other Windows accounts; it cannot protect against owner-account malware or an
+administrator, and does not promise immunity to local resource-exhaustion attacks.
 
 New installations use Inno's `{autopf}` with `PrivilegesRequired=lowest`, resolving
 to the current user's Programs folder. Upgrades retain their registered location:

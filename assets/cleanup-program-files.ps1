@@ -244,7 +244,10 @@ function Invoke-ProgramFileCleanup([string]$Root, $Plan, [string]$ExpectedVersio
         $path = Get-CleanupCandidate $root $entry.path
         $before = Get-CleanupFileState $path
         if ($null -eq $before) { continue }
-        if ($before.Length -gt $script:CleanupFileBytes) { $preserved.Add($entry.path); continue }
+        if ($before.Length -gt $script:CleanupFileBytes) {
+            Assert-RetiredFileSafeToPreserve $entry.path
+            $preserved.Add($entry.path); continue
+        }
         $stream = $null
         $hasher = [Security.Cryptography.SHA256]::Create()
         try {
@@ -268,13 +271,24 @@ function Invoke-ProgramFileCleanup([string]$Root, $Plan, [string]$ExpectedVersio
         $after = Get-CleanupFileState $path
         if ($null -eq $after) { continue }
         Assert-CleanupCondition ($before.Length -eq $after.Length -and $before.Modified -eq $after.Modified -and $before.Created -eq $after.Created) 'An obsolete file changed during verification.'
-        if ($entry.hashes -cnotcontains $digest) { $preserved.Add($entry.path); continue }
+        if ($entry.hashes -cnotcontains $digest) {
+            Assert-RetiredFileSafeToPreserve $entry.path
+            $preserved.Add($entry.path); continue
+        }
         try { [IO.File]::Delete($path) }
         catch { throw ('Could not remove retired file {0}. Close the translator and retry the installation. {1}' -f $entry.path, $_.Exception.Message) }
         $removed.Add($entry.path)
         foreach ($directory in @(Remove-CleanupEmptyParents $root $path)) { $directories.Add($directory) }
     }
     return [pscustomobject]@{ok = $true; version = $ExpectedVersion; removed = $removed.ToArray(); preserved = $preserved.ToArray(); removed_directories = $directories.ToArray(); error = $null}
+}
+
+function Assert-RetiredFileSafeToPreserve([string]$RelativePath) {
+    # Unknown bytes remain the owner's property. A retired binary may still be
+    # found by Windows/Python's loader, so keeping it cannot count as success.
+    if ([IO.Path]::GetExtension($RelativePath) -in @('.dll', '.pyd', '.exe')) {
+        throw ('Retired program file {0} differs from known releases and was left untouched. Move or remove that file manually, then run this installer again before opening the translator.' -f $RelativePath)
+    }
 }
 
 function Assert-RegisteredInstallation([string]$Root, [string]$Version) {

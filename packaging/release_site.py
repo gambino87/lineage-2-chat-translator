@@ -183,13 +183,20 @@ def verified_release(root: Path, version: str, sources: tuple, assets: tuple) ->
             == f"{artifact['sha256']}  {name}", "Release checksum file mismatch.")
     require(manifest.get("product") == "Lineage 2 Chat Translator"
             and manifest.get("platform") == "windows-x64", "Unexpected product/platform.")
-    require(manifest.get("models_bundled") is False and manifest.get("runtime_bundled") is False,
+    require(manifest.get("models_bundled") is False and
+            (manifest.get("runtime_bundled") is False or
+             (manifest.get("runtime_bundled") is True
+              and manifest.get("bundled_runtime_components") == ["authenticated_frontend"]
+              and manifest.get("runtime_libraries_bundled") is False)),
             "Bundled runtime/model claims need homepage review.")
     require(type(manifest.get("authenticode_signed")) is bool, "Signing status is missing.")
     public = {key: manifest[key] for key in (
         "product", "version", "built_at_utc", "platform", "authenticode_signed",
         "default_model", "models_bundled", "runtime_bundled")}
     public["installer"] = {key: artifact[key] for key in ("file", "bytes", "sha256")}
+    if manifest.get("runtime_bundled"):
+        public["bundled_runtime_components"] = ["authenticated_frontend"]
+        public["runtime_libraries_bundled"] = False
     public["validation"] = {"packaged_self_test_passed": True}
     public["model"] = model_details(root, manifest["default_model"])
     return public, installer

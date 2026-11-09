@@ -16,6 +16,8 @@ from unittest.mock import MagicMock, patch
 import zipfile
 
 import installer_runtime as runtime
+import runtime_integrity
+from secure_storage import guard_private_tree
 
 
 class RuntimeTests(unittest.TestCase):
@@ -25,6 +27,31 @@ class RuntimeTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.messages = []
         self.manager = runtime.RuntimeManager(self.root / "data", self.messages.append)
+        self.addCleanup(self.manager._release_storage)
+        # Only these inert fixture bytes are trusted in runtime lifecycle tests.
+        # Real inventory/hash and socket-owner checks have separate native tests.
+        self.fixture_files = {"ollama.exe": b"test-only fake executable; never launched"}
+        def manifest():
+            return {"upstream_executable_sha256": hashlib.sha256(b"fake test runtime").hexdigest(),
+                    "files": [{"path": name, "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
+                              for name, data in self.fixture_files.items()]}
+        self.enterContext(patch.object(runtime_integrity, "load_manifest", side_effect=manifest))
+        self.enterContext(patch.object(runtime, "load_manifest", side_effect=manifest))
+        self.enterContext(patch.object(runtime, "verify_bundled_frontend", return_value=self.root / "frontend.bin"))
+        (self.root / "frontend.bin").write_bytes(self.fixture_files["ollama.exe"])
+        def protect_fixture():
+            if self.manager._storage_guard is None:
+                guard = guard_private_tree(self.manager.data_root, create=True,
+                                           authorize_existing=lambda path: path == self.root / "data",
+                                           allow_locked_ancestors=True)
+                guard.__enter__()
+                self.manager._storage_guard = guard
+        self.enterContext(patch.object(self.manager, "_protect_storage", side_effect=protect_fixture))
+        self.session = MagicMock()
+        self.session.identity.pid = 123
+        self.session.header.return_value = "Bearer " + "a" * 64
+        self.enterContext(patch.object(runtime, "get_session", return_value=self.session))
+        self.enterContext(patch.object(runtime, "register_session", return_value=self.session))
 
     def verified_runtime(self):
         self.manager.runtime_dir.mkdir(parents=True)
@@ -38,7 +65,7 @@ class RuntimeTests(unittest.TestCase):
     def response(self, data):
         return io.BytesIO(data if isinstance(data, bytes) else json.dumps(data).encode())
 
-    def test_valid_receipt_reuses_runtime_without_network_or_process(self):
+    def test_trusted_inventory_reuses_runtime_without_network_or_process(self):
         self.verified_runtime()
         with patch.object(self.manager, "_download_runtime") as download, patch("installer_runtime.subprocess.Popen") as process:
             self.assertEqual(self.manager.ensure_runtime(), self.manager.executable)
@@ -79,6 +106,7 @@ class RuntimeTests(unittest.TestCase):
             runtime._extract_archive(archive, self.root / "extract")
 
     def test_verified_archive_is_staged_and_receipted_without_download(self):
+        self.fixture_files["lib/ollama/fake.dll"] = b"fake test GPU library"
         self.manager.data_root.mkdir()
         archive = self.manager.data_root / f"ollama-windows-amd64-{runtime.OLLAMA_VERSION}.zip"
         with zipfile.ZipFile(archive, "w") as bundle:
@@ -288,7 +316,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_owner_failure_blocks_all_http_requests(self):
         self.manager._opener = MagicMock()
-        with patch.object(self.manager, "_verify_owner", side_effect=runtime.SetupError("different service")):
+        with patch.object(runtime, "get_session", side_effect=runtime.ServiceIdentityError("different service")):
             with self.assertRaisesRegex(runtime.SetupError, "different service"):
                 self.manager._request_api("/api/delete", {"model": runtime.DEFAULT_MODEL}, method="DELETE")
         self.manager._opener.open.assert_not_called()
@@ -336,9 +364,11 @@ class RuntimeTests(unittest.TestCase):
         process = MagicMock()
         process.poll.return_value = None
         inherited = {"OLLAMA_DEBUG": "2", "OLLAMA_DEBUG_LOG_REQUESTS": "1", "OLLAMA_ORIGINS": "*",
-                     "CUDA_VISIBLE_DEVICES": "1", "HTTPS_PROXY": "https://proxy.example.invalid"}
+                     "CUDA_VISIBLE_DEVICES": "1", "HTTPS_PROXY": "https://proxy.example.invalid",
+                     "GGML_BACKEND_PATH": "C:/untrusted", "OLLAMA_LLM_LIBRARY": "untrusted",
+                     "LLAMA_API_KEY": "inherited-key", "PATH": "C:/untrusted"}
         with patch.dict("installer_runtime.os.environ", inherited), \
-             patch.object(self.manager, "ensure_runtime"), patch.object(self.manager, "_port_open", side_effect=[False, False, True]), patch.object(self.manager, "_request_api", return_value={"version": runtime.OLLAMA_VERSION}), patch("installer_runtime.subprocess.Popen", return_value=process) as popen:
+             patch.object(self.manager, "ensure_runtime"), patch.object(self.manager, "_port_open", side_effect=[False, False, True]), patch.object(self.manager, "_request_api", return_value={"version": runtime.BACKEND_VERSION}), patch("installer_runtime.subprocess.Popen", return_value=process) as popen:
             self.manager.ensure_service()
         kwargs = popen.call_args.kwargs
         self.assertEqual(kwargs["env"]["OLLAMA_NO_CLOUD"], "1")
@@ -349,6 +379,12 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(kwargs["env"]["OLLAMA_ORIGINS"], "")
         self.assertEqual(kwargs["env"]["CUDA_VISIBLE_DEVICES"], "1")
         self.assertEqual(kwargs["env"]["HTTPS_PROXY"], "https://proxy.example.invalid")
+        self.assertNotIn("GGML_BACKEND_PATH", kwargs["env"])
+        self.assertNotIn("OLLAMA_LLM_LIBRARY", kwargs["env"])
+        self.assertNotIn("LLAMA_API_KEY", kwargs["env"])
+        self.assertNotIn("untrusted", kwargs["env"]["PATH"])
+        self.assertEqual(kwargs["env"]["USERPROFILE"], str(self.manager.service_home))
+        self.assertRegex(kwargs["env"]["L2CT_OLLAMA_API_KEY"], r"^[0-9a-f]{64}$")
         self.assertEqual(kwargs["creationflags"], getattr(runtime.subprocess, "CREATE_NO_WINDOW", 0))
         self.assertIs(self.manager._owned_service, process)
         process.terminate.assert_not_called()
@@ -357,7 +393,7 @@ class RuntimeTests(unittest.TestCase):
         with patch.object(self.manager, "ensure_runtime"), \
              patch.object(self.manager, "_verify_owner"), \
              patch.object(self.manager, "_port_open", return_value=True), \
-             patch.object(self.manager, "_request_api", return_value={"version": runtime.OLLAMA_VERSION}), \
+             patch.object(self.manager, "_request_api", return_value={"version": runtime.BACKEND_VERSION}), \
              patch("installer_runtime.subprocess.Popen") as spawn:
             self.manager.ensure_service()
         with patch.object(self.manager, "_port_open") as probe, \
@@ -541,7 +577,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_shutdown_api_rejects_replacement_pid_before_mutating_it(self):
         self.manager._opener = MagicMock()
-        with patch.object(self.manager, "_verify_owner", return_value={"pid": 9999}):
+        with patch.object(runtime, "get_session", return_value=SimpleNamespace(identity=SimpleNamespace(pid=9999))):
             with self.assertRaisesRegex(runtime.SetupError, "replacement service"):
                 self.manager._request_api("/api/generate", {"model": runtime.DEFAULT_MODEL, "keep_alive": 0}, expected_pid=4567)
         self.manager._opener.open.assert_not_called()
@@ -618,11 +654,11 @@ class RuntimeTests(unittest.TestCase):
             buffer.value = str(self.manager.executable)
             return True
         kernel.QueryFullProcessImageNameW.side_effect = set_image
-        with patch("ctypes.WinDLL", return_value=kernel):
+        with patch("ctypes.WinDLL", return_value=kernel), patch("local_service._user_sid", return_value=b"same-owner"):
             self.manager._terminate_verified_process(4567)
         kernel.TerminateProcess.assert_called_once_with(1234, 0)
         kernel.WaitForSingleObject.assert_called_once_with(1234, 10000)
-        kernel.CloseHandle.assert_called_once_with(1234)
+        self.assertEqual(kernel.CloseHandle.call_count, 2)
 
     @unittest.skipUnless(os.name == "nt", "Windows process handle verification")
     def test_reused_pid_with_different_image_is_not_terminated(self):
@@ -632,11 +668,21 @@ class RuntimeTests(unittest.TestCase):
             buffer.value = str(self.root / "unrelated.exe")
             return True
         kernel.QueryFullProcessImageNameW.side_effect = set_image
-        with patch("ctypes.WinDLL", return_value=kernel):
+        with patch("ctypes.WinDLL", return_value=kernel), patch("local_service._user_sid", return_value=b"same-owner"):
             with self.assertRaisesRegex(runtime.SetupError, "process changed"):
                 self.manager._terminate_verified_process(4567)
         kernel.TerminateProcess.assert_not_called()
-        kernel.CloseHandle.assert_called_once_with(1234)
+        self.assertEqual(kernel.CloseHandle.call_count, 2)
+
+    @unittest.skipUnless(os.name == "nt", "Windows process account verification")
+    def test_matching_executable_under_other_account_is_not_terminated(self):
+        kernel = MagicMock()
+        kernel.OpenProcess.side_effect = [1234, 5678]
+        with patch("ctypes.WinDLL", return_value=kernel), patch("local_service._user_sid", side_effect=[b"other", b"owner"]):
+            with self.assertRaises(runtime.ServiceOwnershipMismatch):
+                self.manager._terminate_verified_process(4567)
+        kernel.TerminateProcess.assert_not_called()
+        self.assertEqual(kernel.CloseHandle.call_count, 2)
 
     def test_model_list_filters_cloud_and_invalid_entries(self):
         entries = {"models": [
@@ -704,6 +750,12 @@ class CancellationTests(unittest.TestCase):
         self.manager = runtime.RuntimeManager(Path(self.directory) / "data", cancel_event=self.token)
         self.manager.data_root.mkdir()
         self.enterContext(patch.object(self.manager, "_verify_owner", return_value={"pid": 123}))
+        # Synthetic HTTP peers below run in this process and have no model.
+        session = MagicMock()
+        session.identity.pid = 123
+        session.header.return_value = "Bearer " + "a" * 64
+        self.enterContext(patch.object(runtime, "get_session", return_value=session))
+        self.enterContext(patch.object(self.manager, "_protect_storage"))
 
     @contextmanager
     def peer(self, mode):

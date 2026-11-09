@@ -73,6 +73,8 @@ class DllUpgradeTests(unittest.TestCase):
         self.assertTrue(report["exact_current_payload_after_cleanup"])
         self.assertTrue(report["cleanup_idempotent"])
         self.assertTrue(report["modified_retired_dll_preserved"])
+        self.assertTrue(report["modified_retired_dll_blocks_cleanup"])
+        self.assertTrue(report["modified_fixture_never_executed"])
         self.assertFalse(report["real_installation_touched"])
         self.assertIn("settings.json", report["synthetic_protected_files_preserved"])
         self.assertIn("models/fixture-model.bin", report["synthetic_protected_files_preserved"])

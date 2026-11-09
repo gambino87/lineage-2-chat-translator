@@ -128,7 +128,7 @@ Source template and changelog remain in `sites/l2-chat-translator/`. Public file
 are allowlisted, with no external assets or JavaScript dependencies. The page
 hides technical checksum links; release metadata/checksums remain available.
 Never upload settings, logs, review examples, credentials, model weights or local
-validation reports. Ollama and model weights download from upstream during setup.
+validation reports. The protected Ollama frontend is bundled; native libraries and model weights download from upstream during setup.
 
 The installer has no Windows Authenticode publisher signature. The separate
 updater signature authenticates the release metadata and its installer hash to

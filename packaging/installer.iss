@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "1.7.12"
+  #define AppVersion "1.7.13"
 #endif
 #ifndef AppSource
   #error AppSource must point to the verified PyInstaller application folder
@@ -285,7 +285,8 @@ begin
       Started := Exec(ExpandConstant('{app}\Lineage2ChatTranslator.exe'),
         '--uninstall-cleanup --cleanup-result "' + ResultPath + '"',
         '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-      if not Started or (ExitCode <> 0) then begin
+      { Code 2 means managed cleanup succeeded but unconfirmed history remains. }
+      if not Started or ((ExitCode <> 0) and (ExitCode <> 2)) then begin
         Details := '';
         if LoadStringsFromFile(ResultPath, Lines) then
           for I := 0 to GetArrayLength(Lines) - 1 do
@@ -295,6 +296,12 @@ begin
           mbError, MB_OK);
         Abort;
       end;
+      Details := '';
+      if LoadStringsFromFile(ResultPath, Lines) then
+        for I := 0 to GetArrayLength(Lines) - 1 do
+          Details := Details + Lines[I] + #13#10;
+      if ExitCode = 2 then
+        SuppressibleMsgBox(Details, mbInformation, MB_OK, IDOK);
     finally
       DeleteFile(ResultPath);
     end;

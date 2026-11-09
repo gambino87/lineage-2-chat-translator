@@ -59,13 +59,24 @@ class InstallationCleanupTests(unittest.TestCase):
         self.assertEqual(self.run_cleanup(self.plan(entry))["removed"], [entry["path"]])
 
     def test_modified_retired_files_and_nonempty_directories_are_preserved(self):
-        changed = self.write("_internal/old/modified.dll", b"user modified")
+        changed = self.write("_internal/old/modified.txt", b"user modified")
         self.write("_internal/old/retired.dll")
         self.write("_internal/old/my-notes.txt", b"unmanaged")
-        result = self.run_cleanup(self.plan(self.entry("_internal/old/modified.dll"), self.entry("_internal/old/retired.dll")))
-        self.assertEqual(result["preserved"], ["_internal/old/modified.dll"])
+        result = self.run_cleanup(self.plan(self.entry("_internal/old/modified.txt"), self.entry("_internal/old/retired.dll")))
+        self.assertEqual(result["preserved"], ["_internal/old/modified.txt"])
         self.assertEqual(result["removed_directories"], [])
         self.assertEqual(changed.read_bytes(), b"user modified")
+
+    def test_modified_retired_binaries_block_success_and_remain_owner_removable(self):
+        for name in ('_internal/ucrtbase.dll', '_internal/old.PYD'):
+            with self.subTest(name=name):
+                path = self.write(name, b'harmless changed fixture')
+                plan = self.plan(self.entry(name))
+                with self.assertRaisesRegex(cleanup.CleanupError, 'manually'):
+                    self.run_cleanup(plan)
+                self.assertEqual(path.read_bytes(), b'harmless changed fixture')
+                path.unlink()
+                self.assertEqual(self.run_cleanup(plan)['removed'], [])
 
     def test_missing_files_and_repeated_cleanup_are_idempotent(self):
         self.write("_internal/old.dll")
@@ -241,8 +252,8 @@ class InstallationCleanupTests(unittest.TestCase):
 
     def test_oversized_modified_file_is_preserved_without_reading(self):
         old = self.write("_internal/large.dll", b"123456789")
-        with patch.object(cleanup, "MAX_OBSOLETE_FILE_BYTES", 8):
-            self.assertEqual(self.run_cleanup(self.plan(self.entry("_internal/large.dll")))["preserved"], ["_internal/large.dll"])
+        with patch.object(cleanup, "MAX_OBSOLETE_FILE_BYTES", 8), self.assertRaisesRegex(cleanup.CleanupError, 'manually'):
+            self.run_cleanup(self.plan(self.entry("_internal/large.dll")))
         self.assertTrue(old.exists())
 
     def test_read_plan_is_bounded_and_rejects_duplicate_fields(self):

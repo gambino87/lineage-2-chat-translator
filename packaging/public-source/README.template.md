@@ -13,7 +13,7 @@ build scripts, tests, item catalog, artwork, and website source.
 - Translates through a local Ollama model and displays an always-on-top overlay.
 - Preserves item names, prices and common game abbreviations; offers channel filters.
 - Translates replies into the selected language and copies them to the clipboard.
-- Downloads the selected runtime/model during setup and manages its local service.
+- Includes a protected Ollama frontend, downloads native libraries/the selected model during setup, and manages its local service.
 
 The translator reads the log file; it does not read game process memory, inject
 into the client or send chat to the game. Supported log formats depend on the
@@ -27,6 +27,8 @@ client/server. Translation quality depends on the selected model and message.
 | `translator_app.py`, `chat_overlay.py`, `overlay_tray.py`, `reply_composer.py` | Launcher, overlay, filters and replies |
 | `installer_main.py`, `installer_runtime.py`, `app_paths.py` | Setup, model downloads and owned service lifecycle |
 | `app_updater.py`, `update_controls.py`, `installation_cleanup.py`, `uninstall_data.py` | Updates, cleanup and uninstall |
+| `local_service.py`, `runtime_integrity.py`, `secure_storage.py`, `update_network.py` | Authenticated local connections, trusted runtime files, private storage and bounded downloads |
+| `packaging/secure-ollama/` | Maintained Ollama security patch, pinned source/toolchain build and dependency notices |
 | `assets/` | Icons, item catalog and trusted update/cleanup helpers |
 | `tests/` | Automated regression checks using mocks and temporary files |
 | `packaging/` | Build scripts, Inno Setup source, notices and deployment tooling |
@@ -46,6 +48,7 @@ Run these commands from the repository root:
 
 ```powershell
 pwsh -NoProfile -File packaging/bootstrap-tools.ps1
+.build-tools/venv/Scripts/python.exe packaging/secure-ollama/build_secure_ollama.py
 .build-tools/venv/Scripts/python.exe -m unittest discover -s tests
 .build-tools/venv/Scripts/python.exe packaging/build.py --skip-installer
 ```
@@ -57,6 +60,9 @@ application and runs a headless self-test. Official release builds omit
 that requires the publisher's private Windows signing identity, which is not
 included in this repository.
 It does not install the result, open the interface, start Ollama or download models.
+The backend build downloads pinned source/toolchain archives and the official
+native runtime archive to establish its file inventory. Its compiled frontend is
+included in the installer, while GPU libraries and model weights download at setup.
 Generated files go into `.build/`, `release/` and the site's `dist/`, all ignored
 by Git. See [the build documentation](packaging/README.md) for details.
 

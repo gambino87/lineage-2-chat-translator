@@ -3,6 +3,7 @@ import hashlib
 from dataclasses import replace
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import threading
@@ -11,6 +12,7 @@ from unittest.mock import Mock, patch
 from urllib import error, request
 
 import app_updater as updater
+import secure_storage
 
 
 class Response(io.BytesIO):
@@ -27,6 +29,12 @@ class UpdaterTests(unittest.TestCase):
     def setUp(self):
         self.folder = self.enterContext(tempfile.TemporaryDirectory())
         self.root = Path(self.folder)
+        # Scope ACL tests to a disposable private tree. Do not repair or depend
+        # on this machine's real profile/drive permissions.
+        self.enterContext(patch.object(secure_storage, '_ancestor_paths', side_effect=lambda path: [
+            parent for parent in reversed(path.parents) if parent == self.root or self.root in parent.parents]))
+        with secure_storage.guard_private_tree(self.root, authorize_existing=lambda _: True):
+            pass
         self.preferences = self.root / 'Lineage2ChatTranslator'
         self.preferences.mkdir()
         self.executable = self.root / 'Installed app' / 'Lineage2ChatTranslator.exe'
@@ -297,6 +305,53 @@ class UpdaterTests(unittest.TestCase):
         self.assertTrue((prepared.stage / 'commit.json').is_file())
         self.assertFalse((prepared.stage / 'commit.pending').exists())
         process.terminate.assert_not_called()
+
+    def test_verified_helper_cannot_be_rewritten_or_renamed_at_launch(self):
+        prepared = self.prepare()
+        helper = prepared.stage / 'apply-update.ps1'
+        original = helper.read_bytes()
+        def start(*args, **kwargs):
+            # These harmless writes reproduce the old last-hash-to-Popen gap.
+            with self.assertRaises(OSError):
+                helper.write_bytes(b'changed fixture helper; never executed')
+            with self.assertRaises(OSError):
+                helper.rename(prepared.stage / 'renamed.ps1')
+            with self.assertRaises(OSError):
+                prepared.stage.rename(prepared.stage.with_name('renamed-stage'))
+            return self.fake_launch(prepared)
+        with patch.object(updater, '_installed_executable', return_value=self.executable), \
+             patch.object(updater, '_powershell', return_value=Path('C:/Windows/powershell.exe')), \
+             patch.object(updater.subprocess, 'Popen', side_effect=start):
+            updater.launch_update(prepared)
+        self.assertEqual(helper.read_bytes(), original)
+        # The owner can edit/delete normally after the handshake releases locks.
+        helper.write_bytes(b'owner retains full control')
+        helper.unlink()
+
+    def test_stage_files_are_private_and_owner_remains_in_full_control(self):
+        prepared = self.prepare()
+        api = secure_storage._Windows()
+        for path in (prepared.stage, prepared.stage / 'installer.exe', prepared.stage / 'apply-update.ps1'):
+            handle = api.open(path)
+            try:
+                self.assertTrue(api.private(api.security(handle), path.is_dir(), root=path.is_dir()))
+            finally:
+                api.k.CloseHandle(handle)
+        updater.discard_update(prepared)
+        self.assertFalse(prepared.stage.exists())
+
+    def test_hardlinked_helper_is_rejected_without_altering_external_file(self):
+        prepared = self.prepare()
+        helper = prepared.stage / 'apply-update.ps1'
+        outside = self.root / 'outside-script.ps1'
+        outside.write_bytes(helper.read_bytes())
+        helper.unlink()
+        os.link(outside, helper)
+        with patch.object(updater, '_installed_executable', return_value=self.executable), \
+             patch.object(updater.subprocess, 'Popen') as launch, self.assertRaises(OSError):
+            updater.launch_update(prepared)
+        launch.assert_not_called()
+        self.assertEqual(outside.read_bytes(), updater.RUNNER_PATH.read_bytes())
 
     def test_handoff_timeout_cancels_own_helper_without_commit(self):
         prepared = self.prepare()

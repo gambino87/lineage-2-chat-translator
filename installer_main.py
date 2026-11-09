@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import ctypes
 import json
 import os
@@ -21,9 +20,10 @@ from app_paths import default_data_directory, preferences_directory, runtime_fil
 from app_version import VERSION
 from app_icon import ICON, PNG, apply_window_icon
 from game_log_setup import resolve_system_log
-from installer_runtime import DEFAULT_MODEL, ENDPOINT, MODEL_CATALOG, RuntimeManager, SetupCancelled, required_disk_bytes
+from installer_runtime import DEFAULT_MODEL, ENDPOINT, MODEL_CATALOG, RuntimeManager, SetupCancelled, SetupError, required_disk_bytes
 from translator_core import OllamaClient, parse_chat_line
-from uninstall_data import register_data_root, uninstall_data
+from uninstall_data import (register_data_root, uninstall_data, storage_requires_confirmation,
+                            storage_confirmation_identity)
 from app_updater import cleanup_update_cache, consume_update_result, update_in_progress
 from app_updater import _powershell as _system_powershell
 from installation_cleanup import CLEANUP_PLAN_NAME, read_cleanup_plan
@@ -41,6 +41,7 @@ LAUNCH_NOTICE_SECONDS = 30  # Rejected copies exit while Windows owns the notice
 HARDWARE_QUERY_TIMEOUT_SECONDS = 15
 SETUP_EVENT_POLL_INTERVAL_MS = 100
 MAX_CLEANUP_RESULT_CHARACTERS = 8000
+UNINSTALL_REVIEW_EXIT_CODE = 2  # Managed data removed; unconfirmed history retained.
 WINDOWS_PATH_BUFFER_CHARACTERS = 32768
 
 
@@ -98,7 +99,9 @@ def validate_selection(data_root: str, model: str, game_folder: str = "") -> tup
     root = Path(data_root).expanduser()
     if not data_root.strip() or not root.is_absolute() or root == Path(root.anchor):
         raise ValueError("Choose a dedicated runtime and model folder, such as D:\\L2TranslatorData.")
-    root = root.resolve()
+    # Preserve the chosen lexical path so the storage guard can reject junctions
+    # instead of silently turning a redirected folder into another destination.
+    root = Path(os.path.abspath(root))
     if root.exists() and not root.is_dir():
         raise ValueError("The runtime and model folder is a file. Choose a folder.")
     if getattr(sys, "frozen", False) and (root.is_relative_to(Path(sys.executable).parent) or root in Path(sys.executable).parents):
@@ -235,6 +238,9 @@ def self_test() -> dict:
         raise AssertionError("The application's update verification keys do not match.")
     # Exercise native verification against a public proof, never the private key.
     verify_bundled_signing_key()
+    from runtime_integrity import verify_bundled_frontend
+    # Hash only; this headless test never launches the backend or a model.
+    verify_bundled_frontend()
     cleanup_helper = (Path(__file__).parent / "assets" / "cleanup-program-files.ps1").read_text(encoding="utf-8-sig")
     if (len(cleanup_helper) < 1000 or "Invoke-RegisteredCleanup" not in cleanup_helper
             or "L2ProminenceChatTranslator" not in cleanup_helper):
@@ -328,12 +334,11 @@ def detached_launch_notice(reason: str) -> None:
         script = ("$ErrorActionPreference = 'Stop'\n"
                   "$popup = New-Object -ComObject WScript.Shell\n"
                   "[void]$popup.Popup('" + notice + f"', {LAUNCH_NOTICE_SECONDS}, 'Lineage 2 Chat Translator', {POPUP_INFORMATION_ICON})\n")
-        command = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
         powershell = _system_powershell()
         # This system process owns the popup after the rejected launcher exits.
         # Its working directory and executable are outside the installed app.
         subprocess.Popen([str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive",
-                          "-EncodedCommand", command], cwd=powershell.parent,
+                          "-Command", script], cwd=powershell.parent,
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          close_fds=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except Exception:
@@ -724,7 +729,25 @@ class SetupWindow:
             data_root, log = validate_selection(self.data.get(), self.selected_tag(), chosen_game)
             if not self.accepted.get():
                 raise ValueError("Review and accept the selected model's license before downloading.")
-        except (ValueError, OSError) as exc:
+            confirmed_root = None
+            confirmed_identity = None
+            if storage_requires_confirmation(data_root, SETTINGS_PATH.parent):
+                # Bind approval to the directory shown, not a replacement at
+                # the same path while the prompt or worker handoff is pending.
+                confirmed_identity = storage_confirmation_identity(data_root, SETTINGS_PATH.parent)
+                approved = messagebox.askyesno(
+                    "Review existing model storage",
+                    "Please confirm this is the folder you use for this translator:\n\n"
+                    + str(data_root)
+                    + "\n\nIts runtime, models, logs and service-home folders will be treated as this app's data and removed if you uninstall. "
+                      "Your Windows account keeps full access. No model files are deleted during this review. "
+                      "Other unconfirmed historical folders will be left for manual review.\n\n"
+                      "Use and secure this folder? Choose No to select another folder.",
+                    parent=self.root, default="no")
+                if not approved:
+                    return
+                confirmed_root = data_root
+        except (ValueError, OSError, SetupError) as exc:
             messagebox.showerror("Setup", str(exc), parent=self.root)
             return
         model = self.selected_tag()
@@ -734,7 +757,11 @@ class SetupWindow:
             failure = None
             try:
                 # Track failed/partial setup as well as completed installations.
-                register_data_root(data_root, SETTINGS_PATH.parent)
+                if confirmed_root is None:
+                    register_data_root(data_root, SETTINGS_PATH.parent)
+                else:
+                    register_data_root(data_root, SETTINGS_PATH.parent, confirmed_root=confirmed_root,
+                                       confirmed_identity=confirmed_identity)
                 manager = self._runtime_manager(data_root, cancel_event)
                 manager.prepare(model)
                 self._check_cancelled(cancel_event)
@@ -798,6 +825,15 @@ class SetupWindow:
         if not isinstance(log_path, str) or not log_path.strip():
             self._show_setup()
             self.status.set("Choose your Lineage II system folder to finish setup. You can change it later in the translator's Settings.")
+            return
+        try:
+            if storage_requires_confirmation(Path(location["data_root"]), SETTINGS_PATH.parent):
+                self._show_setup()
+                self.status.set("Review your existing model folder, then choose Download & configure to secure it. Existing model files will be reused after verification.")
+                return
+        except (OSError, ValueError, SetupError) as exc:
+            self._show_setup()
+            self.status.set("The saved model folder needs review: " + str(exc))
             return
         if getattr(self, "automatic", False):
             self._show_starting()
@@ -986,8 +1022,14 @@ def main(argv=None) -> int:
                 raise ValueError("Close the translator and its setup window, then retry uninstalling.")
             if update_in_progress():
                 raise ValueError("An update is in progress. Wait for it to finish before uninstalling.")
-            uninstall_data(SETTINGS_PATH.parent)
+            report = uninstall_data(SETTINGS_PATH.parent)
             code, result = 0, "Local model, runtime, settings and log cleanup completed."
+            retained = (report.get("unconfirmed_records_preserved", [])
+                        + report.get("unconfirmed_preferences_preserved", [])) if isinstance(report, dict) else []
+            if retained:
+                code = UNINSTALL_REVIEW_EXIT_CODE
+                result += ("\nManual review required: unconfirmed historical folders were preserved. "
+                           "Their records remain at:\n" + "\n".join(retained))
         except Exception as exc:
             code, result = 1, str(exc)
         finally:

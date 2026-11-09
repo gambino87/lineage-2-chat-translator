@@ -23,9 +23,18 @@ class UninstallDataTests(unittest.TestCase):
         self.manager = self.manager_patch.start().return_value
         self.manager._port_open.return_value = False
         self.manager._verified_runtime.return_value = False
+        self.manager._verified_legacy_runtime.return_value = False
         self.addCleanup(self.manager_patch.stop)
 
     def write(self, path, text="test file"):
+        if os.name == "nt":
+            # Normal new preferences are private. Tests weakening legacy ACLs do
+            # so explicitly instead of relying on this machine's profile ACLs.
+            for folder in cleanup._preference_family(self.preferences):
+                if path.is_relative_to(folder) and not folder.exists():
+                    folder.parent.mkdir(parents=True, exist_ok=True)
+                    with cleanup.guard_private_tree(folder, create=True, allow_locked_ancestors=True):
+                        pass
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
 
@@ -38,6 +47,11 @@ class UninstallDataTests(unittest.TestCase):
         root = root or self.data
         cleanup.register_data_root(root, self.preferences)
         return root
+
+    def adopt_selected(self):
+        identity = cleanup.storage_confirmation_identity(self.data, self.preferences)
+        cleanup.register_data_root(self.data, self.preferences, confirmed_root=self.data,
+                                   confirmed_identity=identity)
 
     def test_registration_tracks_new_root_before_runtime_exists(self):
         self.registered()
@@ -71,6 +85,46 @@ class UninstallDataTests(unittest.TestCase):
             self.registered()
         self.assertTrue((self.data / ".ollama-stage-abcd1234" / "file").exists())
 
+    @unittest.skipUnless(os.name == "nt", "Windows private-storage enforcement")
+    def test_untracked_personal_tree_is_not_permission_repaired(self):
+        self.write(self.data / "personal.txt", "keep")
+        with self.assertRaisesRegex(SetupError, "dedicated"):
+            self.registered()
+        self.assertEqual((self.data / "personal.txt").read_text(), "keep")
+        self.assertFalse((self.data / cleanup.MARKER).exists())
+
+    def test_storage_repair_authorization_requires_registry_and_excludes_siblings(self):
+        self.registered()
+        self.assertTrue(cleanup.authorize_data_root(self.data, self.preferences))
+        self.write(self.data / "personal.txt")
+        self.assertFalse(cleanup.authorize_data_root(self.data, self.preferences))
+        (self.data / "personal.txt").unlink()
+        (self.preferences / cleanup.REGISTRY).unlink()
+        self.assertFalse(cleanup.authorize_data_root(self.data, self.preferences))
+
+    def test_storage_repair_accepts_matching_legacy_preference_registration(self):
+        legacy = self.preferences.parent / "L2Prominence" / "ChatTranslator"
+        cleanup.register_data_root(self.data, legacy)
+        self.assertTrue(cleanup.authorize_data_root(self.data, self.preferences))
+
+    @unittest.skipUnless(os.name == "nt", "Windows directory identity pinning")
+    def test_data_root_cannot_be_replaced_after_ownership_preflight(self):
+        self.registered()
+        self.write(self.data / "models" / "owned.bin")
+        outside = self.base / "outside"
+        self.write(outside / "models" / "keep.txt", "keep")
+        attempts = []
+        def attempt_swap(roots):
+            try:
+                self.data.rename(self.base / "moved-root")
+            except OSError:
+                attempts.append("blocked")
+            return False
+        with patch.object(cleanup, "_stop_owned_service", attempt_swap):
+            cleanup.uninstall_data(self.preferences)
+        self.assertEqual(attempts, ["blocked"])
+        self.assertEqual((outside / "models" / "keep.txt").read_text(), "keep")
+
     def test_registered_failed_download_root_is_removed_without_runtime(self):
         self.registered()
         archive = f"ollama-windows-amd64-{cleanup.OLLAMA_VERSION}.zip"
@@ -82,6 +136,152 @@ class UninstallDataTests(unittest.TestCase):
         self.assertFalse(self.data.exists())
         self.assertFalse(self.preferences.exists())
         self.manager.stop_service.assert_not_called()
+
+    def test_private_service_home_is_owned_and_removed_with_other_app_data(self):
+        self.registered()
+        self.write(self.data / "service-home" / ".ollama" / "id_ed25519", "synthetic private key fixture")
+        self.assertTrue(cleanup.authorize_data_root(self.data, self.preferences))
+        report = cleanup.uninstall_data(self.preferences)
+        self.assertIn(str(self.data / "service-home"), report["removed_paths"])
+        self.assertFalse(self.data.exists())
+
+    def test_fresh_selection_and_plain_settings_are_not_cleanup_authority(self):
+        self.assertFalse(cleanup.storage_requires_confirmation(self.data, self.preferences))
+        self.configure(self.base / "unconfirmed old location")
+        self.assertFalse(cleanup.storage_requires_confirmation(self.data, self.preferences))
+        self.assertFalse((self.preferences / cleanup.REGISTRY).exists())
+
+    def test_new_control_records_are_readable_sealed_and_tamper_evident(self):
+        self.registered()
+        for path in (self.preferences / cleanup.REGISTRY, self.data / cleanup.MARKER):
+            value = json.loads(path.read_text())
+            self.assertEqual(value["schema_version"], 2)
+            self.assertTrue(cleanup.verify_record(value))
+            value["unexpected field"] = "owner can edit, then review is required"
+            self.assertFalse(cleanup.verify_record(value))
+
+    def test_confirmation_must_match_exact_displayed_root(self):
+        self.write(self.data / "models" / "owned.bin")
+        with self.assertRaisesRegex(SetupError, "does not match"):
+            cleanup.register_data_root(self.data, self.preferences, confirmed_root=self.base / "different")
+        self.assertFalse((self.data / cleanup.MARKER).exists())
+        self.assertTrue((self.data / "models" / "owned.bin").exists())
+
+    def test_confirmation_requires_the_pre_prompt_identity(self):
+        self.write(self.data / "models" / "owned.bin")
+        with self.assertRaisesRegex(SetupError, "identity is missing"):
+            cleanup.register_data_root(self.data, self.preferences, confirmed_root=self.data)
+        self.assertFalse((self.data / cleanup.MARKER).exists())
+
+    @unittest.skipUnless(os.name == "nt", "Native directory identity")
+    def test_changed_folder_between_prompt_and_worker_is_not_adopted(self):
+        self.write(self.data / "models" / "chosen.bin")
+        identity = cleanup.storage_confirmation_identity(self.data, self.preferences)
+        self.data.rename(self.base / "original selection")
+        self.write(self.data / "models" / "private.bin", "keep replacement")
+        with self.assertRaisesRegex(OSError, "changed after confirmation"):
+            cleanup.register_data_root(self.data, self.preferences, confirmed_root=self.data,
+                                       confirmed_identity=identity)
+        self.assertEqual((self.data / "models" / "private.bin").read_text(), "keep replacement")
+        self.assertFalse((self.data / cleanup.MARKER).exists())
+
+    @unittest.skipUnless(os.name == "nt", "Native atomic private creation")
+    def test_folder_appearing_after_missing_root_confirmation_is_not_adopted(self):
+        identity = cleanup.storage_confirmation_identity(self.data, self.preferences)
+        self.assertIsNone(identity)
+        self.write(self.data / "models" / "private.bin", "keep newly appeared data")
+        with self.assertRaisesRegex(OSError, "appeared after confirmation"):
+            cleanup.register_data_root(self.data, self.preferences, confirmed_root=self.data,
+                                       confirmed_identity=identity)
+        self.assertEqual((self.data / "models" / "private.bin").read_text(), "keep newly appeared data")
+        self.assertFalse((self.data / cleanup.MARKER).exists())
+
+    def test_known_runtime_does_not_make_old_registry_cleanup_authority(self):
+        self.registered()
+        self.write(self.data / "models" / "keep.bin")
+        record = json.loads((self.preferences / cleanup.REGISTRY).read_text())
+        record.pop("owner_proof")
+        record["schema_version"] = 1
+        (self.preferences / cleanup.REGISTRY).write_text(json.dumps(record))
+        self.manager._verified_runtime.return_value = True
+        self.manager._verified_legacy_runtime.return_value = True
+        self.assertTrue(cleanup.storage_requires_confirmation(self.data, self.preferences))
+        with self.assertRaisesRegex(SetupError, "Configure"):
+            cleanup.uninstall_data(self.preferences)
+        self.assertTrue((self.data / "models" / "keep.bin").exists())
+        self.manager.stop_service.assert_not_called()
+
+    def test_confirmed_adoption_authorizes_only_selected_root_and_preserves_archive(self):
+        victim = self.base / "unconfirmed store"
+        self.write(victim / "models" / "personal.bin", "keep outside selected scope")
+        self.write(self.data / "models" / "selected.bin", "owned selected model")
+        old = {"app_id": cleanup.APP_ID, "schema_version": 1, "data_roots": [str(victim)]}
+        self.write(self.preferences / cleanup.REGISTRY, json.dumps(old))
+        self.adopt_selected()
+        record = json.loads((self.preferences / cleanup.REGISTRY).read_text())
+        self.assertEqual(record["data_roots"], [str(self.data)])
+        self.assertTrue(cleanup.verify_record(record))
+        self.assertFalse(cleanup.storage_requires_confirmation(self.data, self.preferences))
+        archive = self.preferences / cleanup.UNCONFIRMED_RECORDS
+        self.assertTrue(archive.exists())
+        report = cleanup.uninstall_data(self.preferences)
+        self.assertEqual((victim / "models" / "personal.bin").read_text(), "keep outside selected scope")
+        self.assertFalse(self.data.exists())
+        self.assertEqual(report["unconfirmed_records_preserved"], [str(archive)])
+        self.assertTrue(archive.exists())
+
+    def test_confirmed_adoption_does_not_promote_other_legacy_preferences(self):
+        legacy = self.preferences.parent / "L2Prominence" / "ChatTranslator"
+        unconfirmed = self.base / "other store"
+        self.write(unconfirmed / "models" / "keep.bin")
+        old = {"app_id": cleanup.APP_ID, "schema_version": 1, "data_roots": [str(unconfirmed)]}
+        self.write(legacy / cleanup.REGISTRY, json.dumps(old))
+        original = (legacy / cleanup.REGISTRY).read_bytes()
+        self.write(self.data / "models" / "selected.bin")
+        self.adopt_selected()
+        self.assertFalse(cleanup.storage_requires_confirmation(self.data, self.preferences))
+        report = cleanup.uninstall_data(self.preferences)
+        self.assertEqual((legacy / cleanup.REGISTRY).read_bytes(), original)
+        self.assertTrue((unconfirmed / "models" / "keep.bin").exists())
+        self.assertIn(str(legacy), report["unconfirmed_preferences_preserved"])
+
+    def test_confirmation_preserves_previously_trusted_other_stores(self):
+        trusted = self.registered(self.base / "trusted store")
+        self.write(trusted / "models" / "owned.bin")
+        self.write(self.data / "models" / "selected.bin")
+        self.adopt_selected()
+        record = json.loads((self.preferences / cleanup.REGISTRY).read_text())
+        self.assertEqual(record["data_roots"], [str(trusted), str(self.data)])
+
+    def test_archive_failure_preserves_original_records_and_model_data(self):
+        self.write(self.data / "models" / "selected.bin")
+        old = json.dumps({"app_id": cleanup.APP_ID, "schema_version": 1, "data_roots": [str(self.data)]})
+        self.write(self.preferences / cleanup.REGISTRY, old)
+        original = (self.preferences / cleanup.REGISTRY).read_bytes()
+        write = cleanup._write_json
+        def fail_archive(path, value):
+            if path.name == cleanup.UNCONFIRMED_RECORDS:
+                raise PermissionError("synthetic archive save failure")
+            return write(path, value)
+        with patch.object(cleanup, "_write_json", fail_archive), self.assertRaises(OSError):
+            self.adopt_selected()
+        self.assertEqual((self.preferences / cleanup.REGISTRY).read_bytes(), original)
+        self.assertTrue((self.data / "models" / "selected.bin").exists())
+        self.assertFalse((self.data / cleanup.MARKER).exists())
+
+    @unittest.skipUnless(os.name == "nt", "Native directory identity")
+    def test_copied_valid_marker_does_not_authorize_a_replacement_directory(self):
+        self.registered()
+        original = self.data / cleanup.MARKER
+        marker = original.read_bytes()
+        moved = self.base / "original owned store"
+        self.data.rename(moved)
+        with cleanup.guard_private_tree(self.data, create=True, allow_locked_ancestors=True):
+            (self.data / cleanup.MARKER).write_bytes(marker)
+            self.write(self.data / "models" / "private.bin", "do not delete")
+        with self.assertRaisesRegex(SetupError, "ownership record"):
+            cleanup.uninstall_data(self.preferences)
+        self.assertEqual((self.data / "models" / "private.bin").read_text(), "do not delete")
 
     def test_complete_uninstall_removes_all_tracked_stores_and_preferences(self):
         roots = [self.registered(), self.registered(self.base / "other data")]
@@ -97,8 +297,8 @@ class UninstallDataTests(unittest.TestCase):
         self.assertFalse(self.preferences.exists())
 
     def test_unrelated_siblings_and_game_files_are_preserved(self):
-        self.write(self.data / "personal-notes.txt", "keep this")
         self.registered()
+        self.write(self.data / "personal-notes.txt", "keep this")
         self.write(self.data / "models" / "model.bin")
         self.write(self.data / ".ollama-stage-user-folder" / "keep.txt")
         self.write(self.preferences / "personal-notes.txt", "keep prefs sibling")
@@ -112,16 +312,19 @@ class UninstallDataTests(unittest.TestCase):
         self.assertEqual(game.read_text(), "game chat")
         self.assertFalse((self.data / "models").exists())
 
-    def test_current_legacy_store_is_adopted_only_with_verified_runtime(self):
+    def test_current_legacy_store_requires_explicit_exact_root_adoption(self):
         self.configure()
         self.write(self.data / "models" / "model.bin")
-        with self.assertRaisesRegex(SetupError, "untracked"):
+        with self.assertRaisesRegex(SetupError, "Configure"):
             cleanup.uninstall_data(self.preferences)
         self.assertTrue((self.data / "models" / "model.bin").exists())
         self.manager._verified_runtime.return_value = True
+        with self.assertRaisesRegex(SetupError, "Configure"):
+            cleanup.uninstall_data(self.preferences)
+        self.adopt_selected()
         cleanup.uninstall_data(self.preferences)
         self.assertFalse(self.data.exists())
-        self.assertFalse(self.preferences.exists())
+        self.assertTrue((self.preferences / cleanup.UNCONFIRMED_RECORDS).is_file())
 
     def test_uninstall_can_repeat_after_success(self):
         self.registered()
@@ -184,7 +387,7 @@ class UninstallDataTests(unittest.TestCase):
         other = self.registered(self.base / "other data")
         self.write(self.data / "models" / "keep.bin")
         (other / cleanup.MARKER).write_text("{corrupt")
-        with self.assertRaises(SetupError), patch.object(cleanup.shutil, "rmtree") as remove:
+        with self.assertRaises(SetupError), patch.object(cleanup, "safe_remove_tree") as remove:
             cleanup.uninstall_data(self.preferences)
         remove.assert_not_called()
         self.assertTrue((self.data / "models" / "keep.bin").exists())
@@ -324,12 +527,12 @@ class UninstallDataTests(unittest.TestCase):
         self.registered()
         for child in cleanup.CHILDREN:
             self.write(self.data / child / "payload")
-        remove = shutil.rmtree
+        remove = cleanup.safe_remove_tree
         def failure(path, *args, **kwargs):
             if Path(path).name == "models":
                 raise PermissionError("fixture file is busy")
             return remove(path, *args, **kwargs)
-        with patch.object(cleanup.shutil, "rmtree", failure), self.assertRaisesRegex(SetupError, "retry"):
+        with patch.object(cleanup, "safe_remove_tree", failure), self.assertRaisesRegex(SetupError, "retry"):
             cleanup.uninstall_data(self.preferences)
         self.assertTrue((self.preferences / cleanup.REGISTRY).exists())
         self.assertTrue((self.data / cleanup.MARKER).exists())
@@ -367,7 +570,7 @@ class UninstallDataTests(unittest.TestCase):
         registry = self.preferences / cleanup.REGISTRY
         record = json.loads(registry.read_text())
         record["data_roots"].append(str(self.data / "models" / "nested"))
-        registry.write_text(json.dumps(record))
+        registry.write_text(json.dumps(cleanup.seal_record(record)))
         with self.assertRaisesRegex(SetupError, "overlap"):
             cleanup.uninstall_data(self.preferences)
         self.assertTrue((self.data / "models" / "model.bin").exists())

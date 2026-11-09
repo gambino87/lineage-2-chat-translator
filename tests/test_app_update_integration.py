@@ -1,5 +1,4 @@
 """Upgrade lifecycle checks with fake downloads/processes/windows only."""
-import base64
 from contextlib import ExitStack
 from pathlib import Path
 import tempfile
@@ -151,8 +150,8 @@ class UpdateEntrypointTests(unittest.TestCase):
     def assert_detached_notice(self, text):
         self.notice_process.assert_called_once()
         arguments = self.notice_process.call_args.args[0]
-        self.assertEqual(arguments[:-1], [str(self.powershell), '-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand'])
-        script = base64.b64decode(arguments[-1]).decode('utf-16-le')
+        self.assertEqual(arguments[:-1], [str(self.powershell), '-NoLogo', '-NoProfile', '-NonInteractive', '-Command'])
+        script = arguments[-1]
         self.assertIn(text, script)
         self.assertIn("WScript.Shell", script)
         self.assertIn(", 30, 'Lineage 2 Chat Translator', 64)", script)

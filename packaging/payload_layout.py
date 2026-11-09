@@ -14,7 +14,7 @@ import stat
 
 from installation_cleanup import CLEANUP_PLAN_NAME, safe_relative_path, validate_plan
 
-LICENSE_FILES = ("PYTHON.txt", "PYINSTALLER.txt", "TCL.txt", "TK.txt", "INNO-SETUP.txt", "L2J-ITEM-DATA.txt")
+LICENSE_FILES = ("PYTHON.txt", "PYINSTALLER.txt", "TCL.txt", "TK.txt", "INNO-SETUP.txt", "L2J-ITEM-DATA.txt", "OLLAMA.txt")
 ROOT_FILES = frozenset({"Lineage2ChatTranslator.exe", "USER-README.txt", "THIRD-PARTY-NOTICES.txt"})
 PRIVATE_NAMES = frozenset({"settings.json", "runtime.json", "runtime.local.json", "network.log"})
 MAX_HISTORY_MANIFEST_BYTES = 8 * 1024 * 1024
@@ -63,6 +63,8 @@ def payload_records(app: Path, assets: tuple[str, ...]) -> list[dict]:
             raise ValueError(f"Unexpected license payload: {relative}")
         if relative.startswith("_internal/assets/") and relative not in allowed_assets:
             raise ValueError(f"Unexpected application asset: {relative}")
+        if relative.startswith("_internal/secure-runtime/") and relative != "_internal/secure-runtime/ollama.exe":
+            raise ValueError(f"Unexpected bundled backend file: {relative}")
         if relative.casefold() in seen:
             raise ValueError(f"Case-colliding payload file: {relative}")
         seen.add(relative.casefold())
