@@ -30,10 +30,10 @@ SOURCES = (
     "installer_main.py", "installer_runtime.py", "app_paths.py", "app_version.py", "app_icon.py",
     "translator_app.py", "translator_core.py", "game_slang.py", "item_catalog.py",
     "game_log_setup.py", "chat_overlay.py", "overlay_tray.py", "reply_composer.py", "uninstall_data.py",
-    "app_updater.py", "update_controls.py", "installation_cleanup.py",
+    "app_updater.py", "update_trust.py", "update_controls.py", "installation_cleanup.py",
 )
 ASSETS = ("assets/L2CT.ico", "assets/L2CT.png", "assets/item_catalog.json", "assets/ITEM-CATALOG-NOTICE.txt",
-          "assets/apply-update.ps1", "assets/cleanup-program-files.ps1")
+          "assets/apply-update.ps1", "assets/cleanup-program-files.ps1", "assets/protect-install-directory.ps1")
 
 
 def digest(path: Path) -> str:
@@ -68,6 +68,8 @@ def main() -> None:
         published = ROOT / "sites/l2-chat-translator/dist/downloads" / f"Lineage-2-Chat-Translator-{version}-Setup.exe"
         if published.exists():
             raise SystemExit("This version already has a prepared/public installer. Increase app_version.py before rebuilding; use packaging/release_site.py to re-prepare identical bytes.")
+        if any((ROOT / "release" / version / name).exists() for name in ("release.json", "release.sig")):
+            raise SystemExit("This version already has signed release metadata. Increase app_version.py before rebuilding; signed releases are immutable.")
         from release_site import render_changelog
         try:
             render_changelog(ROOT / "sites/l2-chat-translator", version)
@@ -183,15 +185,15 @@ def main() -> None:
     (release / "release-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     (release / "packaged-self-test.json").write_text(json.dumps(public_report, indent=2) + "\n", encoding="utf-8")
     shutil.copy2(PACKAGING / "HOSTING.md", release / "HOSTING.md")
+    site = None
+    if not options.skip_installer:
+        from release_site import prepare_site
+        site = prepare_site(ROOT, ROOT / "sites/l2-chat-translator", SOURCES, ASSETS)
     if not options.skip_installer:
         bundle_base = ROOT / "release" / f"Lineage-2-Chat-Translator-{version}-hosting"
         bundle = Path(shutil.make_archive(str(bundle_base), "zip", root_dir=release))
         bundle.with_suffix(".zip.sha256").write_text(f"{digest(bundle)}  {bundle.name}\n", encoding="ascii")
     (ROOT / ".build/latest-build.json").write_text(json.dumps({"build": str(build), "app": str(app), "release": str(release)}, indent=2), encoding="utf-8")
-    site = None
-    if not options.skip_installer:
-        from release_site import prepare_site
-        site = prepare_site(ROOT, ROOT / "sites/l2-chat-translator", SOURCES, ASSETS)
     print(json.dumps({"app": str(app), "release": str(release), "self_test": report, "homepage": site,
                       "publication": "Prepared locally; publish installer and homepage together on the main server using packaging/HOSTING.md."}, indent=2))
 

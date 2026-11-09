@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 import game_slang
 from game_slang import Hint, game_glossary
-from translator_core import OllamaClient
+from translator_core import OllamaClient, OllamaError, _language_text, _protect_item_links
 
 
 class GameSlangTests(unittest.TestCase):
@@ -164,6 +164,113 @@ class SlangPromptIntegrationTests(unittest.TestCase):
                 self.assertIn("upar =", payload["messages"][0]["content"])
                 self.assertNotIn("pj = player character", payload["messages"][0]["content"])
         self.assertEqual(json.loads(recovery["messages"][1]["content"]), {"part0": "Bora upar"})
+
+
+class DevoNicknameTests(unittest.TestCase):
+    def client(self, *outputs, target="English"):
+        client = OllamaClient(target_language=target)
+        client._verify_local_model = Mock()
+        client._request = Mock(side_effect=[{"message": {"content": output}} for output in outputs])
+        return client
+
+    def test_shorthand_only_trade_listings_keep_exact_case_without_a_model(self):
+        for target in ("English", "Russian", "Portuguese", "Spanish", "Chinese"):
+            for source in ("WTS devo 10kk", "wtb DeVo +6 100k", "WTT DEVO", "WTS [devo] 5kk"):
+                with self.subTest(target=target, source=source):
+                    client = self.client(target=target)
+                    self.assertEqual(client.translate(source), source)
+                    client._request.assert_not_called()
+                    client._verify_local_model.assert_not_called()
+
+    def test_natural_language_translates_around_the_nickname_in_both_directions(self):
+        cases = (
+            ("vendo devo por 10kk", "Selling [[L2ITEM0]] for 10kk", "Selling devo for 10kk", "English"),
+            ("куплю DEVO недорого", "Buying [[L2ITEM0]] cheaply", "Buying DEVO cheaply", "English"),
+            ("Can you sell DeVo?", "¿Puedes vender [[L2ITEM0]]?", "¿Puedes vender DeVo?", "Spanish"),
+            ("WTS devo barato", "[[L2ITEM0]] cheap", "WTS devo cheap", "English"),
+            ("WTS devo barato", "[[L2ITEM0]] дешево", "WTS devo дешево", "Russian"),
+            ("How much for a devo set?", "Сколько стоит [[L2ITEM0]] сет?", "Сколько стоит devo сет?", "Russian"),
+        )
+        for source, output, expected, target in cases:
+            with self.subTest(source=source, target=target):
+                client = self.client(output, target=target)
+                self.assertEqual(client.translate(source), expected)
+                payload = client._request.call_args.args[1]
+                self.assertIn("[[L2ITEM0]]", payload["messages"][1]["content"])
+
+    def test_ordinary_words_and_substrings_are_left_for_translation(self):
+        for source in ("Eu devo comprar poções", "Quanto devo pagar?", "Devo vendere tutto",
+                       "WTS devotion 10kk", "vendo devoPlayer", "buy devops", "vendo predevo"):
+            with self.subTest(source=source):
+                masked, protected = _protect_item_links(source, ())
+                self.assertNotIn("devo", {label.casefold() for label in protected.values()})
+                self.assertIn("devo", masked.casefold())
+        client = self.client("I should buy potions")
+        self.assertEqual(client.translate("Eu devo comprar poções"), "I should buy potions")
+        self.assertEqual(client._request.call_args.args[1]["messages"][1]["content"],
+                         "Eu devo comprar poções")
+
+    def test_trade_tags_do_not_freeze_later_portuguese_or_italian_verbs(self):
+        source = "WTS devo 10kk, quanto devo pagar?"
+        client = self.client("[[L2ITEM0]] 10kk, how much should I pay?")
+        self.assertEqual(client.translate(source), "WTS devo 10kk, how much should I pay?")
+        self.assertEqual(client._request.call_args.args[1]["messages"][1]["content"],
+                         "[[L2ITEM0]] 10kk, quanto devo pagar?")
+        for source in ("WTS [Club], eu devo comprar poções", "WTB [Club], devo vendere tutto"):
+            with self.subTest(source=source):
+                masked, protected = _protect_item_links(source, ("[Club]",))
+                self.assertNotIn("devo", protected.values())
+                self.assertIn("devo", masked)
+        for source in ("WTS devo 10kk, devo comprar poções", "vendo devo e devo comprar poções",
+                       "WTS devo; devo vendere tutto"):
+            with self.subTest(source=source):
+                masked, protected = _protect_item_links(source, ())
+                self.assertEqual(list(protected.values()).count("devo"), 1)
+                self.assertIn("devo", masked)
+
+    def test_urls_and_link_titles_cannot_supply_trade_context(self):
+        for source, labels in (("https://example.com/WTS devo", ()),
+                               ("[WTS] devo", ("[WTS]",)),
+                               ("[sell] devo", ("[sell]",))):
+            with self.subTest(source=source):
+                masked, protected = _protect_item_links(source, labels)
+                self.assertNotIn("devo", protected.values())
+                self.assertIn("devo", masked)
+
+    def test_urls_and_longer_names_are_opaque_even_beside_a_nickname(self):
+        source = "vendo devo https://devo.example.com/devo devotion devoPlayer [devo]"
+        masked, protected = _protect_item_links(source, ("[devo]",))
+        self.assertEqual(masked, "vendo [[L2ITEM0]] [[L2ITEM1]] devotion devoPlayer [[L2ITEM2]]")
+        self.assertEqual(tuple(protected.values()),
+                         ("devo", "https://devo.example.com/devo", "[devo]"))
+
+    def test_repeated_nicknames_are_separate_invariants(self):
+        client = self.client("[[L2ITEM0]] for [[L2ITEM1]]")
+        self.assertEqual(client.translate("WTT devo por DEVO"), "WTT devo for DEVO")
+        client = self.client("Selling [[L2ITEM0]] and [[L2ITEM1]] for 10kk")
+        self.assertEqual(client.translate("vendo devo e DEVO por 10kk"),
+                         "Selling devo and DEVO for 10kk")
+
+    def test_model_cannot_join_latin_words_to_a_restored_nickname(self):
+        client = self.client("Vendo[[L2ITEM0]]barato", target="Spanish")
+        self.assertEqual(client.translate("I sell devo cheap"), "Vendo devo barato")
+
+    def test_missing_nickname_uses_incoming_recovery_and_preserves_prefix(self):
+        client = self.client("devotion cheap", '{"part0":"cheap"}')
+        self.assertEqual(client.translate("WTS devo barato"), "WTS devo cheap")
+        payload = client._request.call_args.args[1]
+        self.assertEqual(json.loads(payload["messages"][1]["content"]), {"part0": "barato"})
+
+    def test_outgoing_changed_or_duplicated_nickname_is_rejected(self):
+        for output in ("¿Vendes devoción?", "[[L2ITEM0]] [[L2ITEM0]]"):
+            with self.subTest(output=output):
+                client = self.client(output, target="Spanish")
+                with self.assertRaises(OllamaError):
+                    client.translate("Can you sell devo?")
+
+    def test_language_detection_excludes_trade_nickname_but_keeps_ordinary_word(self):
+        self.assertEqual(_language_text("vendo devo por 10kk", ()), "vendo por 10kk")
+        self.assertEqual(_language_text("Eu devo comprar poções", ()), "Eu devo comprar poções")
 
 
 if __name__ == "__main__":

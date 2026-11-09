@@ -3,7 +3,8 @@
 Checking never downloads or executes an installer. Installing is a separate
 user action and is handed to an external runner only after clean shutdown.
 Update requests contain the app version, never chat, model prompts or paths.
-HTTPS authenticates the release host; its checksum is not a separate signature.
+The app's pinned public key authenticates release metadata independently of the
+host. A checksum is trusted only after that signature has been verified.
 """
 from __future__ import annotations
 
@@ -24,9 +25,11 @@ import uuid
 
 from app_paths import preferences_directory
 from app_version import VERSION
+from update_trust import SignatureError, SIGNATURE_BYTES, verify_release_signature
 
 BASE_URL = 'https://40.160.140.227'
 RELEASE_URL = BASE_URL + '/downloads/release.json'
+SIGNATURE_URL = BASE_URL + '/downloads/release.sig'
 PRODUCT = 'Lineage 2 Chat Translator'
 APP_ID = 'Lineage2ChatTranslator'
 UPDATE_MUTEX = r'Local\Lineage2ChatTranslatorUpdate'
@@ -58,6 +61,7 @@ WINDOWS_PATH_BUFFER_CHARS = 32768
 _VERSION = re.compile(r'(?:0|[1-9][0-9]{0,4})\.(?:0|[1-9][0-9]{0,4})\.(?:0|[1-9][0-9]{0,4})\Z')
 _STAGE = re.compile(r'update-[a-f0-9]{32}\Z')
 _FILES = frozenset({'owner.json', 'job.json', 'installer.part', 'installer.exe',
+                    'release.json', 'release.sig',
                     'apply-update.ps1', 'ready.json', 'commit.json', 'commit.pending', 'cancel',
                     'self-test.json', 'installer.log'})
 
@@ -76,6 +80,10 @@ class UpdateRelease:
     file: str
     bytes: int
     sha256: str
+    # Keep the exact signed bytes, not a reserialized dictionary. Every trust
+    # boundary re-verifies them; constructing this dataclass conveys no trust.
+    metadata: bytes = b''
+    signature: bytes = b''
 
 
 @dataclass(frozen=True)
@@ -96,6 +104,8 @@ def _version(value):
 
 def _validate_release(release, current=VERSION):
     _require(isinstance(release, UpdateRelease), 'The update details are invalid.')
+    _require(release == _signed_release(release.metadata, release.signature),
+             'The update details do not match their signed release. The installer was not run.')
     _require(_version(release.version) > _version(current), 'This release is not newer than the installed version.')
     _require(release.file == f'Lineage-2-Chat-Translator-{release.version}-Setup.exe',
              'The update installer filename is invalid.')
@@ -135,7 +145,7 @@ def _opener():
 
 
 def _open(url):
-    _require(url == RELEASE_URL or re.fullmatch(
+    _require(url in (RELEASE_URL, SIGNATURE_URL) or re.fullmatch(
         re.escape(BASE_URL) + r'/downloads/Lineage-2-Chat-Translator-[0-9]+\.[0-9]+\.[0-9]+-Setup\.exe', url),
         'Only the official HTTPS release host is allowed.')
     try:
@@ -150,37 +160,55 @@ def _open(url):
         raise UpdateError('Could not reach the update server. Check your internet connection and try again.') from exc
 
 
-def check_for_update(current_version=VERSION):
-    """Fetch only release metadata; return a validated newer release or None."""
-    _version(current_version)
-    with _open(RELEASE_URL) as response:
+def _fetch_record(url, maximum, deadline):
+    with _open(url) as response:
         content = bytearray()
-        deadline = time.monotonic() + MAX_METADATA_SECONDS
         reader = getattr(response, 'read1', response.read)
-        while len(content) <= MAX_METADATA_BYTES:
+        while len(content) <= maximum:
             _require(time.monotonic() < deadline, 'The update check took too long. Try again later.')
-            block = reader(min(METADATA_CHUNK_BYTES, MAX_METADATA_BYTES + 1 - len(content)))
+            block = reader(min(METADATA_CHUNK_BYTES, maximum + 1 - len(content)))
             if not block:
                 break
             content.extend(block)
-    _require(len(content) <= MAX_METADATA_BYTES, 'The update information is too large.')
-    document = _json_bytes(bytes(content))
+    _require(len(content) <= maximum, 'The update information is too large.')
+    return bytes(content)
+
+
+def _signed_release(metadata, signature):
+    """Authenticate before interpreting anything supplied by the download host."""
+    try:
+        verify_release_signature(metadata, signature)
+    except SignatureError as exc:
+        raise UpdateError('The update signature could not be verified. No installer was run. '
+                          'Try again later or check the project website.') from exc
+    document = _json_bytes(metadata)
     _require(document.get('product') == PRODUCT and document.get('platform') == 'windows-x64',
              'The update does not belong to this application.')
     _require(isinstance(document.get('validation'), dict)
              and document['validation'].get('packaged_self_test_passed') is True,
              'The release has not passed its packaged checks.')
     version = document.get('version')
-    candidate = _version(version)
+    _version(version)
     artifact = document.get('installer')
     _require(isinstance(artifact, dict), 'The update installer information is missing.')
-    release = UpdateRelease(version, artifact.get('file'), artifact.get('bytes'), artifact.get('sha256'))
+    release = UpdateRelease(version, artifact.get('file'), artifact.get('bytes'), artifact.get('sha256'),
+                            metadata, signature)
     # Validate even non-new metadata without accepting it as an install action.
     _require(release.file == f'Lineage-2-Chat-Translator-{version}-Setup.exe'
              and type(release.bytes) is int and MIN_INSTALLER_BYTES <= release.bytes <= MAX_INSTALLER_BYTES
              and isinstance(release.sha256, str) and re.fullmatch(r'[a-f0-9]{64}', release.sha256),
              'The update installer information is invalid.')
-    return _validate_release(release, current_version) if candidate > _version(current_version) else None
+    return release
+
+
+def check_for_update(current_version=VERSION):
+    """Fetch signed release details only; unsigned metadata never offers an update."""
+    _version(current_version)
+    deadline = time.monotonic() + MAX_METADATA_SECONDS
+    metadata = _fetch_record(RELEASE_URL, MAX_METADATA_BYTES, deadline)
+    signature = _fetch_record(SIGNATURE_URL, SIGNATURE_BYTES, deadline)
+    release = _signed_release(metadata, signature)
+    return _validate_release(release, current_version) if _version(release.version) > _version(current_version) else None
 
 
 def _plain_path(path):
@@ -236,14 +264,18 @@ def installation_support():
         return False, str(exc)
 
 
-def _read_json(path, maximum=MAX_METADATA_BYTES):
+def _read_bytes(path, maximum=MAX_METADATA_BYTES):
     """Bound the read itself: a file can grow after the preliminary size check."""
     path = _plain_path(path)
     _require(path.is_file() and path.stat().st_size <= maximum, 'The update record is missing or too large.')
     with path.open('rb') as source:
         content = source.read(maximum + 1)
     _require(len(content) <= maximum, 'The update record is too large.')
-    return _json_bytes(content)
+    return content
+
+
+def _read_json(path, maximum=MAX_METADATA_BYTES):
+    return _json_bytes(_read_bytes(path, maximum))
 
 
 def _write_new_json(path, document):
@@ -373,6 +405,8 @@ def prepare_update(release, *, progress=None, cancelled=None):
         with part.open('rb') as source:
             _require(source.read(2) == b'MZ', 'The download is not a Windows installer.')
         part.replace(stage / 'installer.exe')
+        (stage / 'release.json').write_bytes(release.metadata)
+        (stage / 'release.sig').write_bytes(release.signature)
         runner = RUNNER_PATH.read_bytes()
         _require(MIN_RUNNER_BYTES <= len(runner) <= MAX_RUNNER_BYTES, 'The bundled update helper is unavailable.')
         (stage / 'apply-update.ps1').write_bytes(runner)
@@ -433,6 +467,9 @@ def launch_update(prepared):
     _require(isinstance(prepared, PreparedUpdate), 'The prepared update is invalid.')
     release = _validate_release(prepared.release)
     stage, owner = _stage_info(prepared.stage)
+    staged_release = _signed_release(_read_bytes(stage / 'release.json'),
+                                     _read_bytes(stage / 'release.sig', SIGNATURE_BYTES))
+    _require(staged_release == release, 'The signed update details changed. The installer was not run.')
     job = _read_json(stage / 'job.json')
     executable = _installed_executable()
     _require(job.get('app_id') == APP_ID and job.get('schema_version') == 1

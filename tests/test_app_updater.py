@@ -1,5 +1,6 @@
 """Updater protocol/filesystem checks; no network, apps, installers or services."""
 import hashlib
+from dataclasses import replace
 import io
 import json
 from pathlib import Path
@@ -32,8 +33,14 @@ class UpdaterTests(unittest.TestCase):
         self.executable.parent.mkdir()
         self.executable.write_bytes(b'synthetic current application')
         self.binary = b'MZ' + b'synthetic installer bytes.' * 100
+        metadata = json.dumps(self.metadata()).encode()
         self.release = updater.UpdateRelease('99.8.7', 'Lineage-2-Chat-Translator-99.8.7-Setup.exe',
-                                             len(self.binary), hashlib.sha256(self.binary).hexdigest())
+                                             len(self.binary), hashlib.sha256(self.binary).hexdigest(),
+                                             metadata, self.signature(metadata))
+        # This protocol fixture is deliberately not a signing implementation.
+        # Native RSA/PSS verification has separate Windows integration tests.
+        self.verifier = self.enterContext(patch.object(updater, 'verify_release_signature',
+                                                       side_effect=self.verify_fixture))
         self.enterContext(patch.object(updater, 'preferences_directory', return_value=self.preferences))
         self.enterContext(patch.object(updater, 'update_in_progress', return_value=False))
 
@@ -43,11 +50,20 @@ class UpdaterTests(unittest.TestCase):
                               'bytes': len(self.binary), 'sha256': hashlib.sha256(self.binary).hexdigest()},
                 'validation': {'packaged_self_test_passed': True}}
 
+    @staticmethod
+    def signature(data):
+        return hashlib.sha256(data).digest() * 12
+
+    def verify_fixture(self, data, signature):
+        if type(data) is not bytes or not data or signature != self.signature(data):
+            raise updater.SignatureError('synthetic signature mismatch')
+
     def check(self, document, current='1.6.0'):
         data = document if isinstance(document, bytes) else json.dumps(document).encode()
-        with patch.object(updater, '_open', return_value=Response(data)) as fetch:
+        with patch.object(updater, '_open', side_effect=[Response(data), Response(self.signature(data))]) as fetch:
             result = updater.check_for_update(current)
-        fetch.assert_called_once_with(updater.RELEASE_URL)
+        self.assertEqual([call.args[0] for call in fetch.call_args_list],
+                         [updater.RELEASE_URL, updater.SIGNATURE_URL])
         return result
 
     def prepare(self, binary=None, *, progress=None, cancelled=None, content_length=None):
@@ -167,6 +183,8 @@ class UpdaterTests(unittest.TestCase):
             prepared = self.prepare(progress=progress, content_length=len(self.binary))
         launch.assert_not_called()
         self.assertEqual((prepared.stage / 'installer.exe').read_bytes(), self.binary)
+        self.assertEqual((prepared.stage / 'release.json').read_bytes(), self.release.metadata)
+        self.assertEqual((prepared.stage / 'release.sig').read_bytes(), self.release.signature)
         self.assertFalse((prepared.stage / 'installer.part').exists())
         self.assertEqual((prepared.stage / 'apply-update.ps1').read_bytes(), updater.RUNNER_PATH.read_bytes())
         job = json.loads((prepared.stage / 'job.json').read_text())
@@ -344,7 +362,7 @@ class UpdaterTests(unittest.TestCase):
         self.assertFalse(prepared.stage.exists())
 
     def test_changed_installer_or_job_or_script_is_never_launched(self):
-        for filename in ['installer.exe', 'job.json', 'apply-update.ps1']:
+        for filename in ['installer.exe', 'job.json', 'apply-update.ps1', 'release.json', 'release.sig']:
             with self.subTest(filename=filename):
                 prepared = self.prepare()
                 path = prepared.stage / filename
@@ -359,6 +377,54 @@ class UpdaterTests(unittest.TestCase):
                     updater.launch_update(prepared)
                 launch.assert_not_called()
                 updater.discard_update(prepared)
+
+    def test_untrusted_signature_blocks_before_metadata_is_interpreted(self):
+        for signature in (b'', b'wrong key or modified signature', b'x' * updater.SIGNATURE_BYTES):
+            with self.subTest(signature_length=len(signature)), \
+                 patch.object(updater, '_open', side_effect=[Response(b'{host-controlled invalid json'), Response(signature)]), \
+                 patch.object(updater, '_json_bytes') as parse, \
+                 self.assertRaisesRegex(updater.UpdateError, 'signature'):
+                updater.check_for_update()
+            parse.assert_not_called()
+
+    def test_signature_response_is_bounded(self):
+        with patch.object(updater, '_open', side_effect=[Response(self.release.metadata),
+                                                       Response(b'x' * (updater.SIGNATURE_BYTES + 1))]), \
+             self.assertRaisesRegex(updater.UpdateError, 'too large'):
+            updater.check_for_update()
+
+    def test_construction_and_changed_fields_do_not_convey_trust(self):
+        variants = [replace(self.release, metadata=b'', signature=b''),
+                    replace(self.release, sha256='a' * 64),
+                    replace(self.release, bytes=self.release.bytes + 1),
+                    replace(self.release, version='99.8.8', file='Lineage-2-Chat-Translator-99.8.8-Setup.exe'),
+                    replace(self.release, metadata=self.release.metadata + b' '),
+                    replace(self.release, signature=b'x' * updater.SIGNATURE_BYTES)]
+        for release in variants:
+            with self.subTest(release=release.version), patch.object(updater, '_open') as fetch, \
+                 patch.object(updater, '_installed_executable') as installed, \
+                 self.assertRaises(updater.UpdateError):
+                updater.prepare_update(release)
+            fetch.assert_not_called()
+            installed.assert_not_called()
+
+    def test_signed_old_release_cannot_be_prepared(self):
+        data = json.dumps(self.metadata('0.0.1')).encode()
+        old = updater._signed_release(data, self.signature(data))
+        with patch.object(updater, '_open') as fetch, self.assertRaisesRegex(updater.UpdateError, 'not newer'):
+            updater.prepare_update(old)
+        fetch.assert_not_called()
+
+    def test_different_valid_signed_release_cannot_replace_staged_metadata(self):
+        prepared = self.prepare()
+        data = json.dumps(self.metadata('99.8.8')).encode()
+        (prepared.stage / 'release.json').write_bytes(data)
+        (prepared.stage / 'release.sig').write_bytes(self.signature(data))
+        with patch.object(updater.subprocess, 'Popen') as launch, \
+             self.assertRaisesRegex(updater.UpdateError, 'signed update details changed'):
+            updater.launch_update(prepared)
+        launch.assert_not_called()
+        updater.discard_update(prepared)
 
     def test_receipt_consumed_once_without_changing_preferences(self):
         receipt = self.preferences / 'update-result.json'

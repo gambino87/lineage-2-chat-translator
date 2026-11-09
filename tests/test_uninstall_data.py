@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import uninstall_data as cleanup
-from installer_runtime import SetupError
+from installer_runtime import ServiceOwnershipMismatch, SetupError
 
 
 class UninstallDataTests(unittest.TestCase):
@@ -229,10 +229,82 @@ class UninstallDataTests(unittest.TestCase):
     def test_other_service_is_left_running(self):
         self.registered()
         self.manager._port_open.return_value = True
-        self.manager._verify_owner.side_effect = SetupError("Port 11435 is occupied by a different service or storage installation.")
+        # Completely different display wording must not affect the decision.
+        self.manager._verify_owner.side_effect = ServiceOwnershipMismatch("Another installation owns this listener.")
         report = cleanup.uninstall_data(self.preferences)
         self.assertFalse(report["service_stopped"])
         self.manager.stop_service.assert_not_called()
+
+    def test_generic_error_with_old_mismatch_wording_blocks_deletion(self):
+        self.registered()
+        payload = self.data / "models" / "model.bin"
+        self.write(payload)
+        self.manager._port_open.return_value = True
+        failure = SetupError("Port 11435 is occupied by a different service or storage installation.")
+        self.manager._verify_owner.side_effect = failure
+        with self.assertRaises(SetupError) as caught:
+            cleanup.uninstall_data(self.preferences)
+        self.assertIs(caught.exception.__cause__, failure)
+        self.assertTrue(payload.exists())
+        self.assertTrue((self.preferences / cleanup.REGISTRY).exists())
+        self.manager.stop_service.assert_not_called()
+
+    def test_all_registered_roots_mismatch_without_stopping_service(self):
+        roots = [self.registered(), self.registered(self.base / "other model data")]
+        managers = {root: Mock() for root in roots}
+        for root, manager in managers.items():
+            self.write(root / "models" / "model.bin")
+            manager._port_open.return_value = True
+            manager._verify_owner.side_effect = ServiceOwnershipMismatch("Different runtime.")
+        with patch.object(cleanup, "RuntimeManager", side_effect=managers.__getitem__):
+            report = cleanup.uninstall_data(self.preferences)
+        self.assertFalse(report["service_stopped"])
+        for root, manager in managers.items():
+            manager.stop_service.assert_not_called()
+            self.assertFalse((root / "models" / "model.bin").exists())
+
+    def test_uncertainty_among_multiple_roots_blocks_deletion_in_either_order(self):
+        roots = [self.registered(), self.registered(self.base / "other model data")]
+        for root in roots:
+            self.write(root / "models" / "model.bin")
+        for unknown_index in (0, 1):
+            with self.subTest(unknown_index=unknown_index):
+                managers = {root: Mock() for root in roots}
+                for index, (root, manager) in enumerate(managers.items()):
+                    manager._port_open.return_value = True
+                    manager._verify_owner.side_effect = (SetupError("Owner unavailable.") if index == unknown_index
+                                                         else ServiceOwnershipMismatch("Different runtime."))
+                with patch.object(cleanup, "RuntimeManager", side_effect=managers.__getitem__), self.assertRaises(SetupError):
+                    cleanup.uninstall_data(self.preferences)
+                for root, manager in managers.items():
+                    manager.stop_service.assert_not_called()
+                    self.assertTrue((root / "models" / "model.bin").exists())
+
+    def test_later_registered_owner_is_the_only_service_stopped(self):
+        roots = [self.registered(), self.registered(self.base / "other model data")]
+        managers = {root: Mock() for root in roots}
+        for root, manager in managers.items():
+            self.write(root / "models" / "model.bin")
+            manager._port_open.return_value = True
+        first, second = (managers[root] for root in roots)
+        first._verify_owner.side_effect = ServiceOwnershipMismatch("Different runtime.")
+        second._verify_owner.return_value = {"pid": 123}
+        second.stop_service.side_effect = lambda: self.assertTrue(all((root / "models" / "model.bin").exists() for root in roots))
+        with patch.object(cleanup, "RuntimeManager", side_effect=managers.__getitem__):
+            report = cleanup.uninstall_data(self.preferences)
+        self.assertTrue(report["service_stopped"])
+        first.stop_service.assert_not_called()
+        second.stop_service.assert_called_once()
+
+    def test_mismatch_during_stop_still_blocks_deletion(self):
+        self.registered()
+        payload = self.data / "models" / "model.bin"
+        self.write(payload)
+        self.manager._port_open.return_value = True
+        self.manager.stop_service.side_effect = ServiceOwnershipMismatch("The listener changed during shutdown.")
+        with self.assertRaises(ServiceOwnershipMismatch):
+            cleanup.uninstall_data(self.preferences)
+        self.assertTrue(payload.exists())
 
     def test_unverified_or_unstoppable_service_blocks_data_deletion(self):
         self.registered()

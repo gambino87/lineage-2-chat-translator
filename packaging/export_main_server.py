@@ -120,6 +120,17 @@ def verify_archive(archive: Path, manifest: dict) -> None:
                 digest = hashlib.file_digest(stream, "sha256").hexdigest()
             require(member.file_size == row["bytes"] and digest == row["sha256"],
                     f"Archive content mismatch: {row['path']}")
+        require({"downloads/release.json", "downloads/release.sig"}.issubset(names),
+                "Archive is missing signed release metadata.")
+        require(bundle.getinfo("downloads/release.json").file_size <= release_site.MAX_METADATA_BYTES
+                and bundle.getinfo("downloads/release.sig").file_size == release_site.SIGNATURE_BYTES,
+                "Archive signed metadata size is invalid.")
+        metadata = bundle.read("downloads/release.json")
+        release_site.verify_signature(metadata, bundle.read("downloads/release.sig"))
+        public = json.loads(metadata)
+        require(public.get("version") == manifest["version"]
+                and public.get("installer") == manifest["installer"],
+                "Signed archive metadata differs from the export manifest.")
     installer = manifest["installer"]
     require({"path": "downloads/" + installer["file"], "bytes": installer["bytes"],
              "sha256": installer["sha256"]} in records, "Installer metadata mismatch.")

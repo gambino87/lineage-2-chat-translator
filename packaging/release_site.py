@@ -5,6 +5,7 @@ import argparse
 import ast
 import hashlib
 import html
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -15,6 +16,58 @@ ROOT = Path(__file__).resolve().parent.parent
 SITE = ROOT / "sites/l2-chat-translator"
 VERSION_PATTERN = r"[0-9]+\.[0-9]+\.[0-9]+"
 INSTALLER_PATTERN = rf"Lineage-2-Chat-Translator-({VERSION_PATTERN})-Setup\.exe"
+SIGNATURE_BYTES = 384  # RSA-3072 detached signature; cryptographic validation is shared with the app.
+MAX_METADATA_BYTES = 64 * 1024
+
+
+def verify_signature(metadata: bytes, signature: bytes) -> None:
+    from update_trust import verify_release_signature
+    verify_release_signature(metadata, signature)
+
+
+def sign_metadata(metadata: bytes) -> bytes:
+    # Resolve the publisher-only helper by file, not the unrelated packaging package.
+    spec = importlib.util.spec_from_file_location(
+        "l2_release_signer", Path(__file__).with_name("sign_release.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.sign_metadata(metadata)
+
+
+def signed_metadata(root: Path, version: str, public: dict, *, check: bool) -> tuple[bytes, bytes]:
+    """Keep each release's exact signed bytes immutable, including during page-only updates."""
+    metadata = (json.dumps(public, indent=2) + "\n").encode("utf-8")
+    require(len(metadata) <= MAX_METADATA_BYTES, "Release metadata is too large to sign.")
+    folder = root / "release" / version
+    for path in (root / "release", folder):
+        require(not path.is_symlink() and not path.is_junction()
+                and path.resolve().is_relative_to(root.resolve()), "Linked signing output is not allowed.")
+    document, signature_file = folder / "release.json", folder / "release.sig"
+    for path in (document, signature_file):
+        require(not path.is_symlink() and not path.is_junction(), "Linked signing output is not allowed.")
+    if document.exists() or signature_file.exists():
+        require(document.is_file() and signature_file.is_file(),
+                "Incomplete signed release. Do not replace it; use a new release version.")
+        require(document.stat().st_size <= MAX_METADATA_BYTES
+                and signature_file.stat().st_size == SIGNATURE_BYTES,
+                "Signed release size is invalid.")
+        require(document.read_bytes() == metadata,
+                "Signed release metadata changed. Increase the application version before signing again.")
+        signature = signature_file.read_bytes()
+        verify_signature(metadata, signature)
+        return metadata, signature
+    require(not check, "Signed release is missing. Prepare and sign it before checking or exporting.")
+    signature = sign_metadata(metadata)
+    require(isinstance(signature, bytes) and len(signature) == SIGNATURE_BYTES,
+            "The release signer returned an invalid signature.")
+    verify_signature(metadata, signature)
+    # Exclusive creation never silently replaces a previous signed release. A partial
+    # pair after interruption fails closed on the next run rather than being re-signed.
+    with document.open("xb") as output:
+        output.write(metadata)
+    with signature_file.open("xb") as output:
+        output.write(signature)
+    return metadata, signature
 
 
 def digest(path: Path) -> str:
@@ -156,7 +209,7 @@ def prepare_site(root: Path, site: Path, sources: tuple, assets: tuple, *, check
     require(not dist.is_symlink() and not dist.is_junction() and dist.resolve().is_relative_to(site), "Invalid public output path.")
     history = {}
     fixed = {"index.html", "_headers", "robots.txt", "assets/L2CT.ico", "assets/L2CT.png",
-             "downloads/SHA256SUMS.txt", "downloads/release.json"}
+             "downloads/SHA256SUMS.txt", "downloads/release.json", "downloads/release.sig"}
     for path in dist.rglob("*"):
         require(not path.is_symlink() and not path.is_junction(), "Links are not allowed in public output.")
         if not path.is_file():
@@ -199,6 +252,8 @@ def prepare_site(root: Path, site: Path, sources: tuple, assets: tuple, *, check
                     "  Cache-Control: public, max-age=31536000, immutable\n")
     for name, content_type in (("SHA256SUMS.txt", "text/plain"), ("release.json", "application/json")):
         headers += f"/downloads/{name}\n  Content-Type: {content_type}; charset=utf-8\n  Cache-Control: no-cache\n"
+    headers += "/downloads/release.sig\n  Content-Type: application/octet-stream\n  Cache-Control: no-cache\n"
+    metadata, signature = signed_metadata(root, version, public, check=check)
     # Staging and backups stay under a checked, ignored directory in this Site.
     scratch = site / ".sites-artifacts"
     require(not scratch.is_symlink() and not scratch.is_junction() and scratch.resolve().is_relative_to(site), "Invalid staging directory.")
@@ -220,9 +275,13 @@ def prepare_site(root: Path, site: Path, sources: tuple, assets: tuple, *, check
             require(digest(staged / "downloads" / name) == digest(source), "Installer changed while staging.")
         checksum_text = "".join(f"{digest(staged / 'downloads' / name)}  {name}\n" for name in sorted(history))
         (staged / "downloads/SHA256SUMS.txt").write_text(checksum_text, encoding="ascii")
-        (staged / "downloads/release.json").write_text(json.dumps(public, indent=2) + "\n", encoding="utf-8")
+        # Writing bytes avoids newline conversion after signing on Windows.
+        (staged / "downloads/release.json").write_bytes(metadata)
+        (staged / "downloads/release.sig").write_bytes(signature)
         # Catch source/artifact edits made while assembling the release.
         require(verified_release(root, version, sources, assets)[0] == public, "Release changed during preparation.")
+        require(signed_metadata(root, version, public, check=True) == (metadata, signature),
+                "Signed release changed during preparation.")
         require(digest(staged / "downloads" / installer.name) == public["installer"]["sha256"],
                 "Staged installer checksum mismatch.")
         if check:

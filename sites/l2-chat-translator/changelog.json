@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.7.12",
+    "changes": [
+      "Preserved devo, the nickname for Devotion Tunic and Devotion Stockings, in recognized trade messages and translated replies without expanding or translating it.",
+      "Listings such as WTS devo 10kk now show [--]. Ordinary Portuguese and Italian uses of devo remain translatable.",
+      "New installations use your per-user Windows Programs folder. Updates protect existing program files against changes by other local accounts and stop if the folder cannot be secured safely.",
+      "Configure now stops Ollama services it starts after setup or model removal, including failures. Opening the translator starts and checks the service again; failed shutdowns remain visible and can be retried.",
+      "Setup downloads can now be cancelled. Closing setup cancels its work and waits for owned-service cleanup; resumable model layers are kept. Model downloads have a two-hour limit per attempt, including connections that keep sending progress.",
+      "Future automatic updates require an independent release signature before installation, protecting against a replaced installer on the download server. Older versions need a trusted first upgrade to gain this protection. Windows may still show an unknown publisher.",
+      "Uninstall leaves unrelated services running and stops cleanup when service ownership is uncertain, even if error messages change."
+    ]
+  },
+  {
     "version": "1.7.11",
     "changes": [
       "Recognized universal trade listings now show [--] in the overlay instead of a guessed language. Linked items, known English item names, prices and trade shorthand are recognized locally.",

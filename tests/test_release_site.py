@@ -29,6 +29,12 @@ class ReleaseSiteTests(unittest.TestCase):
 <p>{{SIGNING_NOTICE}}</p>"""
 
     def setUp(self):
+        # These tests exercise the release lifecycle, not RSA. Native verification
+        # is covered separately with real ephemeral keys in test_update_trust.
+        self.signer = self.enterContext(patch.object(
+            release_site, "sign_metadata", side_effect=lambda data: hashlib.sha256(data).digest() * 12))
+        self.verifier = self.enterContext(patch.object(
+            release_site, "verify_signature", side_effect=self.verify_synthetic_signature))
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.site = self.root / "sites" / "translator"
         (self.site / ".openai").mkdir(parents=True)
@@ -46,6 +52,11 @@ class ReleaseSiteTests(unittest.TestCase):
             '"download_gb": 6.6, "tested": True}}\n', encoding="utf-8"
         )
         self.make_release("1.2.3", b"synthetic installer one")
+
+    @staticmethod
+    def verify_synthetic_signature(data, signature):
+        if signature != hashlib.sha256(data).digest() * 12:
+            raise ValueError("Synthetic signature verification failed.")
 
     def make_release(self, version, contents):
         (self.root / "app_version.py").write_text(f'VERSION = "{version}"\n', encoding="utf-8")
@@ -205,7 +216,7 @@ class ReleaseSiteTests(unittest.TestCase):
         (self.root / "Network.log").write_text("private-marker")
         self.prepare()
         public = self.public_snapshot()
-        self.assertEqual(len(public), 8)
+        self.assertEqual(len(public), 9)
         self.assertFalse(any(b"private-marker" in content for content in public.values()))
         details = json.loads(public["downloads/release.json"])
         self.assertNotIn("payload", details)
@@ -339,6 +350,81 @@ class ReleaseSiteTests(unittest.TestCase):
         retained = {path.relative_to(backups[0]).as_posix(): path.read_bytes()
                     for path in backups[0].rglob("*") if path.is_file()}
         self.assertEqual(before, retained)
+
+    def test_signature_covers_exact_public_bytes_and_repreparation_never_resigns(self):
+        self.prepare()
+        folder = self.root / "release/1.2.3"
+        public = self.public_snapshot()
+        self.assertEqual((folder / "release.json").read_bytes(), public["downloads/release.json"])
+        self.assertEqual((folder / "release.sig").read_bytes(), public["downloads/release.sig"])
+        self.verify_synthetic_signature(public["downloads/release.json"], public["downloads/release.sig"])
+        self.assertNotIn(b"\r\n", public["downloads/release.json"])
+        self.prepare()
+        self.prepare(check=True)
+        self.signer.assert_called_once()
+
+    def test_check_missing_signature_never_uses_signing_key(self):
+        with self.assertRaisesRegex(ValueError, "Signed release is missing"):
+            self.prepare(check=True)
+        self.signer.assert_not_called()
+        self.assertFalse((self.root / "release/1.2.3/release.json").exists())
+
+    def test_missing_key_or_failed_signer_leaves_public_files_unchanged(self):
+        self.prepare()
+        before = self.public_snapshot()
+        self.make_release("1.2.4", b"synthetic second release")
+        self.signer.side_effect = ValueError("Signing key is unavailable.")
+        with self.assertRaisesRegex(ValueError, "unavailable"):
+            self.prepare()
+        self.assertEqual(before, self.public_snapshot())
+        self.assertFalse((self.root / "release/1.2.4/release.json").exists())
+
+    def test_invalid_signer_output_is_not_written(self):
+        for signature in (b"short", b"x" * 384):
+            with self.subTest(signature_size=len(signature)):
+                self.signer.side_effect = None
+                self.signer.return_value = signature
+                with self.assertRaises(ValueError):
+                    self.prepare()
+                self.assertFalse((self.root / "release/1.2.3/release.json").exists())
+
+    def test_tampered_or_missing_stored_signature_is_not_repaired_by_resigning(self):
+        self.prepare()
+        folder = self.root / "release/1.2.3"
+        signature = (folder / "release.sig").read_bytes()
+        for replacement in (b"short", b"x" * 384, None):
+            with self.subTest(signature_size=None if replacement is None else len(replacement)):
+                if replacement is None:
+                    (folder / "release.sig").unlink()
+                else:
+                    (folder / "release.sig").write_bytes(replacement)
+                self.assert_rejected_without_changes()
+                self.signer.assert_called_once()
+                (folder / "release.sig").write_bytes(signature)
+
+    def test_same_version_metadata_change_is_rejected_even_with_valid_installer(self):
+        self.prepare()
+        manifest = self.read_manifest()
+        manifest["built_at_utc"] = "2026-11-09T00:00:00+00:00"
+        self.write_manifest(manifest)
+        with self.assertRaisesRegex(ValueError, "Signed release metadata changed"):
+            self.prepare()
+        self.signer.assert_called_once()
+
+    def test_export_check_rejects_missing_or_tampered_public_signature(self):
+        self.prepare()
+        signature_file = self.site / "dist/downloads/release.sig"
+        signature = signature_file.read_bytes()
+        for replacement in (b"x" * 384, None):
+            with self.subTest(missing=replacement is None):
+                if replacement is None:
+                    signature_file.unlink()
+                else:
+                    signature_file.write_bytes(replacement)
+                with self.assertRaisesRegex(ValueError, "needs preparation"):
+                    self.prepare(check=True)
+                self.signer.assert_called_once()
+                signature_file.write_bytes(signature)
 
 
 if __name__ == "__main__":

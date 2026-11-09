@@ -160,6 +160,8 @@ class StartupVisibilityTests(unittest.TestCase):
         window.root.destroy.assert_not_called()
         window._drain()
         window.root.destroy.assert_called_once()
+        self.assertFalse(window.launch_requested)  # Close wins over queued launch.
+        self.runtime.return_value.stop_owned_service.assert_called_once()
         self.start_progress.return_value.stop.assert_called_once()
         self.assertIsNone(window._startup_frame)
 

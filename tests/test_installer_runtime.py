@@ -1,11 +1,15 @@
 """Setup safety and recovery checks; no real downloads, processes or models."""
 import hashlib
+from contextlib import contextmanager
 from http.client import IncompleteRead
 import io
 import json
 import os
 from pathlib import Path
 import tempfile
+import socket
+import threading
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
@@ -240,7 +244,7 @@ class RuntimeTests(unittest.TestCase):
         other = self.manager.data_root / ".ollama-stage-unrelated"
         other.mkdir()
         (other / "keep.txt").write_text("keep")
-        def fail_extract(_archive, stage):
+        def fail_extract(_archive, stage, _check=None):
             (stage / "partial.txt").write_text("partial extract")
             raise runtime.SetupError("extract failed")
         with patch("installer_runtime.ARCHIVE_SHA256", runtime._sha256(archive)), \
@@ -255,7 +259,7 @@ class RuntimeTests(unittest.TestCase):
         self.manager.data_root.mkdir()
         archive = self.manager.data_root / f"ollama-windows-amd64-{runtime.OLLAMA_VERSION}.zip"
         archive.write_bytes(b"verified fixture")
-        def fail_extract(_archive, stage):
+        def fail_extract(_archive, stage, _check=None):
             (stage / "junction").mkdir()
             raise runtime.SetupError("extract failed")
         with patch("installer_runtime.ARCHIVE_SHA256", runtime._sha256(archive)), \
@@ -295,12 +299,31 @@ class RuntimeTests(unittest.TestCase):
         connection.__enter__.return_value.getsockname.return_value = ("127.0.0.1", 54321)
         owner = {"executable": str(self.root / "other/ollama.exe"), "address": "127.0.0.1", "pid": 10}
         with patch("installer_runtime.socket.create_connection", return_value=connection), patch("installer_runtime.subprocess.run", return_value=SimpleNamespace(returncode=0, stdout=json.dumps(owner))) as run:
-            with self.assertRaisesRegex(runtime.SetupError, "different service"):
+            with self.assertRaises(runtime.ServiceOwnershipMismatch):
                 self.manager._verify_owner()
         args = run.call_args.args[0]
         self.assertIn("54321", args[-1])
         self.assertNotIn(str(self.manager.executable), args[-1])
         self.assertEqual(run.call_args.kwargs["creationflags"], runtime.subprocess.CREATE_NO_WINDOW)
+
+    @unittest.skipUnless(os.name == "nt", "Windows owner correlation")
+    def test_incomplete_owner_is_never_classified_as_unrelated(self):
+        connection = MagicMock()
+        connection.__enter__.return_value.getsockname.return_value = ("127.0.0.1", 54321)
+        valid = {"executable": str(self.manager.executable), "address": "127.0.0.1", "pid": 10}
+        invalid = [None, [], {}, *({**valid, "executable": value} for value in (None, "", " ", "relative/ollama.exe", 123)),
+                   *({**valid, "pid": value} for value in (None, 0, -1, "10", True)),
+                   *({**valid, "address": value} for value in (None, "0.0.0.0", "::1"))]
+        for owner in invalid:
+            with self.subTest(owner=owner), \
+                 patch("installer_runtime.socket.create_connection", return_value=connection), \
+                 patch("installer_runtime.subprocess.run", return_value=SimpleNamespace(returncode=0, stdout=json.dumps(owner))):
+                with self.assertRaises(runtime.SetupError) as caught:
+                    self.manager._verify_owner()
+                self.assertNotIsInstance(caught.exception, runtime.ServiceOwnershipMismatch)
+        with patch("installer_runtime.socket.create_connection", return_value=connection), \
+             patch("installer_runtime.subprocess.run", return_value=SimpleNamespace(returncode=0, stdout=json.dumps(valid))):
+            self.assertEqual(self.manager._verify_owner(), valid)
 
     def test_occupied_service_is_never_stopped_or_replaced(self):
         with patch.object(self.manager, "ensure_runtime") as install, patch.object(self.manager, "_port_open", return_value=True), patch.object(self.manager, "_verify_owner", side_effect=runtime.SetupError("different service")), patch("installer_runtime.subprocess.Popen") as popen:
@@ -327,7 +350,149 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(kwargs["env"]["CUDA_VISIBLE_DEVICES"], "1")
         self.assertEqual(kwargs["env"]["HTTPS_PROXY"], "https://proxy.example.invalid")
         self.assertEqual(kwargs["creationflags"], getattr(runtime.subprocess, "CREATE_NO_WINDOW", 0))
+        self.assertIs(self.manager._owned_service, process)
         process.terminate.assert_not_called()
+
+    def test_adopted_service_is_not_stopped_by_automatic_cleanup(self):
+        with patch.object(self.manager, "ensure_runtime"), \
+             patch.object(self.manager, "_verify_owner"), \
+             patch.object(self.manager, "_port_open", return_value=True), \
+             patch.object(self.manager, "_request_api", return_value={"version": runtime.OLLAMA_VERSION}), \
+             patch("installer_runtime.subprocess.Popen") as spawn:
+            self.manager.ensure_service()
+        with patch.object(self.manager, "_port_open") as probe, \
+             patch.object(self.manager, "stop_service") as stop:
+            self.manager.stop_owned_service()
+        self.assertIsNone(self.manager._owned_service)
+        spawn.assert_not_called()
+        probe.assert_not_called()
+        stop.assert_not_called()
+
+    def test_failed_readiness_keeps_child_for_cleanup_before_it_listens(self):
+        process = MagicMock(pid=4567)
+        process.poll.return_value = None
+        with patch.object(self.manager, "ensure_runtime"), \
+             patch.object(self.manager, "_port_open", side_effect=[False, False, True]), \
+             patch.object(self.manager, "_request_api", side_effect=runtime.SetupError("bad readiness response")), \
+             patch("installer_runtime.subprocess.Popen", return_value=process):
+            with self.assertRaisesRegex(runtime.SetupError, "bad readiness response"):
+                self.manager.ensure_service()
+        self.assertIs(self.manager._owned_service, process)
+        with patch.object(self.manager, "_port_open", return_value=False), \
+             patch.object(self.manager, "_verify_owner") as verify, \
+             patch.object(self.manager, "_unload_running_models") as unload:
+            self.manager.stop_owned_service()
+            self.manager.stop_owned_service()
+        verify.assert_not_called()
+        unload.assert_not_called()
+        process.terminate.assert_called_once()
+        process.wait.assert_called_once_with(timeout=runtime.SERVICE_STOP_SECONDS)
+        self.assertIsNone(self.manager._owned_service)
+
+    def test_startup_poll_failure_retains_child_and_blocks_another_spawn(self):
+        process = MagicMock(pid=4567)
+        process.poll.side_effect = OSError("process query failed")
+        with patch.object(self.manager, "ensure_runtime"), \
+             patch.object(self.manager, "_port_open", return_value=False), \
+             patch("installer_runtime.subprocess.Popen", return_value=process):
+            with self.assertRaisesRegex(OSError, "process query failed"):
+                self.manager.ensure_service()
+        self.assertIs(self.manager._owned_service, process)
+        process.poll.side_effect = None
+        process.poll.return_value = None
+        with patch.object(self.manager, "_port_open", return_value=False), \
+             patch("installer_runtime.subprocess.Popen") as spawn:
+            with self.assertRaisesRegex(runtime.SetupError, "previous local service"):
+                self.manager.ensure_service()
+            self.manager.stop_owned_service()
+        spawn.assert_not_called()
+        process.terminate.assert_called_once()
+
+    def test_owned_service_unloads_then_stops_using_the_retained_process(self):
+        process = MagicMock(pid=4567)
+        process.poll.return_value = None
+        self.manager._owned_service = process
+        calls = MagicMock()
+        calls.attach_mock(process.terminate, "terminate")
+        calls.attach_mock(process.wait, "wait")
+        with patch.object(self.manager, "_port_open", return_value=True), \
+             patch.object(self.manager, "_verify_owner", return_value={"pid": 4567}), \
+             patch.object(self.manager, "_unload_running_models") as unload, \
+             patch.object(self.manager, "_terminate_verified_process") as reopen:
+            calls.attach_mock(unload, "unload")
+            self.manager.stop_owned_service()
+        self.assertEqual([call[0] for call in calls.mock_calls], ["unload", "terminate", "wait"])
+        unload.assert_called_once_with(4567)
+        reopen.assert_not_called()
+        self.assertIsNone(self.manager._owned_service)
+
+    def test_listener_disappearing_during_runtime_check_cannot_replace_owned_handle(self):
+        process = MagicMock(pid=4567)
+        process.poll.return_value = None
+        self.manager._owned_service = process
+        with patch.object(self.manager, "_port_open", side_effect=[True, True, False]), \
+             patch.object(self.manager, "_verify_owner"), \
+             patch.object(self.manager, "ensure_runtime"), \
+             patch("installer_runtime.subprocess.Popen") as spawn:
+            with self.assertRaisesRegex(runtime.SetupError, "previous local service"):
+                self.manager.ensure_service()
+        spawn.assert_not_called()
+        self.assertIs(self.manager._owned_service, process)
+
+    def test_owned_cleanup_does_not_unload_or_terminate_a_replacement_listener(self):
+        process = MagicMock(pid=4567)
+        process.poll.return_value = None
+        self.manager._owned_service = process
+        with patch.object(self.manager, "_port_open", return_value=True), \
+             patch.object(self.manager, "_verify_owner", return_value={"pid": 9999}), \
+             patch.object(self.manager, "_unload_running_models") as unload, \
+             patch.object(self.manager, "_terminate_verified_process") as reopen:
+            self.manager.stop_owned_service()
+        unload.assert_not_called()
+        reopen.assert_not_called()
+        process.terminate.assert_called_once()
+        process.wait.assert_called_once_with(timeout=runtime.SERVICE_STOP_SECONDS)
+
+    def test_owned_cleanup_still_stops_child_if_owner_or_unload_checks_fail(self):
+        for phase in ("_verify_owner", "_unload_running_models"):
+            with self.subTest(phase=phase):
+                process = MagicMock(pid=4567)
+                process.poll.return_value = None
+                self.manager._owned_service = process
+                with patch.object(self.manager, "_port_open", return_value=True), \
+                     patch.object(self.manager, "_verify_owner", return_value={"pid": 4567}), \
+                     patch.object(self.manager, "_unload_running_models"), \
+                     patch.object(self.manager, phase, side_effect=runtime.SetupError("not ready")):
+                    self.manager.stop_owned_service()
+                process.terminate.assert_called_once()
+                self.assertIsNone(self.manager._owned_service)
+
+    def test_failed_owned_shutdown_retains_handle_for_retry(self):
+        for phase, failure in (("terminate", OSError("stop failed")),
+                               ("wait", runtime.subprocess.TimeoutExpired("ollama", 10))):
+            with self.subTest(phase=phase):
+                process = MagicMock(pid=4567)
+                process.poll.return_value = None
+                self.manager._owned_service = process
+                getattr(process, phase).side_effect = [failure, 0]
+                with patch.object(self.manager, "_port_open", return_value=False):
+                    with self.assertRaisesRegex(runtime.SetupError, "Retry local service cleanup"):
+                        self.manager.stop_owned_service()
+                    self.assertIs(self.manager._owned_service, process)
+                    self.manager.stop_owned_service()
+                self.assertIsNone(self.manager._owned_service)
+                self.assertEqual(getattr(process, phase).call_count, 2)
+
+    def test_exited_owned_child_is_forgotten_without_touching_current_listener(self):
+        process = MagicMock(pid=4567)
+        process.poll.return_value = 0
+        self.manager._owned_service = process
+        with patch.object(self.manager, "_port_open") as probe:
+            self.manager.stop_owned_service()
+        probe.assert_not_called()
+        process.terminate.assert_not_called()
+        process.wait.assert_not_called()
+        self.assertIsNone(self.manager._owned_service)
 
     def test_existing_wrong_version_is_rejected(self):
         with patch.object(self.manager, "ensure_runtime"), patch.object(self.manager, "_verify_owner"), patch.object(self.manager, "_port_open", return_value=True), patch.object(self.manager, "_request_api", return_value={"version": "old"}):
@@ -529,6 +694,230 @@ class RuntimeTests(unittest.TestCase):
         self.assertFalse(runtime.MODEL_CATALOG["qwen3.5:4b-q4_K_M"]["tested"])
         self.assertTrue(runtime.MODEL_CATALOG[runtime.DEFAULT_MODEL]["recommended"])
         self.assertGreater(runtime.required_disk_bytes(runtime.DEFAULT_MODEL), 9 * runtime.GIB)
+
+
+class CancellationTests(unittest.TestCase):
+    """Only tiny synthetic loopback peers; never the user's Ollama endpoint."""
+    def setUp(self):
+        self.directory = self.enterContext(tempfile.TemporaryDirectory())
+        self.token = threading.Event()
+        self.manager = runtime.RuntimeManager(Path(self.directory) / "data", cancel_event=self.token)
+        self.manager.data_root.mkdir()
+        self.enterContext(patch.object(self.manager, "_verify_owner", return_value={"pid": 123}))
+
+    @contextmanager
+    def peer(self, mode):
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        listener.settimeout(3)
+        stop, ready = threading.Event(), threading.Event()
+        connections = []
+        def serve():
+            try:
+                connection, _ = listener.accept()
+                connections.append(connection)
+                connection.settimeout(3)
+                if mode == "tls":
+                    connection.recv(4096)  # ClientHello; deliberately no handshake reply.
+                else:
+                    request_data = b""
+                    while b"\r\n\r\n" not in request_data:
+                        block = connection.recv(4096)
+                        if not block:
+                            return
+                        request_data += block
+                    if mode == "headers":
+                        connection.sendall(b"HTTP/1.1 200 OK\r\nX-Wait: ")
+                    else:
+                        connection.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 1000000\r\n\r\n")
+                ready.set()
+                while not stop.wait(0.01):
+                    if mode == "progress":
+                        connection.sendall(b'{"status":"pulling manifest"}\n')
+                    elif mode in ("line", "headers"):
+                        connection.sendall(b" ")
+            except (OSError, TimeoutError):
+                pass
+            finally:
+                for connection in connections:
+                    connection.close()
+        server = threading.Thread(target=serve, name="synthetic-setup-peer", daemon=True)
+        server.start()
+        try:
+            yield f"http://127.0.0.1:{listener.getsockname()[1]}", ready
+        finally:
+            stop.set()
+            for connection in connections:
+                try:
+                    connection.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+                connection.close()
+            listener.close()
+            server.join(4)
+            self.assertFalse(server.is_alive(), "synthetic server did not finish")
+
+    def interrupted_request(self, mode, action, *, cancel=True, https=False):
+        errors = []
+        def work():
+            try:
+                action()
+            except Exception as exc:
+                errors.append(exc)
+        worker = threading.Thread(target=work, name="synthetic-setup-request", daemon=True)
+        started = time.monotonic()
+        try:
+            with self.peer(mode) as (url, ready), patch.object(runtime, "ENDPOINT", url), \
+                 patch.object(runtime, "ARCHIVE_URL", url.replace("http:", "https:") if https else url):
+                worker.start()
+                self.assertTrue(ready.wait(3), "synthetic request never arrived")
+                if cancel:
+                    self.token.set()
+                worker.join(3)
+                self.assertFalse(worker.is_alive(), "network operation ignored cancellation/deadline")
+        finally:
+            worker.join(4)
+        self.assertLess(time.monotonic() - started, 4)
+        self.assertEqual(len(errors), 1)
+        self.assertIsInstance(errors[0], runtime.SetupCancelled if cancel else runtime.SetupError)
+        if not cancel:
+            self.assertIn("time budget", str(errors[0]))
+        self.assertIsNone(self.manager._network)
+        self.assertFalse(any(t.name == "setup-network-cancellation" for t in threading.enumerate()))
+
+    def test_cancel_interrupts_idle_body_and_unfinished_headers(self):
+        for mode in ("body", "headers"):
+            with self.subTest(mode=mode):
+                self.token.clear()
+                self.interrupted_request(mode, lambda: self.manager._request_api("/synthetic", timeout=30))
+
+    def test_budget_interrupts_headers_even_while_bytes_keep_arriving(self):
+        self.interrupted_request("headers", lambda: self.manager._request_api("/synthetic", timeout=0.3), cancel=False)
+
+    def test_model_pull_budget_bounds_progress_and_unterminated_status_line(self):
+        for mode in ("progress", "line"):
+            with self.subTest(mode=mode), patch.object(runtime, "MODEL_PULL_BUDGET_SECONDS", 0.3), \
+                 patch.object(self.manager, "installed_models", return_value=[]), patch.object(self.manager, "_check_disk"):
+                self.interrupted_request(mode, lambda: self.manager.install_model(runtime.DEFAULT_MODEL), cancel=False)
+
+    def test_cancel_model_pull_preserves_all_partial_model_bytes(self):
+        partial = self.manager.models_dir / "blobs" / "sha256-synthetic-partial"
+        partial.parent.mkdir(parents=True)
+        partial.write_bytes(b"resumable model bytes")
+        with patch.object(self.manager, "installed_models", return_value=[]), patch.object(self.manager, "_check_disk"):
+            self.interrupted_request("line", lambda: self.manager.install_model(runtime.DEFAULT_MODEL))
+        self.assertEqual(partial.read_bytes(), b"resumable model bytes")
+
+    def test_cancel_runtime_download_closes_socket_and_removes_only_its_unverified_part(self):
+        archive = self.manager.data_root / "synthetic.zip"
+        unrelated = self.manager.data_root / "keep.bin"
+        unrelated.write_bytes(b"unrelated")
+        self.interrupted_request("body", lambda: self.manager._download_runtime(archive))
+        self.assertFalse(archive.exists())
+        self.assertFalse(archive.with_suffix(".zip.part").exists())
+        self.assertEqual(unrelated.read_bytes(), b"unrelated")
+
+    def test_cancel_runtime_tls_handshake_is_not_waiting_for_idle_timeout(self):
+        archive = self.manager.data_root / "synthetic.zip"
+        self.interrupted_request("tls", lambda: self.manager._download_runtime(archive), https=True)
+
+    def test_cancel_interrupts_proxy_connect_headers_before_tls(self):
+        errors = []
+        with self.peer("headers") as (url, ready):
+            port = int(url.rsplit(":", 1)[1])
+            def work():
+                try:
+                    with runtime._NetworkOperation(self.token, 30, "Synthetic tunnel") as operation:
+                        connection = runtime._ControlledHTTPSConnection("127.0.0.1", port, operation=operation, timeout=30)
+                        try:
+                            connection.set_tunnel("example.invalid", 443)
+                            connection.request("GET", "/")
+                        finally:
+                            connection.close()
+                except Exception as exc:
+                    errors.append(exc)
+            worker = threading.Thread(target=work, name="synthetic-connect-request", daemon=True)
+            worker.start()
+            try:
+                self.assertTrue(ready.wait(3))
+                self.token.set()
+                worker.join(3)
+                self.assertFalse(worker.is_alive())
+            finally:
+                self.token.set()
+                worker.join(4)
+        self.assertEqual(len(errors), 1)
+        self.assertIsInstance(errors[0], runtime.SetupCancelled)
+
+    def test_model_budget_includes_post_pull_verification(self):
+        def verify(_tag):
+            time.sleep(0.03)
+        with patch.object(runtime, "MODEL_PULL_BUDGET_SECONDS", 0.01), \
+             patch.object(self.manager, "installed_models", return_value=[{"name": runtime.DEFAULT_MODEL}]), \
+             patch.object(self.manager, "_verify_local_model", side_effect=verify):
+            with self.assertRaisesRegex(runtime.SetupError, "time budget"):
+                self.manager.install_model(runtime.DEFAULT_MODEL)
+
+    def test_cancelled_setup_cannot_start_an_owned_process(self):
+        self.token.set()
+        with patch.object(self.manager, "ensure_runtime") as download, patch.object(runtime.subprocess, "Popen") as spawn:
+            with self.assertRaises(runtime.SetupCancelled):
+                self.manager.prepare()
+        download.assert_not_called()
+        spawn.assert_not_called()
+
+    def test_cancelled_token_does_not_prevent_owned_service_cleanup(self):
+        self.token.set()
+        process = MagicMock()
+        process.poll.return_value = None
+        process.pid = 123
+        self.manager._owned_service = process
+        with patch.object(self.manager, "_port_open", return_value=True), \
+             patch.object(self.manager, "_unload_running_models", side_effect=lambda _pid: self.manager.check_cancelled()) as unload:
+            self.manager.stop_owned_service()
+        unload.assert_called_once_with(123)
+        process.terminate.assert_called_once()
+        self.assertIsNone(self.manager._owned_service)
+        with self.assertRaises(runtime.SetupCancelled):
+            self.manager.check_cancelled()
+
+    def test_cancelled_extraction_preserves_verified_archive_and_removes_current_stage(self):
+        archive = self.manager.data_root / f"ollama-windows-amd64-{runtime.OLLAMA_VERSION}.zip"
+        with zipfile.ZipFile(archive, "w") as bundle:
+            bundle.writestr("ollama.exe", b"fixture runtime")
+        real_extract = runtime._extract_archive
+        def cancelled_extract(source, target, check):
+            self.token.set()
+            return real_extract(source, target, check)
+        with patch.object(runtime, "ARCHIVE_SHA256", runtime._sha256(archive)), \
+             patch.object(self.manager, "_check_disk"), patch.object(runtime, "_extract_archive", side_effect=cancelled_extract):
+            with self.assertRaises(runtime.SetupCancelled):
+                self.manager.ensure_runtime()
+        self.assertTrue(archive.exists())
+        self.assertFalse(self.manager.runtime_dir.exists())
+        self.assertFalse(list(self.manager.data_root.glob(".ollama-stage-*")))
+
+    def test_setup_client_adapter_restores_client_and_applies_shared_budget(self):
+        client = MagicMock()
+        original = client._request
+        with patch.object(self.manager, "_request_api", return_value={"ok": True}) as api:
+            with self.manager.cancellable_client(client, timeout=3):
+                self.assertEqual(client._request("/api/show", {"model": runtime.DEFAULT_MODEL}, timeout=30), {"ok": True})
+                self.assertLessEqual(api.call_args.kwargs["timeout"], 3)
+            self.assertIs(client._request, original)
+            with self.assertRaises(runtime.SetupError), self.manager.cancellable_client(client, timeout=0):
+                client._request("/api/show")
+        self.assertIs(client._request, original)
+
+    def test_setup_client_network_reads_are_cancelled(self):
+        client = MagicMock()
+        original = client._request
+        def action():
+            with self.manager.cancellable_client(client):
+                client._request("/api/generate", {"prompt": "synthetic"})
+        self.interrupted_request("body", action)
+        self.assertIs(client._request, original)
 
 
 if __name__ == "__main__":

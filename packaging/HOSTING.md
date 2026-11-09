@@ -8,7 +8,11 @@ Preserve this metadata contract: product `Lineage 2 Chat Translator`, platform
 byte count, SHA-256, and `validation.packaged_self_test_passed: true`. The feed
 must not redirect. Publishing the homepage, installer and metadata in one atomic
 release makes that version available to the updater. Never publish metadata
-before its verified installer. Keep silent upgrade support and `--self-test`
+before its verified installer. From v1.7.12, also publish `/downloads/release.sig`
+with the exact signed `release.json` bytes. Never reformat that JSON on the server
+or mirror. Site preparation signs locally and reuses the verified signature;
+check-only preparation does not sign. The server receives no signing key.
+Keep silent upgrade support and `--self-test`
 compatible in subsequent releases; updates retain model files and preferences.
 
 The homepage and installer are one static release on the existing OVH Ubuntu
@@ -120,7 +124,10 @@ hides technical checksum links; release metadata/checksums remain available.
 Never upload settings, logs, review examples, credentials, model weights or local
 validation reports. Ollama and model weights download from upstream during setup.
 
-The installer is currently unsigned. HTTPS protects transport but does not sign
-the Windows executable. If signing is added, sign before final manifest and
-checksum generation. Headless checks do not replace a clean Windows install,
+The installer has no Windows Authenticode publisher signature. The separate
+updater signature authenticates the release metadata and its installer hash to
+v1.7.12+ clients independently of the download host. See UPDATE-SIGNING.md for
+key custody and the first trusted upgrade. If Authenticode is added later,
+sign before final manifest, checksum and updater-signature generation.
+Headless checks do not replace a clean Windows install,
 upgrade or uninstall test; request permission before interactive testing.

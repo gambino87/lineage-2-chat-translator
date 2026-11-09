@@ -88,10 +88,30 @@ _TRADE_CONTACT = re.compile(r"\bPM(?:\s*ME)?\b", re.IGNORECASE)
 _TRADE_AMOUNT = re.compile(r"(?<!\w)(?:[+-]?\d+(?:[.,]\d+)*(?:kk|k|m|кк|к)?|x\d+|\d+x)(?!\w)", re.IGNORECASE)
 _TRADE_CURRENCY = re.compile(r"\badenas?\b", re.IGNORECASE)
 _TRADE_DECORATION = " \t\r\n[](){}+/-.,:;!?*=|%#@&<>$€£"
+# A player nickname for Devotion clothing, also an ordinary Portuguese/Italian
+# word. Protect only whole tokens with item/trade context, never a global alias.
+_DEVO = re.compile(r"(?<!\w)devo(?!\w)", re.IGNORECASE)
+_DEVO_TRADE_PREFIX = re.compile(
+    r"(?<!\w)(?:WTS|WTB|WTT|buy|buying|sell|selling|trade|trading|vendo|vendendo|compro|comprando|troco|"
+    r"vendes|compras|vends|vendre|achète|acheter|"
+    r"продам|продаю|куплю|покупаю|продати|купити|卖|賣|买|買|收购|收購)"
+    r"(?:\s+(?:a|an|the|my|your|me|um|uma|un|una|el|la|o))?[\s:;,\[\](+\d.-]*$",
+    re.IGNORECASE)
+_DEVO_EQUIPMENT = re.compile(r"\s+(?:tunic|stockings|set|robe)(?!\w)", re.IGNORECASE)
+_DEVO_VERB_FOLLOWS = re.compile(
+    r"\s+(?:comprar|vender|pagar|trocar|fazer|ir|ser|estar|ter|ficar|dar|ajudar|esperar|"
+    r"comprare|vendere|pagare|fare|andare|essere|avere|dare|aiutare|aspettare)(?!\w)",
+    re.IGNORECASE)
+_DEVO_LIST_SEPARATOR = re.compile(
+    r"[\s\d.,:+/;&|()\[\]xkк-]*(?:(?:and|or|for|e|ou|por|y|o|или|и|на)"
+    r"[\s\d.,:+/;&|()\[\]xkк-]+)?", re.IGNORECASE)
+_DEVO_TRADE_NAMES = frozenset(("devo", "devo tunic", "devo stockings", "devo set", "devo robe"))
 
 def _language_text(text: str, item_links: tuple[str, ...], party_details: tuple[str, ...] = ()) -> str:
     """Remove immutable spans but retain player-written party descriptions."""
     text, decoded_links, decoded_details = decode_chat_links(text)
+    for start, end in reversed(_trade_nickname_spans(text, item_links + decoded_links + party_details + decoded_details)):
+        text = text[:start] + " " * (end - start) + text[end:]
     for label in sorted(set(item_links + decoded_links + party_details + decoded_details), key=len, reverse=True):
         if label:
             text = text.replace(label, " ")
@@ -201,11 +221,13 @@ def decode_item_links(text: str) -> tuple[str, tuple[str, ...]]:
     return message, items
 
 
-def _protect_item_links(text: str, labels: tuple[str, ...], *, protect_prices: bool = False) -> tuple[str, dict[str, str]]:
+def _protect_item_links(text: str, labels: tuple[str, ...], *, protect_prices: bool = False,
+                        trade_context: bool = False) -> tuple[str, dict[str, str]]:
     """Mask immutable source spans, URLs and acronyms with collision-free tokens."""
     labels = tuple(dict.fromkeys(label for label in labels if label and label in text))
     has_urls = any(_url_matches(text))
-    if not labels and not _ACRONYM.search(text) and not has_urls and not (protect_prices and _PRICE.search(text)):
+    nickname_spans = set(_trade_nickname_spans(text, labels, trade_context=trade_context))
+    if not labels and not nickname_spans and not _ACRONYM.search(text) and not has_urls and not (protect_prices and _PRICE.search(text)):
         return text, {}
     prefix = "L2ITEM"
     while prefix.casefold() in text.casefold():
@@ -213,6 +235,8 @@ def _protect_item_links(text: str, labels: tuple[str, ...], *, protect_prices: b
     replacements = {}
 
     def protect(match):
+        if match.groupdict().get("nickname") is not None and match.span() not in nickname_spans:
+            return match.group()
         if match.groupdict().get("url") is not None and not _valid_url_context(text, match.start()):
             return match.group()
         token = f"[[{prefix}{len(replacements)}]]"
@@ -224,6 +248,8 @@ def _protect_item_links(text: str, labels: tuple[str, ...], *, protect_prices: b
     # Whole URL spans precede acronym/price matching, so /WTB/10kk is opaque.
     if has_urls:
         patterns.append("(?P<url>(?i:" + _URL_CANDIDATES.pattern + "))")
+    if nickname_spans:
+        patterns.append("(?P<nickname>(?i:" + _DEVO.pattern + "))")
     if protect_prices:
         patterns.append("(?i:" + _PRICE.pattern + ")")
     patterns.append("(?i:" + _ACRONYM.pattern + ")")
@@ -478,13 +504,35 @@ def _url_matches(text: str):
             if _valid_url_context(text, match.start()))
 
 
-def _mask_labels(text: str, labels: tuple[str, ...]) -> str:
+def _mask_labels(text: str, labels: tuple[str, ...], *, fill: str = " ") -> str:
     """Exclude linked item labels without moving any subsequent character."""
     labels = tuple(sorted(set(label for label in labels if label), key=len, reverse=True))
     if not labels:
         return text
     pattern = re.compile("|".join(re.escape(label) for label in labels))
-    return pattern.sub(lambda match: " " * len(match.group()), text)
+    return pattern.sub(lambda match: fill * len(match.group()), text)
+
+
+def _trade_nickname_spans(text: str, labels: tuple[str, ...] = (), *,
+                          trade_context: bool = False) -> list[tuple[int, int]]:
+    """Find contextual item nicknames outside immutable titles and addresses."""
+    if not _DEVO.search(text):
+        return []
+    # Opaque spans are barriers, so "WTB [item], devo vendere" cannot make
+    # the ordinary verb look like a nickname immediately following WTB.
+    remaining = _mask_labels(text, labels, fill="\0")
+    for match in reversed(list(_url_matches(remaining))):
+        remaining = remaining[:match.start()] + "\0" * len(match.group()) + remaining[match.end():]
+    spans = []
+    for match in _DEVO.finditer(remaining):
+        if _DEVO_VERB_FOLLOWS.match(remaining[match.end():]):
+            continue
+        prefix = ("WTS " if trade_context else "") + remaining[:match.start()]
+        coordinated = bool(spans and _DEVO_LIST_SEPARATOR.fullmatch(remaining[spans[-1][1]:match.start()]))
+        if (_DEVO_TRADE_PREFIX.search(prefix) or coordinated
+                or _DEVO_EQUIPMENT.match(remaining[match.end():])):
+            spans.append(match.span())
+    return spans
 
 
 @lru_cache(maxsize=1)
@@ -503,8 +551,8 @@ def is_universal_trade_message(text: str, *, item_links: tuple[str, ...] = (),
 
     URLs and linked titles cannot supply the trade tag. Any remaining natural
     phrase, including a short negation, prevents this classification. Unlinked
-    item names must match an entire English catalog name; unknown shorthand is
-    left to normal language detection.
+    item names must match an entire English catalog name or a recognized
+    nickname; unknown shorthand is left to normal language detection.
     """
     if len(text) > MAX_CHAT_RECORD_CHARACTERS or party_details or re.search(rf"\x08[ \t]*Type={PARTY_LINK_TYPE}\b", text):
         return False
@@ -522,6 +570,8 @@ def is_universal_trade_message(text: str, *, item_links: tuple[str, ...] = (),
     remaining = _TRADE_CURRENCY.sub(" ", remaining)
     remaining = " ".join(remaining.strip(_TRADE_DECORATION).casefold().split())
     if not remaining or all(char in _TRADE_DECORATION for char in remaining):
+        return True
+    if remaining in _DEVO_TRADE_NAMES:
         return True
     try:
         return remaining in _english_trade_item_names()
@@ -745,7 +795,8 @@ class OllamaClient:
                 output.append(part)
         return "".join(output).strip()
 
-    def translate(self, text: str, *, item_links: tuple[str, ...] = (), party_details: tuple[str, ...] = ()) -> str:
+    def translate(self, text: str, *, item_links: tuple[str, ...] = (), party_details: tuple[str, ...] = (),
+                  _trade_context: bool = False) -> str:
         """Translate one bounded message, restoring protected spans outside the model."""
         if len(text) > MAX_CHAT_RECORD_CHARACTERS:
             raise ValueError("The raw chat record is too large to process safely.")
@@ -774,12 +825,13 @@ class OllamaClient:
             prefix, body = text[:end], text[end:]
             if not body:
                 return text
-            translated_body = self.translate(body, item_links=item_links, party_details=party_details)
+            translated_body = self.translate(body, item_links=item_links, party_details=party_details,
+                                             _trade_context=_trade_context or bool(_TRADE_TAG.search(prefix)))
             if translated_body == body:
                 return text
             separator = " " if prefix[-1].isalnum() else ""
             return prefix + separator + translated_body
-        model_text, protected_links = _protect_item_links(text, fixed_labels)
+        model_text, protected_links = _protect_item_links(text, fixed_labels, trade_context=_trade_context)
         def url_values(value):
             return [match.group() for match in _url_matches(_mask_labels(value, fixed_labels))]
         expected_urls = url_values(text)
@@ -833,7 +885,7 @@ class OllamaClient:
             recovery_text, invariants = model_text, protected_links
             if include_prices:
                 recovery_text, invariants = _protect_item_links(
-                    text, fixed_labels, protect_prices=True)
+                    text, fixed_labels, protect_prices=True, trade_context=_trade_context)
             recovered = self._translate_fragments(recovery_text, invariants)
             if expected_urls and url_values(recovered) != expected_urls:
                 raise OllamaError("The model changed a URL during recovery. Try translating again.")
@@ -850,7 +902,7 @@ class OllamaClient:
             names = {token[2:-2].casefold(): label for token, label in protected_links.items()}
             prefix = next(iter(names)).rstrip("0123456789")
             tokens = re.compile(
-                r"(?<!\w)\[{0,2}(?P<name>" + re.escape(prefix) + r"\d+)(?!\w)\]{0,2}(?P<punctuation>[.,;:!?]*)",
+                r"(?:\[{1,2}|(?<!\w))(?P<name>" + re.escape(prefix) + r"\d+)(?!\w)\]{0,2}(?P<punctuation>[.,;:!?]*)",
                 re.IGNORECASE,
             )
             found = [match.group("name").casefold() for match in tokens.finditer(translated)]
@@ -875,7 +927,7 @@ class OllamaClient:
                 # sentence punctuation invented immediately after their opaque
                 # token, instead of changing the address or doubling its ending.
                 punctuation = "" if name in url_names else match.group("punctuation")
-                if _ACRONYM.fullmatch(label):
+                if _ACRONYM.fullmatch(label) or _DEVO.fullmatch(label):
                     # Do not join an invariant abbreviation to a translated
                     # Latin word (e.g. [[L2ITEM0]]me must not become PMme).
                     before = translated[match.start()-1:match.start()] if match.start() else ""

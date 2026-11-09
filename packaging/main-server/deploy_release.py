@@ -18,7 +18,10 @@ import zipfile
 ROOT = Path('/srv/l2-chat-translator')
 BASE_URL = 'https://40.160.140.227'
 STATIC_FILES = {'index.html', '_headers', 'robots.txt', 'assets/L2CT.png',
-                'assets/L2CT.ico', 'downloads/release.json', 'downloads/SHA256SUMS.txt'}
+                'assets/L2CT.ico', 'downloads/release.json', 'downloads/release.sig',
+                'downloads/SHA256SUMS.txt'}
+SIGNATURE_BYTES = 384  # RSA-3072; clients verify with their independently pinned public key.
+MAX_METADATA_BYTES = 64 * 1024
 INSTALLER = re.compile(r'downloads/Lineage-2-Chat-Translator-[0-9]+\.[0-9]+\.[0-9]+-Setup\.exe')
 
 
@@ -63,6 +66,11 @@ def verify_bundle(archive, manifest):
                 sha = hashlib.file_digest(stream, 'sha256').hexdigest()
             require(member.file_size == row['bytes'] and sha == row['sha256'],
                     'Incorrect ZIP content: ' + row['path'])
+        require(bundle.getinfo('downloads/release.json').file_size <= MAX_METADATA_BYTES
+                and bundle.getinfo('downloads/release.sig').file_size == SIGNATURE_BYTES,
+                'Invalid signed release metadata size')
+        # The public bundle carries the detached signature unchanged. Its publisher
+        # key never belongs on this host; independent verification happens on clients.
         public = json.loads(bundle.read('downloads/release.json'))
         require(public.get('version') == version and public.get('installer') == installer,
                 'Public release metadata differs from manifest')

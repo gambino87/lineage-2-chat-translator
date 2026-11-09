@@ -84,6 +84,10 @@ class MainServerExportTests(unittest.TestCase):
 <p>{{SIGNING_NOTICE}}</p><section>{{CHANGELOG}}</section>'''
 
     def setUp(self):
+        self.enterContext(patch.object(exporter.release_site, "sign_metadata",
+                                      side_effect=lambda data: hashlib.sha256(data).digest() * 12))
+        self.enterContext(patch.object(exporter.release_site, "verify_signature",
+                                      side_effect=self.verify_synthetic_signature))
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.site = self.root / "sites/l2-chat-translator"
         (self.site / ".openai").mkdir(parents=True)
@@ -103,6 +107,11 @@ class MainServerExportTests(unittest.TestCase):
         self.enterContext(patch.object(exporter, "ASSETS", self.ASSETS))
         self.make_release("1.2.3", b"synthetic installer\x00\xff\r\n")
         self.prepare()
+
+    @staticmethod
+    def verify_synthetic_signature(data, signature):
+        if signature != hashlib.sha256(data).digest() * 12:
+            raise ValueError("Synthetic signature verification failed.")
 
     def make_release(self, version, content):
         (self.root / "app_version.py").write_text(f'VERSION = "{version}"\n', encoding="utf-8")
@@ -242,6 +251,38 @@ class MainServerExportTests(unittest.TestCase):
         path.write_bytes(path.read_bytes() + b"changed")
         with self.assertRaisesRegex(ValueError, "Archive checksum"):
             exporter.verify_archive(path, manifest)
+
+    def test_recomputed_host_checksums_do_not_bypass_signature_or_installer_binding(self):
+        for case in ("bad_signature", "different_signed_installer"):
+            with self.subTest(case=case):
+                result = self.export()
+                path = Path(result["archive"])
+                manifest = json.loads(Path(result["manifest"]).read_text())
+                with zipfile.ZipFile(path) as archive:
+                    content = {name: archive.read(name) for name in archive.namelist()}
+                if case == "bad_signature":
+                    content["downloads/release.sig"] = b"x" * 384
+                else:
+                    public = json.loads(content["downloads/release.json"])
+                    public["installer"]["sha256"] = "0" * 64
+                    metadata = json.dumps(public).encode()
+                    content["downloads/release.json"] = metadata
+                    # A valid signature for different release details still cannot
+                    # authorize the installer selected in the archive manifest.
+                    content["downloads/release.sig"] = hashlib.sha256(metadata).digest() * 12
+                with zipfile.ZipFile(path, "w") as archive:
+                    for name, data in content.items():
+                        archive.writestr(name, data)
+                manifest["files"] = [
+                    {"path": name, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+                    for name, data in content.items()]
+                identity = {key: manifest[key] for key in
+                            ("schema_version", "version", "base_url", "installer", "files")}
+                manifest["release_id"] = (manifest["version"] + "-"
+                                          + hashlib.sha256(exporter._canonical_json(identity)).hexdigest()[:12])
+                manifest["archive"].update(bytes=path.stat().st_size, sha256=exporter.release_site.digest(path))
+                with self.assertRaisesRegex(ValueError, "signature verification failed|Signed archive metadata differs"):
+                    exporter.verify_archive(path, manifest)
 
 
 if __name__ == "__main__":

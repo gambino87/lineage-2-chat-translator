@@ -45,5 +45,7 @@ without creating a duplicate source update.
 Source input hashes identify the files used in the recorded release. They do not
 establish byte-for-byte binary reproducibility. Historical DLL-cleanup inventories
 depend on verified older installers and manifests, which are intentionally absent
-from the source-only repository. A fresh build can run without those artifacts,
-but will have a different historical cleanup inventory.
+from the source-only repository. A fresh app-only build (`--skip-installer`) can
+run without those artifacts, but will have a different historical cleanup
+inventory. Official installer/site release preparation also requires the
+publisher's private signing identity; it is intentionally absent from GitHub.

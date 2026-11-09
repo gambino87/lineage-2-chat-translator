@@ -12,11 +12,45 @@ virtual environment. It extracts a portable Inno compiler package, verifies its
 digest and upstream Authenticode/ECDSA signatures, and collects upstream license
 notices. It does not install the Inno application or register file associations.
 
+New installations use Inno's `{autopf}` with `PrivilegesRequired=lowest`, resolving
+to the current user's Programs folder. Upgrades retain their registered location:
+older updater helpers explicitly pass `/DIR` and reopen the original executable,
+so silently moving an existing installation would break their handoff.
+
+Before file replacement, setup extracts `protect-install-directory.ps1` into its
+private temporary directory and runs native Windows PowerShell there. The helper
+restricts the owned application tree to the current user, SYSTEM and Administrators,
+including legacy installs at `C:\Lineage 2 Chat Translator`, and checks the tree
+again before launching installed code. Unsafe paths, ownership, links or ancestor
+permissions stop setup; it does not broaden permissions, elevate, or change a
+parent folder's ACL. This closes the program-folder write-permission exposure;
+it does not attest that a previously writable installation was never modified
+or revoke another process's already-open security-management handles.
+
+Like other per-user installers, setup assumes the Windows profile and temporary
+directory are private to the account. Inno's non-admin temporary directory can
+inherit its parent's permissions. This app-folder repair does not secure an
+already-shared profile or Temp folder; those permissions need separate repair.
+It never rewrites profile, Temp or other parent ACLs.
+
 Each build uses a fresh `.build/<version>-<UTC timestamp>/source` folder containing
 only explicitly listed application modules, icon assets, the item catalog with
 its attribution notice, and the trusted update and cleanup helpers. Personal settings, logs,
 review data, development scripts, tests and model weights cannot enter this
 source staging directory. PyInstaller discovers Python/Tcl/Tk dependencies.
+
+Setup uses a fresh cancellation token per worker operation. Controlled HTTP
+connections register their sockets before proxy negotiation, TLS and response
+headers, so a watchdog can interrupt blocked reads without closing a buffered
+response on the UI thread. Runtime transfer and model pull budgets are one and
+two hours respectively; setup's sample verification shares a 180-second budget
+across requests. Windows service-owner checks may still take up to 20 seconds;
+native DNS resolution follows the OS resolver timeout. Cancellation waits for
+owned-service cleanup, which deliberately ignores the cancelled token. Model
+layers and verified runtime archives are retained; incomplete runtime ZIPs are
+not resumable and are removed. Headless tests exercise stalled and trickling
+local HTTP fixtures, cancellation races, retry and exact-child cleanup without
+using a real Ollama service or model.
 
 Native dependency discovery uses isolated Python (`-I`), an explicit PATH limited
 to the pinned interpreter/venv and Windows directories, and a separate cache for
@@ -89,7 +123,12 @@ The item-data license is included as `licenses/L2J-ITEM-DATA.txt`.
 
 `assets/apply-update.ps1` is copied from the installed application for update
 handoff; it is never fetched as executable script from the website. The packaged
-self-test checks that this helper is included. Update tests use fake downloads,
+self-test checks that this helper is included. From v1.7.12, independent release
+signatures are required in both the application and helper before installation.
+Windows cryptography performs RSA-PSS verification without adding a crypto
+package or bundled DLL. See [UPDATE-SIGNING.md](UPDATE-SIGNING.md) for the
+signing protocol, local key custody, first trusted upgrade and recovery limits.
+Update tests use fake downloads,
 processes and windows; no installed application is replaced by the build. A live
 upgrade test requires explicit permission and a controlled installed copy.
 

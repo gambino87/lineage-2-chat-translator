@@ -53,6 +53,7 @@ class MainServerDeployTests(unittest.TestCase):
             "assets/L2CT.ico": b"synthetic ico",
             "assets/L2CT.png": b"synthetic png",
             "downloads/release.json": json.dumps({"version": version, "installer": artifact}).encode(),
+            "downloads/release.sig": b"s" * 384,
             "downloads/" + name: content,
         }
         files.update(old or {})
@@ -172,6 +173,17 @@ class MainServerDeployTests(unittest.TestCase):
 
                 archive, manifest, _ = self.bundle(mutate=mutate)
                 self.assert_rejected_before_activation(archive, manifest, "Public release metadata differs")
+
+    def test_unsigned_or_wrong_length_signature_is_rejected_before_activation(self):
+        for signature in (None, b"short", b"x" * 385):
+            with self.subTest(signature_size=None if signature is None else len(signature)):
+                def mutate(files):
+                    if signature is None:
+                        del files["downloads/release.sig"]
+                    else:
+                        files["downloads/release.sig"] = signature
+                archive, manifest, _ = self.bundle(mutate=mutate)
+                self.assert_rejected_before_activation(archive, manifest)
 
     def test_public_checksums_must_cover_every_installer_with_exact_hashes(self):
         old_name = self.installer_name("1.2.2")

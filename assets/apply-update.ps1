@@ -6,6 +6,10 @@ $ErrorActionPreference = 'Stop'
 
 $appIdentity = 'Lineage2ChatTranslator'
 $productName = 'Lineage 2 Chat Translator'
+# This public key is part of the installed helper, never read from the host/job.
+# Keep it identical to update_trust.PUBLIC_KEY_BLOB_B64 when rotating trust.
+$releasePublicKeyBlob = 'UlNBMQAMAAADAAAAgAEAAAAAAAAAAAAAAQABqH1NyNtVCMd/9YZYLdUITlH/T8qIwWUEbZZmLRCYBeo2rC1il+aTdicUZ+YvJvn3zSuGOfil71uhGzQRlx79amfzzJIQdssaGE1PKy82d5HA1vsQ17CcZwmJYcuRYnEsqyIrhKoTTOeLtgp6Y6+hzgT+DUXwFzG1w0IIp+iI/qeXgl5UhcO10QOsfl3+bsirG39xAWu/9aD+i9lZHNJ4Q7RTzuKKJNBcR1StiKuPsh8rrLVtRZlD/ZqDMjmalumrB4ccWXPyhnxhyGHynX4Ct6f9ItKjd0G6V/yzcrig/W0C9TvtelaElJ4nX/U/bKKo6zqwSsRuWTJUTkHmJ2oqL9940eegnsZ0QfxPsJBE/SWWkMqHcPLTZcMNhWO6oBFzU2YxIoo4iOtZfWl6MLHrNYtxNt0nD7yU/qzjtIf0qPtNIkAl/a41RJGrFnz2ijLvud//ZV0MQjNCD/MVFpwzBPpKTqSU/xKi1s2eTnJG94e2B63/B70rgyxzcSptxntp'
+$releaseSignatureBytes = 384  # RSA-3072; PSS SHA-256 uses a 32-byte salt.
 $registryPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{1D8CE3C7-53A6-4C67-AC9F-1C6F0D6B1920}_is1'
 # These bounds mirror app_updater.py; they are the handoff protocol, not model settings.
 $maxRecordBytes = 64 * 1024
@@ -21,6 +25,7 @@ $restartRequiredExitCode = 3010  # Inno's configured reboot-required result.
 $maxResultMessageChars = 7800  # Leaves room for a bounded failure explanation.
 $stagePrefix = 'update-'
 $allowedFiles = @('owner.json', 'job.json', 'installer.part', 'installer.exe', 'apply-update.ps1',
+                  'release.json', 'release.sig',
                   'ready.json', 'commit.json', 'commit.pending', 'cancel', 'self-test.json', 'installer.log')
 $stage = $null
 $job = $null
@@ -57,6 +62,12 @@ function Assert-PlainPath([string]$Value) {
 }
 
 function Read-Record([string]$Path, [int]$Maximum = $maxRecordBytes) {
+    $content = Read-BoundedBytes $Path $Maximum
+    $text = [Text.UTF8Encoding]::new($false, $true).GetString($content).TrimStart([char]0xFEFF)
+    return ($text | ConvertFrom-Json)
+}
+
+function Read-BoundedBytes([string]$Path, [int]$Maximum = $maxRecordBytes) {
     $checked = Assert-PlainPath $Path
     Assert-Condition ([IO.File]::Exists($checked)) 'An update record is missing.'
     Assert-Condition ((Get-Item -LiteralPath $checked).Length -le $Maximum) 'An update record is too large.'
@@ -73,8 +84,61 @@ function Read-Record([string]$Path, [int]$Maximum = $maxRecordBytes) {
         }
     } finally { $stream.Dispose() }
     Assert-Condition ($count -le $Maximum) 'An update record is too large.'
-    $text = [Text.UTF8Encoding]::new($false, $true).GetString($buffer, 0, $count).TrimStart([char]0xFEFF)
-    return ($text | ConvertFrom-Json)
+    $content = [byte[]]::new($count)
+    [Array]::Copy($buffer, $content, $count)
+    return ,$content
+}
+
+function Assert-SignedRelease {
+    # Authenticate the exact bytes before parsing; the host cannot substitute
+    # its own public key, checksum, filename, version, or signing algorithm.
+    $metadata = Read-BoundedBytes ([IO.Path]::Combine($stage, 'release.json')) $maxRecordBytes
+    $signature = Read-BoundedBytes ([IO.Path]::Combine($stage, 'release.sig')) $releaseSignatureBytes
+    Assert-Condition (($metadata.Length -gt 0) -and ($signature.Length -eq $releaseSignatureBytes)) 'The update signature is missing or invalid.'
+    $key = $null
+    $rsa = $null
+    try {
+        $key = [Security.Cryptography.CngKey]::Import([Convert]::FromBase64String($releasePublicKeyBlob), [Security.Cryptography.CngKeyBlobFormat]::GenericPublicBlob)
+        $rsa = [Security.Cryptography.RSACng]::new($key)
+        Assert-Condition ($rsa.KeySize -eq 3072) 'The update signing key is invalid.'
+        Assert-Condition ($rsa.VerifyData($metadata, $signature, [Security.Cryptography.HashAlgorithmName]::SHA256, [Security.Cryptography.RSASignaturePadding]::Pss)) 'The update signature could not be verified. No installer was run.'
+    } finally {
+        if ($rsa) { $rsa.Dispose() }
+        if ($key) { $key.Dispose() }
+    }
+    $document = ([Text.UTF8Encoding]::new($false, $true).GetString($metadata).TrimStart([char]0xFEFF) | ConvertFrom-Json)
+    Assert-Condition (($document.product -ceq $productName) -and ($document.platform -ceq 'windows-x64') -and
+        ($document.validation.packaged_self_test_passed -is [bool]) -and $document.validation.packaged_self_test_passed) 'The signed release does not belong to this application or failed its checks.'
+    Assert-Condition (($document.version -is [string]) -and ($document.version -ceq $job.version) -and
+        ([Version]$document.version -gt [Version]$job.from_version)) 'The signed release version does not match this update.'
+    Assert-Condition (($document.installer.file -is [string]) -and ($document.installer.file -ceq $job.installer_file) -and
+        ($document.installer.bytes -is [int] -or $document.installer.bytes -is [long]) -and
+        ($document.installer.bytes -eq $job.installer_bytes) -and ($document.installer.sha256 -is [string]) -and
+        ($document.installer.sha256 -ceq $job.installer_sha256)) 'The installer does not match its signed release.'
+}
+
+function Assert-InstalledVersion([string]$Executable) {
+    # The job's claimed old version is not an independent downgrade guard.
+    $actualVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($Executable).ProductVersion
+    Assert-Condition ($actualVersion -ceq $job.from_version) 'The installed version changed. Check for updates again.'
+}
+
+function Open-VerifiedInstaller([string]$Installer) {
+    # Hold a deny-write/deny-delete handle through CreateProcess and execution.
+    # A pre-existing writer also makes this open fail rather than racing a hash.
+    $checked = Assert-PlainPath $Installer
+    $stream = [IO.File]::Open($checked, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        Assert-Condition ($stream.Length -eq $job.installer_bytes) 'The installer size changed.'
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try { $hash = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+        finally { $sha.Dispose() }
+        Assert-Condition ($hash -ceq $job.installer_sha256) 'The installer checksum changed; it was not run.'
+        return $stream
+    } catch {
+        $stream.Dispose()
+        throw
+    }
 }
 
 function Write-Record([string]$Path, $Value) {
@@ -195,6 +259,8 @@ try {
         ($job.installer_sha256 -cmatch '^[a-f0-9]{64}$')) 'Invalid installer identity.'
     $executable = Assert-Installation $job.executable
     $safeStage = $true
+    Assert-InstalledVersion $executable
+    Assert-SignedRelease
 
     $created = $false
     $helperMutex = [Threading.Mutex]::new($false, 'Local\Lineage2ChatTranslatorUpdate', [ref]$created)
@@ -223,15 +289,17 @@ try {
     $parentExited = $true
     Assert-Condition (-not [IO.File]::Exists($cancelPath)) 'The update was canceled.'
     Assert-Installation $executable | Out-Null
+    Assert-InstalledVersion $executable
+    Assert-SignedRelease
     $installer = Assert-PlainPath ([IO.Path]::Combine($stage, 'installer.exe'))
-    Assert-Condition ((Get-Item -LiteralPath $installer).Length -eq $job.installer_bytes) 'The installer size changed.'
-    Assert-Condition ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $job.installer_sha256) 'The installer checksum changed; it was not run.'
     $arguments = @('/SP-', '/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NORESTARTAPPLICATIONS',
                    '/NOCLOSEAPPLICATIONS', ('/RESTARTEXITCODE=' + $restartRequiredExitCode), '/AUTOUPDATE=1',
                    ('/DIR=' + [IO.Path]::GetDirectoryName($executable)),
                    ('/LOG=' + [IO.Path]::Combine($stage, 'installer.log')))
-    $installerProcess = Start-VerifiedProcess $installer $arguments $false
+    $installerLock = Open-VerifiedInstaller $installer
+    $installerProcess = $null
     try {
+        $installerProcess = Start-VerifiedProcess $installer $arguments $false
         # Inno shows its normal progress window; it never closes unrelated apps.
         $installerProcess.WaitForExit()
         $exitCode = $installerProcess.ExitCode
@@ -240,7 +308,10 @@ try {
             throw 'The installer requested a Windows restart. Restart Windows before opening the translator again.'
         }
         Assert-Condition ($exitCode -eq 0) ('The installer did not complete (code ' + $exitCode + ').')
-    } finally { $installerProcess.Dispose() }
+    } finally {
+        if ($installerProcess) { $installerProcess.Dispose() }
+        $installerLock.Dispose()
+    }
     $restartExecutable = Test-InstalledProgram @($job.version)
     $status = 'success'
     $message = 'Updated to version ' + $job.version + '. Temporary installer files were removed.'

@@ -47,17 +47,21 @@ Run these commands from the repository root:
 ```powershell
 pwsh -NoProfile -File packaging/bootstrap-tools.ps1
 .build-tools/venv/Scripts/python.exe -m unittest discover -s tests
-.build-tools/venv/Scripts/python.exe packaging/build.py
+.build-tools/venv/Scripts/python.exe packaging/build.py --skip-installer
 ```
 
 Bootstrap downloads the pinned build dependencies and verified portable Inno
-Setup compiler. The build runs the regression suite, freezes the application,
-runs a headless self-test, compiles the installer and prepares the static website.
+Setup compiler. The app-only build runs the regression suite, freezes the
+application and runs a headless self-test. Official release builds omit
+`--skip-installer` to compile the installer and prepare the signed website feed;
+that requires the publisher's private Windows signing identity, which is not
+included in this repository.
 It does not install the result, open the interface, start Ollama or download models.
 Generated files go into `.build/`, `release/` and the site's `dist/`, all ignored
 by Git. See [the build documentation](packaging/README.md) for details.
 
-For a headless application-only build, use `packaging/build.py --skip-installer`.
+For a separately published fork, provision your own signing identity and update
+its public trust anchors and hosting configuration. See [update signing](packaging/UPDATE-SIGNING.md).
 Tests skip checks that require an unavailable platform facility; a successful
 test run does not establish coverage of every Windows or model configuration.
 
@@ -71,6 +75,11 @@ official version or upload it to the official update feed.
 
 [SOURCE-MANIFEST.json](SOURCE-MANIFEST.json) records the v{{VERSION}} release installer
 checksum and the SHA-256 hashes of its application modules and assets.
+From v1.7.12, clients verify a separate release signature against the public key
+bundled in the app. The signing key stays off the download server and is never
+part of this repository. See [update signing](packaging/UPDATE-SIGNING.md) for
+the protocol, bootstrap requirements and limits. Windows publisher signing is
+separate and is not included.
 Those files are byte-for-byte copies of the recorded release inputs. The
 manifest also inventories the other files in this snapshot, excluding itself.
 Git preserves their original line endings so those hashes remain checkable.
@@ -84,8 +93,9 @@ private development diary and review tooling/data are omitted.
 This is a source transparency snapshot, **not a claim of byte-for-byte binary
 reproducibility**. In particular, the official obsolete-file cleanup plan is
 generated from checksum-verified older installers and their manifests. These
-historical binaries are not in Git. A fresh source build succeeds without that
-history, but its historical cleanup inventory differs. Toolchain, timestamps
+historical binaries are not in Git. An app-only build can run without that
+history, but its historical cleanup inventory differs. Official signed release
+preparation also requires the private publisher identity. Toolchain, timestamps
 and packaging metadata can also affect the resulting executable bytes.
 
 ## Privacy and network behavior

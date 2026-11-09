@@ -6,7 +6,10 @@ the dedicated loopback service after Windows verifies its executable owner.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from contextlib import contextmanager
+import errno
 import hashlib
+import http.client
 from http.client import HTTPException
 import json
 import os
@@ -17,6 +20,7 @@ import socket
 import stat
 import subprocess
 import tempfile
+import threading
 import time
 from typing import Callable
 from urllib import error, request
@@ -54,6 +58,10 @@ OWNER_CHECK_SECONDS = 20
 OWNER_PROBE_SECONDS = 3
 SHUTDOWN_OWNER_CHECK_SECONDS = 5
 MODEL_PULL_IDLE_SECONDS = 600
+MODEL_PULL_BUDGET_SECONDS = 2 * 60 * 60
+SETUP_CLIENT_BUDGET_SECONDS = 180
+NETWORK_CONNECT_SECONDS = 5
+CANCELLATION_POLL_SECONDS = 0.1
 MODEL_UNLOAD_BUDGET_SECONDS = 6
 MAX_MODELS_TO_UNLOAD = 4
 SERVICE_STARTUP_SECONDS = 60
@@ -107,6 +115,149 @@ class SetupError(RuntimeError):
     """A recoverable setup failure suitable for display in the setup window."""
 
 
+class ServiceOwnershipMismatch(SetupError):
+    """A verified loopback listener uses a different runtime executable."""
+
+
+class SetupCancelled(SetupError):
+    """The user cancelled setup; completed model layers remain available."""
+
+
+class _NetworkOperation:
+    """Interrupt socket I/O without racing a buffered response's close lock.
+
+    A separate wall-clock budget also covers a peer that keeps sending headers
+    or a partial JSON line. Only sockets created for this operation are touched.
+    DNS resolution remains subject to the operating system's resolver timeout.
+    """
+    def __init__(self, cancel_event, seconds, description):
+        self.cancel_event = cancel_event
+        self.deadline = time.monotonic() + seconds
+        self.description = description
+        self._finished = threading.Event()
+        self._lock = threading.Lock()
+        self._sockets = []
+        self._watcher = None
+
+    def check(self):
+        if self.cancel_event is not None and self.cancel_event.is_set():
+            raise SetupCancelled("Setup cancelled. Downloaded model layers are kept for a later retry.")
+        if time.monotonic() >= self.deadline:
+            raise SetupError(self.description + " exceeded its time budget. Retry setup to resume downloaded model layers.")
+
+    def remaining(self):
+        self.check()
+        return self.deadline - time.monotonic()
+
+    def add_socket(self, sock):
+        with self._lock:
+            self._sockets.append(sock)
+        try:
+            self.check()
+        except SetupError:
+            self._abort()
+            raise
+
+    def _abort(self):
+        with self._lock:
+            for sock in self._sockets:
+                try:
+                    sock.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+                # WinSock select() does not reliably wake on shutdown alone.
+                # Close the socket itself, bypassing makefile's reference count;
+                # never close the buffered HTTP response from this thread.
+                try:
+                    sock._real_close()
+                except OSError:
+                    pass
+
+    def _watch(self):
+        while not self._finished.wait(CANCELLATION_POLL_SECONDS):
+            try:
+                self.check()
+            except SetupError:
+                self._abort()
+                return
+
+    def __enter__(self):
+        self.check()
+        self._watcher = threading.Thread(target=self._watch, name="setup-network-cancellation", daemon=True)
+        self._watcher.start()
+        return self
+
+    def __exit__(self, *_):
+        self._finished.set()
+        if self._watcher is not None:
+            self._watcher.join()
+        self.check()
+
+
+def _controlled_connect(connection, operation):
+    # Match HTTPConnection's TCP/tunnel setup, registering before CONNECT
+    # headers or TLS can block. TCP connect has its own short timeout; a native
+    # DNS lookup cannot be interrupted by Python socket shutdown.
+    operation.check()
+    connection.sock = connection._create_connection(
+        (connection.host, connection.port), min(NETWORK_CONNECT_SECONDS, operation.remaining()),
+        connection.source_address)
+    operation.add_socket(connection.sock)
+    connection.sock.settimeout(min(connection.timeout, operation.remaining()))
+    try:
+        connection.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    except OSError as exc:
+        if exc.errno != errno.ENOPROTOOPT:
+            raise
+    if connection._tunnel_host:
+        connection._tunnel()
+
+
+class _ControlledHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, *args, operation, **kwargs):
+        self.operation = operation
+        super().__init__(*args, **kwargs)
+
+    def connect(self):
+        _controlled_connect(self, self.operation)
+
+
+class _ControlledHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(self, *args, operation, **kwargs):
+        self.operation = operation
+        super().__init__(*args, **kwargs)
+
+    def connect(self):
+        _controlled_connect(self, self.operation)
+        # Register the SSL socket before its handshake; wrap_socket's default
+        # handshake would leave the watchdog holding a detached TCP socket.
+        self.sock = self._context.wrap_socket(
+            self.sock, server_hostname=self._tunnel_host or self.host,
+            do_handshake_on_connect=False)
+        self.operation.add_socket(self.sock)
+        self.sock.do_handshake()
+
+
+class _ControlledHTTPHandler(request.HTTPHandler):
+    def __init__(self, operation):
+        super().__init__()
+        self.operation = operation
+
+    def http_open(self, req):
+        return self.do_open(lambda *args, **kwargs: _ControlledHTTPConnection(
+            *args, operation=self.operation(), **kwargs), req)
+
+
+class _ControlledHTTPSHandler(request.HTTPSHandler):
+    def __init__(self, operation):
+        super().__init__()
+        self.operation = operation
+
+    def https_open(self, req):
+        return self.do_open(lambda *args, **kwargs: _ControlledHTTPSConnection(
+            *args, operation=self.operation(), **kwargs), req, context=self._context)
+
+
 class _NoRedirect(request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise SetupError("The local service tried to redirect a request. Setup stopped.")
@@ -119,10 +270,12 @@ class _HttpsRedirect(request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def _sha256(path: Path) -> str:
+def _sha256(path: Path, check: Callable[[], None] | None = None) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
         for block in iter(lambda: source.read(TRANSFER_CHUNK_BYTES), b""):
+            if check is not None:
+                check()
             digest.update(block)
     return digest.hexdigest()
 
@@ -142,13 +295,15 @@ def _is_reparse_path(path: Path) -> bool:
     return stat.S_ISLNK(info.st_mode) or bool(getattr(info, "st_file_attributes", 0) & FILE_ATTRIBUTE_REPARSE_POINT)
 
 
-def _extract_archive(archive: Path, destination: Path) -> None:
+def _extract_archive(archive: Path, destination: Path, check: Callable[[], None] | None = None) -> None:
     """Validate every archive member before writing anything into staging."""
     root = destination.resolve()
     with zipfile.ZipFile(archive) as bundle:
         members = bundle.infolist()
         seen = set()
         for member in members:
+            if check is not None:
+                check()
             windows_path = PureWindowsPath(member.filename)
             normalized = member.filename.replace("\\", "/")
             parts = normalized.split("/")
@@ -167,17 +322,23 @@ def _extract_archive(archive: Path, destination: Path) -> None:
         if sum(item.file_size for item in members) > MAX_EXTRACTED_RUNTIME_BYTES:
             raise SetupError("The runtime archive is larger than the supported installation size.")
         for member in members:
+            if check is not None:
+                check()
             target = root / member.filename.replace("\\", "/")
             if member.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
             else:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with bundle.open(member) as source, target.open("wb") as output:
-                    shutil.copyfileobj(source, output, TRANSFER_CHUNK_BYTES)
+                    for block in iter(lambda: source.read(TRANSFER_CHUNK_BYTES), b""):
+                        if check is not None:
+                            check()
+                        output.write(block)
 
 
 class RuntimeManager:
-    def __init__(self, data_root: str | Path, progress: Callable[[str], None] | None = None):
+    def __init__(self, data_root: str | Path, progress: Callable[[str], None] | None = None,
+                 *, cancel_event: threading.Event | None = None):
         if not str(data_root).strip():
             raise SetupError("Choose a folder for the runtime and model files.")
         self.data_root = Path(data_root).expanduser().resolve()
@@ -187,20 +348,65 @@ class RuntimeManager:
         self.executable = self.runtime_dir / "ollama.exe"
         self.receipt_path = self.runtime_dir / "verified-install.json"
         self.progress = progress or (lambda message: None)
-        self._opener = request.build_opener(request.ProxyHandler({}), _NoRedirect())
+        self.cancel_event = cancel_event
+        self._ignore_cancel = False
+        self._network = None
+        self._opener = request.build_opener(request.ProxyHandler({}), _NoRedirect(),
+                                           _ControlledHTTPHandler(lambda: self._network))
+        # Retain the child handle, not just its PID: configuration must never
+        # assume that reusing an existing listener makes it ours to stop.
+        self._owned_service: subprocess.Popen | None = None
+
+    def check_cancelled(self):
+        if not self._ignore_cancel and self.cancel_event is not None and self.cancel_event.is_set():
+            raise SetupCancelled("Setup cancelled. Downloaded model layers are kept for a later retry.")
+
+    @contextmanager
+    def _network_scope(self, seconds, description):
+        previous = self._network
+        token = None if self._ignore_cancel else self.cancel_event
+        if previous is not None:
+            seconds = min(seconds, previous.remaining())
+        try:
+            with _NetworkOperation(token, seconds, description) as operation:
+                self._network = operation
+                yield operation
+        finally:
+            self._network = previous
+
+    @contextmanager
+    def cancellable_client(self, client, timeout=SETUP_CLIENT_BUDGET_SECONDS):
+        """Use bounded owned-service requests for setup's existing LLM pipeline."""
+        original = client._request
+        deadline = time.monotonic() + timeout
+        def local_request(path, payload=None, timeout=SETUP_CLIENT_BUDGET_SECONDS):
+            self.check_cancelled()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise SetupError("Setup verification exceeded its time budget. Retry setup.")
+            return self._request_api(path, payload, timeout=min(timeout, remaining))
+        client._request = local_request
+        try:
+            self.check_cancelled()
+            yield client
+            self.check_cancelled()
+        finally:
+            client._request = original
 
     def _verified_runtime(self) -> bool:
         """Require the pinned archive receipt and an unchanged Ollama executable."""
+        self.check_cancelled()
         try:
             receipt = json.loads(self.receipt_path.read_text(encoding="utf-8-sig"))
             return (receipt.get("version") == OLLAMA_VERSION
                     and receipt.get("archiveSha256") == ARCHIVE_SHA256
                     and self.executable.is_file()
-                    and receipt.get("executableSha256", "").lower() == _sha256(self.executable))
+                    and receipt.get("executableSha256", "").lower() == _sha256(self.executable, self.check_cancelled))
         except (OSError, ValueError, AttributeError):
             return False
 
     def _check_disk(self, required: int) -> None:
+        self.check_cancelled()
         self.data_root.mkdir(parents=True, exist_ok=True)
         free = shutil.disk_usage(self.data_root).free
         if free < required:
@@ -231,7 +437,7 @@ class RuntimeManager:
             return {"removed": [], "bytes_reclaimed": 0}
         if not self._verified_runtime():
             raise SetupError("The installed runtime could not be verified before cleaning up its download.")
-        if not archive.is_file() or _sha256(archive) != ARCHIVE_SHA256:
+        if not archive.is_file() or _sha256(archive, self.check_cancelled) != ARCHIVE_SHA256:
             self.progress("Preserved an unverified file at the runtime archive path; it was not treated as a setup download.")
             return {"removed": [], "bytes_reclaimed": 0}
         size = archive.stat().st_size
@@ -244,18 +450,26 @@ class RuntimeManager:
         self.progress("Removed the verified runtime download archive.")
         return {"removed": [archive.name], "bytes_reclaimed": size}
 
+    @contextmanager
+    def _runtime_response(self, req):
+        with self._network_scope(RUNTIME_DOWNLOAD_BUDGET_SECONDS, "The runtime download") as operation:
+            opener = request.build_opener(_HttpsRedirect(),
+                _ControlledHTTPHandler(lambda: operation), _ControlledHTTPSHandler(lambda: operation))
+            with opener.open(req, timeout=min(RUNTIME_DOWNLOAD_IDLE_SECONDS, operation.remaining())) as response:
+                yield response
+
     def _download_runtime(self, archive: Path) -> None:
         """Download within a hard size ceiling, then verify before promotion."""
+        self.check_cancelled()
         part = archive.with_suffix(archive.suffix + ".part")
         self._check_setup_child(archive)
         self._check_setup_child(part)
         part_opened = False
         self.progress("Downloading the official portable Ollama runtime (about 1.6 GB)…")
-        opener = request.build_opener(_HttpsRedirect())
         deadline = time.monotonic() + RUNTIME_DOWNLOAD_BUDGET_SECONDS
         try:
             req = request.Request(ARCHIVE_URL, headers={"User-Agent": "L2ChatTranslator-Setup/1"})
-            with opener.open(req, timeout=RUNTIME_DOWNLOAD_IDLE_SECONDS) as source, part.open("wb") as output:
+            with self._runtime_response(req) as source, part.open("wb") as output:
                 part_opened = True
                 length = source.headers.get("Content-Length")
                 if length is not None and (len(length) > 20 or not length.isdecimal()
@@ -266,6 +480,7 @@ class RuntimeManager:
                 last_bucket = -1
                 digest = hashlib.sha256()
                 while True:
+                    self.check_cancelled()
                     if time.monotonic() >= deadline:
                         raise SetupError("The runtime download exceeded its time budget. Retry setup on a faster connection.")
                     # read1 returns after an underlying read so a slow drip of
@@ -286,6 +501,7 @@ class RuntimeManager:
                     raise SetupError("The runtime download was incomplete. Retry setup.")
                 if digest.hexdigest() != ARCHIVE_SHA256:
                     raise SetupError("The runtime download failed SHA-256 verification. No runtime was installed; retry setup.")
+            self.check_cancelled()
             part.replace(archive)
         except (error.URLError, TimeoutError, OSError, HTTPException) as exc:
             raise SetupError(f"Could not download the runtime: {exc}. Check your connection and retry setup.") from exc
@@ -298,6 +514,7 @@ class RuntimeManager:
 
     def ensure_runtime(self) -> Path:
         """Reuse a verified runtime or stage a verified archive without overwrites."""
+        self.check_cancelled()
         if self._verified_runtime():
             self.progress(f"Verified portable Ollama {OLLAMA_VERSION} is already installed.")
             self.cleanup_installation()
@@ -307,21 +524,21 @@ class RuntimeManager:
         self._check_disk(RUNTIME_PEAK_BYTES)
         archive = self.data_root / f"ollama-windows-amd64-{OLLAMA_VERSION}.zip"
         self._check_setup_child(archive)
-        if not archive.is_file() or _sha256(archive) != ARCHIVE_SHA256:
+        if not archive.is_file() or _sha256(archive, self.check_cancelled) != ARCHIVE_SHA256:
             self._download_runtime(archive)
         self.progress("Verifying and extracting the runtime and GPU libraries…")
-        if _sha256(archive) != ARCHIVE_SHA256:
+        if _sha256(archive, self.check_cancelled) != ARCHIVE_SHA256:
             raise SetupError("The runtime archive failed SHA-256 verification.")
         staging = Path(tempfile.mkdtemp(prefix=".ollama-stage-", dir=self.data_root)).resolve()
         try:
             self._check_setup_child(staging, tree=True)
-            _extract_archive(archive, staging)
+            _extract_archive(archive, staging, self.check_cancelled)
             executable = staging / "ollama.exe"
             if not executable.is_file():
                 raise SetupError("The verified archive did not contain ollama.exe.")
             receipt = {
                 "version": OLLAMA_VERSION, "source": ARCHIVE_URL,
-                "archiveSha256": ARCHIVE_SHA256, "executableSha256": _sha256(executable),
+                "archiveSha256": ARCHIVE_SHA256, "executableSha256": _sha256(executable, self.check_cancelled),
                 "installedAtUtc": datetime.now(timezone.utc).isoformat(),
             }
             (staging / "verified-install.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
@@ -329,6 +546,7 @@ class RuntimeManager:
                 raise SetupError("Another setup created the runtime folder. Retry setup.")
             if staging.parent != self.data_root or self.runtime_dir.parent != self.data_root:
                 raise SetupError("The runtime staging location is invalid.")
+            self.check_cancelled()
             staging.rename(self.runtime_dir)
             self.cleanup_installation()
         finally:
@@ -346,6 +564,7 @@ class RuntimeManager:
 
     def _verify_owner(self, *, timeout: float = OWNER_CHECK_SECONDS) -> dict:
         """Correlate a held probe socket with its server owner and bind address."""
+        self.check_cancelled()
         if os.name != "nt":
             raise SetupError("Portable runtime setup requires Windows 10 or later (64-bit).")
         deadline = time.monotonic() + timeout
@@ -368,35 +587,48 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
                 if remaining <= 0:
                     raise SetupError("The local service owner check timed out.")
                 result = subprocess.run([str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True, encoding="utf-8", timeout=remaining, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                self.check_cancelled()
                 if result.returncode != 0:
                     raise SetupError("Windows could not verify the dedicated local service. Close any other translator instance using this port, then retry.")
                 owner = json.loads(result.stdout.lstrip("\ufeff"))
-                actual = os.path.normcase(str(Path(owner.get("executable") or "").resolve()))
+                # Missing identity is not evidence that the service is unrelated.
+                # Keep it a verification failure so uninstall cannot delete data
+                # while an unidentified process might still be using it.
+                if (not isinstance(owner, dict)
+                        or not isinstance(owner.get("executable"), str)
+                        or not owner["executable"].strip()
+                        or not Path(owner["executable"]).is_absolute()
+                        or owner.get("address") != "127.0.0.1"
+                        or type(owner.get("pid")) is not int or owner["pid"] <= 0):
+                    raise SetupError("Windows returned incomplete or unsafe local service ownership information. No data was deleted.")
+                actual = os.path.normcase(str(Path(owner["executable"]).resolve()))
                 expected = os.path.normcase(str(self.executable.resolve()))
-                if actual != expected or owner.get("address") != "127.0.0.1":
-                    raise SetupError(f"Port {PORT} is occupied by a different service or storage installation. Close that service before selecting this storage folder. No other process was stopped.")
+                if actual != expected:
+                    raise ServiceOwnershipMismatch(f"Port {PORT} is occupied by a different service or storage installation. Close that service before selecting this storage folder. No other process was stopped.")
                 return owner
         except SetupError:
             raise
         except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
             raise SetupError("Could not verify the local Ollama process. Retry setup after closing other translator instances.") from exc
 
+    @contextmanager
     def _open_api(self, path: str, payload: dict | None = None, *, method: str | None = None,
-                  timeout: float = API_TIMEOUT_SECONDS, expected_pid: int | None = None):
+                  timeout: float = API_TIMEOUT_SECONDS, expected_pid: int | None = None,
+                  budget_seconds: float | None = None):
         """Verify the loopback owner before each API request; never use a proxy."""
-        deadline = time.monotonic() + timeout
-        owner = self._verify_owner(timeout=min(OWNER_CHECK_SECONDS, timeout))
-        if expected_pid is not None and owner.get("pid") != expected_pid:
-            raise SetupError("The dedicated service changed during shutdown. No replacement service was stopped.")
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise SetupError("The dedicated service request timed out during verification.")
-        body = None if payload is None else json.dumps(payload).encode("utf-8")
-        req = request.Request(ENDPOINT + path, data=body, method=method, headers={"Content-Type": "application/json"})
-        try:
-            return self._opener.open(req, timeout=remaining)
-        except (error.URLError, OSError, TimeoutError) as exc:
-            raise SetupError(f"The dedicated local service could not complete {path}: {exc}") from exc
+        budget = timeout if budget_seconds is None else budget_seconds
+        with self._network_scope(budget, "The local service request") as operation:
+            owner = self._verify_owner(timeout=min(OWNER_CHECK_SECONDS, timeout, operation.remaining()))
+            if expected_pid is not None and owner.get("pid") != expected_pid:
+                raise SetupError("The dedicated service changed during shutdown. No replacement service was stopped.")
+            body = None if payload is None else json.dumps(payload).encode("utf-8")
+            req = request.Request(ENDPOINT + path, data=body, method=method, headers={"Content-Type": "application/json"})
+            try:
+                with self._opener.open(req, timeout=min(timeout, operation.remaining())) as response:
+                    yield response
+            except (error.URLError, OSError, TimeoutError) as exc:
+                operation.check()
+                raise SetupError(f"The dedicated local service could not complete {path}: {exc}") from exc
 
     def _request_api(self, path: str, payload: dict | None = None, *, method: str | None = None,
                      timeout: float = API_TIMEOUT_SECONDS, expected_pid: int | None = None) -> dict:
@@ -417,12 +649,26 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
 
     def ensure_service(self) -> None:
         """Start only this store's service, with cloud and request logging disabled."""
+        self.check_cancelled()
+        if self._owned_service is not None:
+            if self._owned_service.poll() is not None:
+                self._owned_service = None
+            elif not self._port_open():
+                # Do not replace the only reference to a partially started
+                # child. Its owner must finish cleanup before another start.
+                raise SetupError("The previous local service is still starting or stopping. Finish local service cleanup before retrying.")
         # Detect another storage installation before downloading a new runtime.
         # A second check below handles a listener appearing during installation.
         if self._port_open():
             self._verify_owner()
         self.ensure_runtime()
         if not self._port_open():
+            # The listener can disappear while the runtime is being checked.
+            # Recheck ownership here too, before replacing the retained handle.
+            if self._owned_service is not None:
+                if self._owned_service.poll() is None:
+                    raise SetupError("The previous local service is still starting or stopping. Finish local service cleanup before retrying.")
+                self._owned_service = None
             self.logs_dir.mkdir(parents=True, exist_ok=True)
             self.models_dir.mkdir(parents=True, exist_ok=True)
             self.progress("Starting the dedicated local translation service…")
@@ -436,19 +682,69 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
                         "OLLAMA_DEBUG": "0", "OLLAMA_DEBUG_LOG_REQUESTS": "0", "OLLAMA_ORIGINS": ""})
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
             with (self.logs_dir / f"ollama-{stamp}.stdout.log").open("ab") as stdout, (self.logs_dir / f"ollama-{stamp}.stderr.log").open("ab") as stderr:
+                self.check_cancelled()
                 process = subprocess.Popen([str(self.executable), "serve"], cwd=self.runtime_dir, env=env, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), close_fds=True)
+                # Keep ownership even if readiness/version checks fail below.
+                self._owned_service = process
             for _ in range(int(SERVICE_STARTUP_SECONDS / SERVICE_STARTUP_POLL_SECONDS)):
+                self.check_cancelled()
                 if process.poll() is not None:
                     raise SetupError(f"The local translation service stopped during startup. See {self.logs_dir}.")
                 if self._port_open():
                     break
-                time.sleep(SERVICE_STARTUP_POLL_SECONDS)
+                if self.cancel_event is None:
+                    time.sleep(SERVICE_STARTUP_POLL_SECONDS)
+                else:
+                    self.cancel_event.wait(SERVICE_STARTUP_POLL_SECONDS)
             else:
                 process.terminate()
                 raise SetupError(f"The local service did not start within one minute. See {self.logs_dir}.")
         version = self._request_api("/api/version", timeout=10).get("version")
         if version != OLLAMA_VERSION:
             raise SetupError(f"The dedicated service reports version {version}; expected {OLLAMA_VERSION}. Close the old service and retry.")
+
+    def stop_owned_service(self) -> None:
+        # Cancellation must never prevent teardown of the child it interrupted.
+        previous = self._ignore_cancel
+        self._ignore_cancel = True
+        try:
+            self._stop_owned_service()
+        finally:
+            self._ignore_cancel = previous
+
+    def _stop_owned_service(self) -> None:
+        """Release only the child this manager started, including partial starts.
+
+        Explicit service-stop commands still use stop_service(). This method
+        is for automatic lifecycle cleanup and must leave adopted or replacement
+        listeners alone. On Windows, Popen retains the exact child's handle.
+        """
+        process = self._owned_service
+        if process is None:
+            return
+        if process.poll() is not None:
+            self._owned_service = None
+            return
+        self.progress("Stopping the local service started by this window…")
+        try:
+            if self._port_open():
+                owner = self._verify_owner(timeout=SHUTDOWN_OWNER_CHECK_SECONDS)
+                if owner.get("pid") == process.pid and process.poll() is None:
+                    self._unload_running_models(process.pid)
+        except Exception:
+            # Unloading is best-effort, including a failed readiness check.
+            # The retained child handle remains safe even if the listener is
+            # missing, replaced, or cannot be verified for API requests.
+            self.progress("Model unloading did not finish; stopping only the service started by this window.")
+        try:
+            if process.poll() is None:
+                process.terminate()
+            process.wait(timeout=SERVICE_STOP_SECONDS)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            # Keep the handle so closing/retrying can finish the same cleanup.
+            raise SetupError("The local service started by this window has not stopped. Retry local service cleanup.") from exc
+        self._owned_service = None
+        self.progress("The local service started by this window is stopped.")
 
     def _terminate_verified_process(self, process_id: int) -> None:
         """Pin a Windows process handle, recheck its image, then terminate it.
@@ -526,6 +822,14 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
             api("/api/generate", {"model": tag, "prompt": "", "keep_alive": 0, "stream": False})
 
     def stop_service(self) -> None:
+        previous = self._ignore_cancel
+        self._ignore_cancel = True
+        try:
+            self._stop_service()
+        finally:
+            self._ignore_cancel = previous
+
+    def _stop_service(self) -> None:
         """Unload models, then stop only this saved storage installation.
 
         Unloading is best-effort if inference is busy. This never installs,
@@ -578,6 +882,12 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
 
     def install_model(self, tag: str) -> None:
         """Pull one catalog model and verify its local presence before reporting ready."""
+        with self._network_scope(MODEL_PULL_BUDGET_SECONDS, "The model download"):
+            self._install_model(tag)
+
+    def _install_model(self, tag: str) -> None:
+        self.check_cancelled()
+        deadline = time.monotonic() + MODEL_PULL_BUDGET_SECONDS
         if tag not in MODEL_CATALOG:
             raise SetupError("Choose a supported model from the model list.")
         if any(entry["name"] == tag for entry in self.installed_models()):
@@ -589,9 +899,14 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
         success = False
         last_update = None
         try:
-            with self._open_api("/api/pull", {"model": tag, "stream": True}, timeout=MODEL_PULL_IDLE_SECONDS) as response:
+            with self._open_api("/api/pull", {"model": tag, "stream": True}, timeout=MODEL_PULL_IDLE_SECONDS,
+                                budget_seconds=deadline - time.monotonic()) as response:
                 while True:
+                    self.check_cancelled()
+                    if time.monotonic() >= deadline:
+                        raise SetupError("The model download exceeded its time budget. Retry setup to resume downloaded model layers.")
                     line = response.readline(MAX_PULL_STATUS_BYTES + 1)
+                    self.check_cancelled()
                     if not line:
                         break
                     if len(line) > MAX_PULL_STATUS_BYTES:
@@ -617,6 +932,7 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
         if not any(entry["name"] == tag for entry in self.installed_models()):
             raise SetupError("The selected model was not found after download. Retry setup.")
         self._verify_local_model(tag)
+        self.check_cancelled()
 
     def _verify_local_model(self, tag: str) -> None:
         details = self._request_api("/api/show", {"model": _model_tag(tag)}, timeout=30)
@@ -625,6 +941,7 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
 
     def remove_model(self, tag: str) -> None:
         """Delete only the selected installed tag through the verified local API."""
+        self.check_cancelled()
         _model_tag(tag)
         if not any(entry["name"] == tag for entry in self.installed_models()):
             raise SetupError("That model is not installed in this storage folder.")
@@ -634,6 +951,7 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
             raise SetupError("The model is still listed after removal. Retry the removal.")
 
     def prepare(self, tag: str = DEFAULT_MODEL) -> None:
+        self.check_cancelled()
         if tag not in MODEL_CATALOG:
             raise SetupError("Choose a supported model from the model list.")
         self.data_root.mkdir(parents=True, exist_ok=True)

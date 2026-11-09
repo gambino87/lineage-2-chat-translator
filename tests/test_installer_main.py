@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import queue
 import tempfile
+import threading
 import unittest
 from unittest.mock import Mock, patch
 
@@ -36,6 +37,13 @@ class InstallerConfigurationTests(unittest.TestCase):
         window.accepted = Mock(get=lambda: True)
         window.selected_tag = lambda: DEFAULT_MODEL
         window.ready = False
+        window.busy = False
+        window._closing = False
+        window._cancel_event = threading.Event()
+        window._cancellable = False
+        window._exiting = False
+        window._service_managers = []
+        window._work_lock = threading.RLock()
         window._set_busy = Mock()
         window._report = Mock()
         window._show_setup = Mock()
@@ -291,6 +299,8 @@ class InstallerConfigurationTests(unittest.TestCase):
         window.events = queue.Queue()
         window.events.put(("ready", "Setup complete."))
         window.ready, window.busy = False, True
+        window._closing = window._cancellable = False
+        window._cancel_event = threading.Event()
         window.model_box, window.install_button, window.open_button = Mock(), Mock(), Mock()
         window.progress, window.status = Mock(), Mock()
         window.controls = [window.model_box, window.install_button]
@@ -310,6 +320,8 @@ class InstallerConfigurationTests(unittest.TestCase):
         window.events = queue.Queue()
         window.events.put(("error", "Connection interrupted."))
         window.ready, window.busy = False, True
+        window._closing = window._cancellable = False
+        window._cancel_event = threading.Event()
         window.model_box, window.install_button, window.open_button = Mock(), Mock(), Mock()
         window.progress, window.status = Mock(), Mock()
         window.controls = [window.model_box, window.install_button]

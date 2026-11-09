@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "product": "Lineage 2 Chat Translator",
-  "version": "1.7.11",
+  "version": "1.7.12",
   "purpose": "Source published for transparency; not a claim of byte-for-byte binary reproducibility.",
   "published_installer": {
-    "file": "Lineage-2-Chat-Translator-1.7.11-Setup.exe",
-    "bytes": 11001626,
-    "sha256": "f504bf55a26c46d4ee2be3eaaa75dfad7ad1ea8f0b78211f7dfadfaab911db96",
-    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.7.11-Setup.exe"
+    "file": "Lineage-2-Chat-Translator-1.7.12-Setup.exe",
+    "bytes": 11028076,
+    "sha256": "9d324299599bca9ec3b955765ca68374533f659ed33f7fd33561ff7815f2c791",
+    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.7.12-Setup.exe"
   },
   "release_toolchain": {
     "python": "3.12.10",
@@ -17,11 +17,11 @@
   "application_sources": [
     {
       "path": "installer_main.py",
-      "sha256": "9218c0e242c3b842d172c8946b5e846178f7baaa61051920b4a14aaf139937ac"
+      "sha256": "631f2734f138c8568efab74fefb2a35bf4e3d886883e3ac6274d807349578af2"
     },
     {
       "path": "installer_runtime.py",
-      "sha256": "87ccbd83d82f92327bbe805acee9ecc36404ec30119f453cc3cfe27ded2c5eef"
+      "sha256": "2cad92b62aa176144fae195e4d48ce5bee9101b36864da0f1509f219ec615c29"
     },
     {
       "path": "app_paths.py",
@@ -29,7 +29,7 @@
     },
     {
       "path": "app_version.py",
-      "sha256": "6e1f0510a9f8b2d4d3c2047914302b19199055db2f50527dfd3db097063e599e"
+      "sha256": "2d5918e92a32471b180c89a4e6263d02426834f361f265936dfa93d554a81ffb"
     },
     {
       "path": "app_icon.py",
@@ -41,7 +41,7 @@
     },
     {
       "path": "translator_core.py",
-      "sha256": "220065fdfb713b77371a4d9283e83ec880381ffc6a0dfaf303f639d02b850bd5"
+      "sha256": "9ed3f125911414e5d8caa6f788f33da7847a562879525f5b9c764b56e3d2330b"
     },
     {
       "path": "game_slang.py",
@@ -69,11 +69,15 @@
     },
     {
       "path": "uninstall_data.py",
-      "sha256": "68c4650c9bed041029ee222f541ebf78199b2c5413089ce39fa8d9183ef26508"
+      "sha256": "986ecb3aba3e53ff0d7f16ab4c5ebb9f7ea040883438cff0b5c2404dfd9a0274"
     },
     {
       "path": "app_updater.py",
-      "sha256": "a7701dc07c66921f30f7aca025c5399d874ada071c4bd84f95849b7aa1aa47e9"
+      "sha256": "64ca20e66f7666d51724023d1459dbc9c236aea0604235f11104a2f077e72c23"
+    },
+    {
+      "path": "update_trust.py",
+      "sha256": "f6324402d9fd4c6f35ba1d81cd5f9e9f62d0f7dcec2a57efee09dfcdcf0b9f1e"
     },
     {
       "path": "update_controls.py",
@@ -103,11 +107,15 @@
     },
     {
       "path": "assets/apply-update.ps1",
-      "sha256": "89ba66234f2bdd62a2786e3cfe16c481d696fa550e758a8b8b26e25b6793dea0"
+      "sha256": "7406fe6a7b668e0fe2053252b93e3cf6dfe36e667839366bb3dc39fea713a268"
     },
     {
       "path": "assets/cleanup-program-files.ps1",
       "sha256": "b9f1e9add97131b89511cd63c90cab3c7eaee3c308cbcd3e93eedf7d096bb617"
+    },
+    {
+      "path": "assets/protect-install-directory.ps1",
+      "sha256": "84a52cc0261dd1ee4815749014d49309867c3fa4df24e97af39cfa2030184535"
     }
   ],
   "publication_adapted_files": [
@@ -139,7 +147,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "ec92cfe4ecc186c981d55ed567119d3bad0e24506c2862ccb73116bd995ecfa5"
+      "sha256": "31fd68f0efe02772b88256d21e56dc0703854ead3797becda995c96de6a94565"
     },
     {
       "path": "Setup Ollama.ps1",
@@ -163,11 +171,11 @@
     },
     {
       "path": "app_updater.py",
-      "sha256": "a7701dc07c66921f30f7aca025c5399d874ada071c4bd84f95849b7aa1aa47e9"
+      "sha256": "64ca20e66f7666d51724023d1459dbc9c236aea0604235f11104a2f077e72c23"
     },
     {
       "path": "app_version.py",
-      "sha256": "6e1f0510a9f8b2d4d3c2047914302b19199055db2f50527dfd3db097063e599e"
+      "sha256": "2d5918e92a32471b180c89a4e6263d02426834f361f265936dfa93d554a81ffb"
     },
     {
       "path": "assets/ITEM-CATALOG-NOTICE.txt",
@@ -183,7 +191,7 @@
     },
     {
       "path": "assets/apply-update.ps1",
-      "sha256": "89ba66234f2bdd62a2786e3cfe16c481d696fa550e758a8b8b26e25b6793dea0"
+      "sha256": "7406fe6a7b668e0fe2053252b93e3cf6dfe36e667839366bb3dc39fea713a268"
     },
     {
       "path": "assets/cleanup-program-files.ps1",
@@ -192,6 +200,10 @@
     {
       "path": "assets/item_catalog.json",
       "sha256": "c68b6b2180ccc0fe79100baa772acf4161b1a812f976638fc38d27fdc5b5c9d9"
+    },
+    {
+      "path": "assets/protect-install-directory.ps1",
+      "sha256": "84a52cc0261dd1ee4815749014d49309867c3fa4df24e97af39cfa2030184535"
     },
     {
       "path": "chat_overlay.py",
@@ -215,11 +227,11 @@
     },
     {
       "path": "installer_main.py",
-      "sha256": "9218c0e242c3b842d172c8946b5e846178f7baaa61051920b4a14aaf139937ac"
+      "sha256": "631f2734f138c8568efab74fefb2a35bf4e3d886883e3ac6274d807349578af2"
     },
     {
       "path": "installer_runtime.py",
-      "sha256": "87ccbd83d82f92327bbe805acee9ecc36404ec30119f453cc3cfe27ded2c5eef"
+      "sha256": "2cad92b62aa176144fae195e4d48ce5bee9101b36864da0f1509f219ec615c29"
     },
     {
       "path": "item_catalog.py",
@@ -239,7 +251,7 @@
     },
     {
       "path": "packaging/HOSTING.md",
-      "sha256": "dc8661e5e7c67bf4cd67760d3a5c851b35085ee98796a6b90868cfa6561f09e4"
+      "sha256": "339569d0458183d8e1018be38d4f4a3e7582eab2f7c2cb2ccc23192c3c49cf0b"
     },
     {
       "path": "packaging/INSTALL-COMPLETE.txt",
@@ -247,19 +259,23 @@
     },
     {
       "path": "packaging/PUBLIC-SOURCE.md",
-      "sha256": "46fb6240f2a5e61f73a2cc9cb3a4d379cf905768100e678bc28d477b76961eae"
+      "sha256": "e8105d81cf8ff88ea30e85cfb27456711ecc4e53d875d75f1fd1baa64e617ac6"
     },
     {
       "path": "packaging/README.md",
-      "sha256": "9da55a6c779a278b4c90d8c38b6b3ac51362c9c1b849844479ec763907c29e09"
+      "sha256": "5012c9d670d981fbed2b690ce7f905b3f7ffd74ffe0f34cbecfe3f4ae4ac74de"
     },
     {
       "path": "packaging/THIRD-PARTY-NOTICES.txt",
       "sha256": "cabdf4bcc2792dc485bff6cfe446858c08888e09873ba06066a6ed2dcf40fb4f"
     },
     {
+      "path": "packaging/UPDATE-SIGNING.md",
+      "sha256": "7343b58387019e49195e4f348150ea7b2312813c0e59be9dcef3c7727f35ca40"
+    },
+    {
       "path": "packaging/USER-README.txt",
-      "sha256": "945baebfbe08b737066c30cf47f46b587eef5ba68063127e9dcf427a70cce796"
+      "sha256": "868c498ab68953ef639aef87c21230013c7497cb2d7ee1dc8d11060a7f187a95"
     },
     {
       "path": "packaging/bootstrap-tools.ps1",
@@ -267,7 +283,7 @@
     },
     {
       "path": "packaging/build.py",
-      "sha256": "5371efacafe4e9ec5399872ec08e0704b0219679097140a3adb024bd3f182db8"
+      "sha256": "cd2c915de185b11b451b23e6625ea3a6d1578f08781ad8682008d70517f58966"
     },
     {
       "path": "packaging/build_environment.py",
@@ -279,11 +295,11 @@
     },
     {
       "path": "packaging/export_main_server.py",
-      "sha256": "70073f326c1cf6e8df4b6c87e8054657b6669d29639bb1da2367d3adf73d35af"
+      "sha256": "1492ab3500c34289a12417f72c4a0478cd2e3c82ce6a9a7eac40bcf601c8f046"
     },
     {
       "path": "packaging/installer.iss",
-      "sha256": "6f6bb12cf3aa3a411c98265f1abf7f32a12bb1f7b640cf489de8e075daac1e54"
+      "sha256": "a73e221fae7d4b59d297a80376080bf387d7469466d6a8889402b895ff13ee17"
     },
     {
       "path": "packaging/licenses/INNO-SETUP.txt",
@@ -315,7 +331,7 @@
     },
     {
       "path": "packaging/main-server/deploy_release.py",
-      "sha256": "8259eadfe305a053c7fc639c4755b06061f46a3e5283d8711e21ed716cc61d9a"
+      "sha256": "010554e273a5b44cab4263d3bee751d9452281e5ae7c1db9bcfee59cc4a23750"
     },
     {
       "path": "packaging/main-server/discord_release.py",
@@ -351,11 +367,11 @@
     },
     {
       "path": "packaging/public-source/README.template.md",
-      "sha256": "ad82d85d7a69d829d5f48e2ddad18c5538ae4f8c750370ee824ae0441caa8074"
+      "sha256": "52c12623c6d84818c2841d15c8689f04da35d642c4a73b7dcb526a0d38361f3e"
     },
     {
       "path": "packaging/public-source/allowlist.json",
-      "sha256": "21dbbfa9c598761a2a7a5d30e0a606657bc77746366f67efb2a3cc20e44426d5"
+      "sha256": "ef9d45c7d062590672b25d9191e5d5cbece9d164dc9c44ce5aa784511234d0d7"
     },
     {
       "path": "packaging/public-source/gitattributes.txt",
@@ -367,11 +383,19 @@
     },
     {
       "path": "packaging/release_site.py",
-      "sha256": "91f058d8f260444d61b74bc518e2df692f0f52671046b7db558f2e606c417f1f"
+      "sha256": "e10a8b6049b26bbaa480029b07f60a778860b4df49cae787999a36747a409a96"
     },
     {
       "path": "packaging/requirements-build.txt",
       "sha256": "12443442c4b7ef74a1a733560ed9256de202d1ab0c7a290e8d6f8ccd46e18c4c"
+    },
+    {
+      "path": "packaging/sign-release.ps1",
+      "sha256": "865d40147d42d9307df16e3fa5dd2d5e7bcf4d56a07fe347796992f1d7aeb032"
+    },
+    {
+      "path": "packaging/sign_release.py",
+      "sha256": "1994d9864de12f4f03eecf23491f62dbebb1ddbf361821ec77a373503bc6b020"
     },
     {
       "path": "packaging/source_release.py",
@@ -399,11 +423,11 @@
     },
     {
       "path": "sites/l2-chat-translator/changelog.json",
-      "sha256": "442aab949695c3259048f3c9e32979465013ac16796141e428d8cb8869252433"
+      "sha256": "e144540288d507a7f7d0e3456a37e9b77809edc3316bf5af9a1cf4eabd4ee7d9"
     },
     {
       "path": "sites/l2-chat-translator/index.template.html",
-      "sha256": "c3254eed03e23adf0d33abecc2c3573e25ad2d2a9d462671cf83833c10619183"
+      "sha256": "3e389818fa5eb8ad503a0d79b408c54e46c68bdbda83a5c80939187a1b17e994"
     },
     {
       "path": "tests/test_app_update_integration.py",
@@ -411,7 +435,7 @@
     },
     {
       "path": "tests/test_app_updater.py",
-      "sha256": "c64f463b2e7ba6b65af16f9eacea57a7a62c125f35f3c28d2a3a1e57d8f099f6"
+      "sha256": "48a69949bd33c42f834cbe604aa5e72b260981199866ffd472b10a723fa8469a"
     },
     {
       "path": "tests/test_build_environment.py",
@@ -451,11 +475,15 @@
     },
     {
       "path": "tests/test_game_slang.py",
-      "sha256": "f9e5769f96afcd803920e3c912bd3e0cd2e8222d6be5b9e6d89ca601df1a5e02"
+      "sha256": "fd107b97498f6ca8eca2cba157d73f0649fa8802c750211525c066954e3be9b1"
+    },
+    {
+      "path": "tests/test_install_directory_security.py",
+      "sha256": "165b12e33679507f31ca9fa6bdf4f68ae03c308a27cf90dd28b6002224b1f3e0"
     },
     {
       "path": "tests/test_install_lifecycle.py",
-      "sha256": "658004e059447c8fd69e398a9f533630fbb21f4550324deb863fc50c793747cc"
+      "sha256": "a5b61d52c06ef99b9867f5a3afeeab4ee7edcd5913e5dac51b6b7160baf0e458"
     },
     {
       "path": "tests/test_installation_cleanup.py",
@@ -463,11 +491,11 @@
     },
     {
       "path": "tests/test_installer_main.py",
-      "sha256": "827495e2a9275d06fa036e46a280caaa03fb51f3c5df4543fb2fd95a72435a80"
+      "sha256": "517ea75c5028913a856eeb17c3a75279f31a59a4b3a2f6a3431cc8e627b18ab9"
     },
     {
       "path": "tests/test_installer_runtime.py",
-      "sha256": "e6a1176bb7bce0a81661b5cc0c0af2247df3f5818ef1fbebc0c6146778e52ec3"
+      "sha256": "2b39c16d7cb3cbf38d0e2312a995a25773f7a24da2eb0eec31537f4e2941ea10"
     },
     {
       "path": "tests/test_item_catalog.py",
@@ -491,11 +519,11 @@
     },
     {
       "path": "tests/test_main_server_deploy.py",
-      "sha256": "fedb1e4e85d1289fe59e211d2de54a9f4be2cb8aa0abdb97ff8438b5a8f0ddec"
+      "sha256": "0fea79a6c2fbba5230bae7778a6a369a356e9385b21f9670f9bd63649445cdcb"
     },
     {
       "path": "tests/test_main_server_export.py",
-      "sha256": "3a40a481cb70e65aba4cfee886dbf46537cdd3dc8dd526d02ba0cd30d6fb831d"
+      "sha256": "19f44294a8902bbba35947e9bf7f06e203a8e4f5c9333aa9e1d8e30128c6fe44"
     },
     {
       "path": "tests/test_ollama_service.py",
@@ -535,7 +563,7 @@
     },
     {
       "path": "tests/test_release_site.py",
-      "sha256": "7d0e3e17affce769b420c4ec707cc856abfb0910c17cb6627de3145d2ac2483e"
+      "sha256": "b31f6ed7eb86be345aab0e3c460a3084e63e950554439722c63fb42d8d52c180"
     },
     {
       "path": "tests/test_reply_composer.py",
@@ -555,7 +583,7 @@
     },
     {
       "path": "tests/test_startup_visibility.py",
-      "sha256": "92a99aefb5409b0c3676f7d66fcb592a453e7fe5f784ed6b1a3358bd339feec2"
+      "sha256": "49df648a9be9404b950bb8cd7f80af0e4c48bf2f134aa78a747a5011e6ecb207"
     },
     {
       "path": "tests/test_translator_core.py",
@@ -563,15 +591,23 @@
     },
     {
       "path": "tests/test_uninstall_data.py",
-      "sha256": "86585693a92335969c87e6589918284c41601e2660de55f78dcafec5d3632b63"
+      "sha256": "894b0e59fa7d273c0b9da6777ea0f5e1033f0aa9cc0d9ad49e08f229f7a081e3"
     },
     {
       "path": "tests/test_universal_trade.py",
-      "sha256": "b915940e64876c0d76568f23504155e9cdafcf91ac814a31b17c2f23878d3990"
+      "sha256": "9a9610761d60c64dbdc7ca6bdd6597012b74ca1516f0dc9d44d91f921d481a37"
     },
     {
       "path": "tests/test_update_controls.py",
       "sha256": "0a8f6798b24d39106bf0adb025345ff3ee34d8d2b2d34c2908bc65cb94b7c1f2"
+    },
+    {
+      "path": "tests/test_update_runner.py",
+      "sha256": "759795b3bbca6b851f3ef5d5415c8c29168480762e83089e86fe10c3248526b1"
+    },
+    {
+      "path": "tests/test_update_trust.py",
+      "sha256": "8dd60f594179ef33b914019cad6333dee7099db7bc653ce064a0dc59cdc1aba7"
     },
     {
       "path": "tests/test_url_restore.py",
@@ -595,15 +631,19 @@
     },
     {
       "path": "translator_core.py",
-      "sha256": "220065fdfb713b77371a4d9283e83ec880381ffc6a0dfaf303f639d02b850bd5"
+      "sha256": "9ed3f125911414e5d8caa6f788f33da7847a562879525f5b9c764b56e3d2330b"
     },
     {
       "path": "uninstall_data.py",
-      "sha256": "68c4650c9bed041029ee222f541ebf78199b2c5413089ce39fa8d9183ef26508"
+      "sha256": "986ecb3aba3e53ff0d7f16ab4c5ebb9f7ea040883438cff0b5c2404dfd9a0274"
     },
     {
       "path": "update_controls.py",
       "sha256": "7b15650fc479296dd91462fe8cb10c95b13413739a9b7c517f4fbd23ac856246"
+    },
+    {
+      "path": "update_trust.py",
+      "sha256": "f6324402d9fd4c6f35ba1d81cd5f9e9f62d0f7dcec2a57efee09dfcdcf0b9f1e"
     },
     {
       "path": "verify_local.py",

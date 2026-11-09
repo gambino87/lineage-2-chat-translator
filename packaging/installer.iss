@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "1.7.10"
+  #define AppVersion "1.7.12"
 #endif
 #ifndef AppSource
   #error AppSource must point to the verified PyInstaller application folder
@@ -21,7 +21,7 @@ AppVersion={#AppVersion}
 AppVerName=Lineage 2 Chat Translator {#AppVersion}
 AppPublisher=Lineage 2 Chat Translator
 SetupIconFile={#AppIcon}
-DefaultDirName=C:\Lineage 2 Chat Translator
+DefaultDirName={autopf}\Lineage 2 Chat Translator
 DefaultGroupName=Lineage 2 Chat Translator
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
@@ -52,7 +52,14 @@ InfoBeforeFile=USER-README.txt
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
 
+[Dirs]
+; The security helper creates this folder before Inno records installation.
+; Still remove it on uninstall when empty; never recursively delete user files.
+Name: "{app}"; Flags: uninsalwaysuninstall
+
 [Files]
+; Secure the program directory before installing or running any of its code.
+Source: "{#AppSource}\_internal\assets\protect-install-directory.ps1"; DestName: "l2-protect-install-directory.ps1"; Flags: dontcopy
 ; Extract the trusted helper outside the installed DLL search directory.
 Source: "{#AppSource}\_internal\assets\cleanup-program-files.ps1"; DestName: "l2-program-cleanup.ps1"; Flags: dontcopy
 #include AppFileList
@@ -77,7 +84,42 @@ var
   ModelSetupAttempted: Boolean;
   ModelSetupComplete: Boolean;
   AutomaticUpdate: Boolean;
+  ProgramSecurityComplete: Boolean;
   ProgramCleanupComplete: Boolean;
+
+function ProtectInstallationDirectory(VerifyOnly: Boolean): Boolean;
+var
+  ExitCode, I: Integer;
+  ResultPath, HelperPath, PowerShellPath, Arguments, Details: String;
+  Lines: TArrayOfString;
+begin
+  { Keep legacy upgrade paths: older update helpers explicitly target/reopen
+    that directory. Repair its permissions instead of silently relocating it.
+    The trusted helper never starts an installed executable or changes parent
+    folders. A failure must stop setup before program replacement or startup. }
+  ResultPath := ExpandConstant('{tmp}\l2-install-security-result.json');
+  HelperPath := ExpandConstant('{tmp}\l2-protect-install-directory.ps1');
+  PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  WizardForm.StatusLabel.Caption := 'Checking the program folder permissions...';
+  Result := False;
+  try
+    ExtractTemporaryFile('l2-protect-install-directory.ps1');
+    Arguments := '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + HelperPath +
+      '" -InstallRoot "' + ExpandConstant('{app}') + '" -ResultPath "' + ResultPath + '"';
+    if VerifyOnly then Arguments := Arguments + ' -VerifyOnly';
+    ExitCode := -1;
+    Result := Exec(PowerShellPath, Arguments, ExpandConstant('{tmp}'),
+      SW_HIDE, ewWaitUntilTerminated, ExitCode) and (ExitCode = 0);
+    Details := '';
+    if LoadStringsFromFile(ResultPath, Lines) then
+      for I := 0 to GetArrayLength(Lines) - 1 do
+        Details := Details + Lines[I] + #13#10;
+    Log('Program directory security: ' + Details);
+  finally
+    DeleteFile(ResultPath);
+    DeleteFile(HelperPath);
+  end;
+end;
 
 function CleanRetiredProgramFiles: Boolean;
 var
@@ -156,11 +198,24 @@ begin
   if AutomaticUpdate and (not FileExists(ExpandConstant('{app}\Lineage2ChatTranslator.exe')) or
                          not FileExists(ExpandConstant('{app}\unins000.exe'))) then
     Result := 'The existing translator installation could not be found. Run the normal installer to repair it.';
+  if Result <> '' then Exit;
+  { Windows may not have created this standard per-user Programs folder yet.
+    Do not create arbitrary custom parents or alter an existing parent's ACL. }
+  if CompareText(ExtractFileDir(ExpandConstant('{app}')), ExpandConstant('{autopf}')) = 0 then
+    if not DirExists(ExpandConstant('{autopf}')) then
+      if not ForceDirectories(ExpandConstant('{autopf}')) then begin
+        Result := 'Windows could not create your personal Programs folder. Choose an existing private parent folder and retry.';
+        Exit;
+      end;
+  if not ProtectInstallationDirectory(False) then
+    Result := 'Windows could not safely protect this program folder from changes by other accounts.' + #13#10#13#10 +
+      'Choose a private folder for a new installation, or have the existing folder permissions repaired, then retry.' + #13#10 +
+      'Existing installations must be upgraded in their current folder. See the setup log for details.';
 end;
 
 function ModelIsReady: Boolean;
 begin
-  Result := ModelSetupComplete;
+  Result := ProgramSecurityComplete and ModelSetupComplete;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -169,6 +224,13 @@ var
   Started, Retry: Boolean;
 begin
   if CurStep = ssPostInstall then begin
+    { Check all newly installed files before cleanup, model setup or [Run]. }
+    ProgramSecurityComplete := ProtectInstallationDirectory(True);
+    if not ProgramSecurityComplete then begin
+      SuppressibleMsgBox('The installed program folder did not pass its Windows permission checks. The translator will not be started. Correct the folder permissions and rerun this installer.',
+        mbError, MB_OK, IDOK);
+      Exit;
+    end;
     ProgramCleanupComplete := CleanRetiredProgramFiles;
     if not ProgramCleanupComplete then Exit;
   end;
@@ -190,7 +252,9 @@ end;
 
 procedure CurPageChanged(CurPageID: Integer);
 begin
-  if (CurPageID = wpFinished) and not ProgramCleanupComplete then
+  if (CurPageID = wpFinished) and not ProgramSecurityComplete then
+    WizardForm.FinishedLabel.Caption := 'Program folder permissions need attention. The translator has not been started. Correct the permissions and rerun this installer.'
+  else if (CurPageID = wpFinished) and not ProgramCleanupComplete then
     WizardForm.FinishedLabel.Caption := 'The new version is installed, but program-file cleanup needs a retry. Close the translator and run this installer again.'
   else if (CurPageID = wpFinished) and ModelSetupAttempted and not ModelSetupComplete then
     WizardForm.FinishedLabel.Caption := 'The launcher is installed, but model setup was not completed. Open Configure Lineage 2 Chat Translator from the Start menu to finish setup before translating.';
@@ -199,7 +263,8 @@ end;
 function GetCustomSetupExitCode: Integer;
 begin
   Result := 0;
-  if not ProgramCleanupComplete then Result := 4
+  if not ProgramSecurityComplete then Result := 5
+  else if not ProgramCleanupComplete then Result := 4
   else if ModelSetupAttempted and not ModelSetupComplete then Result := 2;
 end;
 

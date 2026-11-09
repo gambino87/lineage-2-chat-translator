@@ -53,6 +53,18 @@ class UniversalTradeTests(unittest.TestCase):
         self.assertFalse(core.is_universal_trade_message("WTS这个多少钱？"))
         self.assertFalse(core.is_universal_trade_message("WTS Vorpal Tunic no"))
 
+    def test_recognized_devotion_nickname_listings_are_universal(self):
+        for text in ("WTS devo 10kk", "wtb DeVo +6 100k PM me", "WTT DEVO",
+                     "WTS devo tunic 10kk", "WTB devo stockings", "WTS devo set",
+                     "WTS [devo] 5kk"):
+            with self.subTest(text=text):
+                self.assertTrue(core.is_universal_trade_message(text))
+        for text in ("vendo devo barato", "WTS devo barato", "WTS devo no",
+                     "WTS devoPlayer", "devo comprar poções", "devo vendere tutto"):
+            with self.subTest(text=text):
+                self.assertFalse(core.is_universal_trade_message(text))
+        self.request.assert_not_called()
+
     def test_party_and_recruitment_are_not_universal_trade(self):
         samples = (
             "LFG 40 lvl PM me",

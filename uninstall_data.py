@@ -14,7 +14,7 @@ import stat
 import sys
 import tempfile
 
-from installer_runtime import OLLAMA_VERSION, RuntimeManager, SetupError
+from installer_runtime import OLLAMA_VERSION, RuntimeManager, ServiceOwnershipMismatch, SetupError
 
 
 APP_ID = "Lineage2ChatTranslator"
@@ -275,6 +275,10 @@ def _stop_owned_service(roots: list[Path]) -> bool:
         manager = RuntimeManager(root)
         try:
             manager._verify_owner(timeout=SERVICE_IDENTIFICATION_SECONDS)
+        except ServiceOwnershipMismatch:
+            # This root does not own the identified listener; another registered
+            # root may. Display wording must never decide cleanup behavior.
+            continue
         except SetupError as exc:
             errors.append(exc)
             continue
@@ -282,9 +286,9 @@ def _stop_owned_service(roots: list[Path]) -> bool:
         return True
     # A verified executable mismatch is safe to leave running. Failed Windows
     # verification is not evidence of an unrelated service, so fail closed.
-    if all("occupied by a different service or storage installation" in str(exc) for exc in errors):
-        return False
-    raise SetupError("Could not identify the running local service. Close it and retry uninstall; no data was deleted.")
+    if errors:
+        raise SetupError("Could not identify the running local service. Close it and retry uninstall; no data was deleted.") from errors[0]
+    return False
 
 
 def uninstall_data(preferences_dir: Path) -> dict:

@@ -21,7 +21,7 @@ from app_paths import default_data_directory, preferences_directory, runtime_fil
 from app_version import VERSION
 from app_icon import ICON, PNG, apply_window_icon
 from game_log_setup import resolve_system_log
-from installer_runtime import DEFAULT_MODEL, ENDPOINT, MODEL_CATALOG, RuntimeManager, required_disk_bytes
+from installer_runtime import DEFAULT_MODEL, ENDPOINT, MODEL_CATALOG, RuntimeManager, SetupCancelled, required_disk_bytes
 from translator_core import OllamaClient, parse_chat_line
 from uninstall_data import register_data_root, uninstall_data
 from app_updater import cleanup_update_cache, consume_update_result, update_in_progress
@@ -230,10 +230,19 @@ def self_test() -> dict:
     helper = RUNNER_PATH.read_text(encoding="utf-8-sig")
     if len(helper) < 1000 or "JobPath" not in helper or "Lineage2ChatTranslatorUpdate" not in helper:
         raise AssertionError("The bundled automatic update helper is missing or invalid.")
+    from update_trust import PUBLIC_KEY_BLOB_B64, verify_bundled_signing_key
+    if "$releasePublicKeyBlob = '" + PUBLIC_KEY_BLOB_B64 + "'" not in helper:
+        raise AssertionError("The application's update verification keys do not match.")
+    # Exercise native verification against a public proof, never the private key.
+    verify_bundled_signing_key()
     cleanup_helper = (Path(__file__).parent / "assets" / "cleanup-program-files.ps1").read_text(encoding="utf-8-sig")
     if (len(cleanup_helper) < 1000 or "Invoke-RegisteredCleanup" not in cleanup_helper
             or "L2ProminenceChatTranslator" not in cleanup_helper):
         raise AssertionError("The bundled external cleanup helper is missing or invalid.")
+    # Presence only: a headless self-test must never change installation ACLs.
+    security_helper = (Path(__file__).parent / "assets" / "protect-install-directory.ps1").read_text(encoding="utf-8-sig")
+    if "Invoke-InstallDirectoryProtection" not in security_helper or "VerifyOnly" not in security_helper:
+        raise AssertionError("The bundled installation permission helper is missing or invalid.")
     if getattr(sys, "frozen", False):
         # Validate metadata only: packaged checks must never remove program files.
         plan = read_cleanup_plan(Path(__file__).parent / "assets" / CLEANUP_PLAN_NAME, VERSION)
@@ -262,7 +271,7 @@ def self_test() -> dict:
             "models": list(MODEL_CATALOG), "settings_path": str(SETTINGS_PATH),
             "app_settings_path": str(translator_app.SETTINGS),
             "item_catalog_version": catalog.version, "item_catalog_entries": len(catalog.items),
-            "checks": ["bundled imports", "Tcl runtime", "native TLS, hashing and compression", "synthetic log parser", "model catalog", "loopback client", "bundled icon", "bundled item database", "localized item ID resolution", "party link separation", "source URL protection", "bundled update helper", "bundled external cleanup helper"] + (["bundled cleanup inventory", "no obsolete app-local UCRT"] if getattr(sys, "frozen", False) else []) + (["Windows system UCRT"] if system_ucrt else []),
+            "checks": ["bundled imports", "Tcl runtime", "native TLS, hashing and compression", "synthetic log parser", "model catalog", "loopback client", "bundled icon", "bundled item database", "localized item ID resolution", "party link separation", "source URL protection", "bundled update helper", "bundled external cleanup helper", "bundled installation permission helper"] + (["bundled cleanup inventory", "no obsolete app-local UCRT"] if getattr(sys, "frozen", False) else []) + (["Windows system UCRT"] if system_ucrt else []),
             "windows_opened": False, "network_requests": False}
 
 
@@ -344,6 +353,14 @@ class SetupWindow:
         self.busy = False
         self.ready = False
         self.launch_requested = False
+        # Keep the managers that started work, not the currently edited folder.
+        # A failed stop stays tracked so Close (or final exit) can retry it.
+        self._service_managers = []
+        self._work_lock = threading.RLock()
+        self._exiting = False
+        self._closing = False
+        self._cancel_event = threading.Event()
+        self._cancellable = False
         self.installer_mode = installer_mode
         self.setup_completed = False
         self.automatic = automatic
@@ -408,7 +425,8 @@ class SetupWindow:
         self._startup_frame.pack(fill="both", expand=True)
         tk.Label(self._startup_frame, text="Starting translator…", background="#111820", foreground="#edf3f8",
                  font=("Segoe UI", 16, "bold")).pack(pady=(0, 12))
-        tk.Label(self._startup_frame, text="Starting local Ollama.\nThe translator will open automatically.",
+        self.status.set("Starting local Ollama.\nThe translator will open automatically.")
+        tk.Label(self._startup_frame, textvariable=self.status,
                  background="#111820", foreground="#a4b4c3", justify="center", wraplength=400).pack(pady=(0, 18))
         self._startup_progress = ttk.Progressbar(self._startup_frame, mode="indeterminate", length=340)
         self._startup_progress.pack()
@@ -516,6 +534,9 @@ class SetupWindow:
         self.open_button = ttk.Button(actions, text="Open translator →", command=self.open_translator, style="Primary.TButton")
         self.open_button.grid(row=0, column=0, sticky="ew")
         self.open_button.grid_remove()
+        self.cancel_button = ttk.Button(actions, text="Cancel", command=self.cancel_work, style="Secondary.TButton")
+        self.cancel_button.grid(row=1, column=0, sticky="e", pady=(8, 0))
+        self.cancel_button.grid_remove()
         self.controls.extend([self.install_button, self.stop_button])
         if not self.installer_mode:
             self.controls.append(self.remove_button)
@@ -587,6 +608,7 @@ class SetupWindow:
         for control in self.controls:
             control.configure(state="disabled" if busy else ("readonly" if control is self.model_box else "normal"))
         self._sync_actions()
+        self._sync_cancel_action()
         if busy:
             self.progress.grid()
             self.progress.start(12)
@@ -597,6 +619,95 @@ class SetupWindow:
 
     def _report(self, text):
         self.events.put(("progress", str(text)))
+
+    def _sync_cancel_action(self):
+        button = getattr(self, "cancel_button", None)
+        if button is not None:
+            if self.busy and self._cancellable:
+                button.grid()
+                button.configure(state="disabled" if self._cancel_event.is_set() else "normal",
+                                 text="Cancelling…" if self._cancel_event.is_set() else "Cancel")
+            else:
+                button.grid_remove()
+
+    @staticmethod
+    def _check_cancelled(cancel_event):
+        if cancel_event.is_set():
+            raise SetupCancelled("Setup cancelled. Unfinished model downloads can be resumed.")
+
+    def _runtime_manager(self, data_root, cancel_event):
+        manager = RuntimeManager(data_root, progress=self._report, cancel_event=cancel_event)
+        self._service_managers.append(manager)
+        return manager
+
+    def _start_work(self, work, *, cleanup_first=False):
+        # Each operation owns a fresh token; old managers retain their old token.
+        # Cleanup-only work must not reset it or become cancellable itself.
+        self._cancellable = cleanup_first
+        cancel_event = threading.Event() if cleanup_first else self._cancel_event
+        if cleanup_first:
+            self._cancel_event = cancel_event
+        self._sync_cancel_action()
+        def serialized_work():
+            # Final exit either waits for the active operation or prevents a
+            # queued worker from starting a new service after cleanup.
+            with self._work_lock:
+                if not self._exiting:
+                    if cleanup_first:
+                        if cancel_event.is_set():
+                            self._operation_result("cancelled", "", cancel_event=cancel_event)
+                            return
+                        # A previous partial startup may still own a live child
+                        # without a listener. Do not create another manager until
+                        # that failed cleanup has actually completed.
+                        try:
+                            self._cleanup_services()
+                        except Exception as exc:
+                            self.events.put(("cancel_error" if cancel_event.is_set() else "error", str(exc)))
+                            return
+                        if cancel_event.is_set():
+                            self._operation_result("cancelled", "", cancel_event=cancel_event)
+                            return
+                        work(cancel_event)
+                    else:
+                        work()
+        threading.Thread(target=serialized_work, daemon=True).start()
+
+    def _cleanup_services(self):
+        """Release only children started by these managers; retain failed stops."""
+        with self._work_lock:
+            failures = []
+            for manager in self._service_managers[:]:
+                try:
+                    manager.stop_owned_service()
+                except Exception as exc:
+                    failures.append(str(exc))
+                else:
+                    self._service_managers.remove(manager)
+            if failures:
+                raise RuntimeError("Could not finish local service cleanup: " + "\n".join(failures))
+
+    def finish(self):
+        """Cover abnormal setup exits and failures before translator handoff."""
+        # Signal before waiting on the worker, so a network read can be aborted.
+        self._cancel_event.set()
+        with self._work_lock:
+            self._exiting = True
+            self._cleanup_services()
+
+    def _operation_result(self, kind, message, failure=None, *, cancel_event):
+        # Setup/model tools do not retain a GPU service while idle. Only a
+        # verified launch keeps it alive for the translator's deliberate handoff.
+        cleanup_failure = None
+        try:
+            self._cleanup_services()
+        except Exception as exc:
+            cleanup_failure = str(exc)
+            failure = (failure + "\n" if failure else "") + str(exc)
+        if cancel_event.is_set():
+            self.events.put(("cancel_error", cleanup_failure) if cleanup_failure else ("cancelled", ""))
+        else:
+            self.events.put(("error", failure) if failure is not None else (kind, message))
 
     def install(self):
         """Configure local runtime/model only after validated choices and license consent."""
@@ -619,32 +730,28 @@ class SetupWindow:
         model = self.selected_tag()
         self.ready = False
         self._set_busy(True)
-        def work():
-            manager = None
+        def work(cancel_event):
             failure = None
             try:
                 # Track failed/partial setup as well as completed installations.
                 register_data_root(data_root, SETTINGS_PATH.parent)
-                manager = RuntimeManager(data_root, progress=self._report)
+                manager = self._runtime_manager(data_root, cancel_event)
                 manager.prepare(model)
+                self._check_cancelled(cancel_event)
                 self._report("Testing translation with a synthetic Russian sentence…")
-                result = OllamaClient(ENDPOINT, model, "English").translate("Привет! Ищем хилера в пати.")
+                client = OllamaClient(ENDPOINT, model, "English")
+                with manager.cancellable_client(client):
+                    result = client.translate("Привет! Ищем хилера в пати.")
+                self._check_cancelled(cancel_event)
                 self._report("Sample translation: " + result)
                 self._report("Cleaning up installation files…")
                 manager.cleanup_installation()
+                self._check_cancelled(cancel_event)
                 save_configuration(data_root, model, log)
             except Exception as exc:
                 failure = str(exc)
-            if getattr(self, "installer_mode", False) and manager is not None:
-                try:
-                    manager.stop_service()
-                except Exception as exc:
-                    failure = (failure + "\n" if failure else "") + "Could not finish local service cleanup: " + str(exc)
-            if failure is not None:
-                self.events.put(("error", failure))
-            else:
-                self.events.put(("ready", "Setup complete. Your model and preferences are saved. Open the translator when ready."))
-        threading.Thread(target=work, daemon=True).start()
+            self._operation_result("ready", "Setup complete. Your model and preferences are saved. Open the translator when ready.", failure, cancel_event=cancel_event)
+        self._start_work(work, cleanup_first=True)
 
     def remove(self):
         # Maintenance can start its own service. Keep it in configuration,
@@ -663,15 +770,17 @@ class SetupWindow:
         if not messagebox.askyesno("Remove downloaded model", f"Remove {tag} from this translator's model folder?\n\nYou can download it again later.", parent=self.root):
             return
         self._set_busy(True)
-        def work():
+        def work(cancel_event):
+            failure = None
             try:
-                manager = RuntimeManager(data_root, progress=self._report)
+                manager = self._runtime_manager(data_root, cancel_event)
                 manager.ensure_service()
+                self._check_cancelled(cancel_event)
                 manager.remove_model(tag)
-                self.events.put(("removed", f"Removed {tag}."))
             except Exception as exc:
-                self.events.put(("error", str(exc)))
-        threading.Thread(target=work, daemon=True).start()
+                failure = str(exc)
+            self._operation_result("removed", f"Removed {tag}.", failure, cancel_event=cancel_event)
+        self._start_work(work, cleanup_first=True)
 
     def launch_existing(self):
         """Check saved installation in a worker and hand off when its local model is ready."""
@@ -694,21 +803,25 @@ class SetupWindow:
             self._show_starting()
         self._set_busy(True)
         self.status.set("Checking your local translation service…")
-        def work():
+        def work(cancel_event):
             try:
                 register_data_root(Path(location["data_root"]), SETTINGS_PATH.parent)
-                manager = RuntimeManager(Path(location["data_root"]), progress=self._report)
+                manager = self._runtime_manager(Path(location["data_root"]), cancel_event)
                 if not manager.executable.is_file():
                     raise ValueError("The local Ollama runtime is missing. Use Download & configure to restore it.")
                 manager.ensure_service()
+                self._check_cancelled(cancel_event)
                 model = settings["model"]
                 if model not in {entry.get("name", entry.get("model")) for entry in manager.installed_models()}:
                     raise ValueError("The selected model is missing. Use Download & configure to restore it.")
-                OllamaClient(ENDPOINT, model)._verify_local_model()
+                client = OllamaClient(ENDPOINT, model)
+                with manager.cancellable_client(client):
+                    client._verify_local_model()
+                self._check_cancelled(cancel_event)
                 self.events.put(("launch", ""))
             except Exception as exc:
-                self.events.put(("error", str(exc)))
-        threading.Thread(target=work, daemon=True).start()
+                self._operation_result("launch", "", str(exc), cancel_event=cancel_event)
+        self._start_work(work, cleanup_first=True)
 
     def stop_service(self):
         try:
@@ -723,11 +836,12 @@ class SetupWindow:
         self._set_busy(True)
         def work():
             try:
+                self._cleanup_services()
                 RuntimeManager(data_root, progress=self._report).stop_service()
                 self.events.put(("stopped", "Local service stopped. You can now choose a different storage folder. Changing folders downloads a separate runtime and model; it does not move existing files."))
             except Exception as exc:
                 self.events.put(("error", str(exc)))
-        threading.Thread(target=work, daemon=True).start()
+        self._start_work(work)
 
     def _drain(self):
         try:
@@ -736,17 +850,47 @@ class SetupWindow:
                 if kind == "hardware":
                     self.hardware.set(value)
                 elif kind == "progress":
-                    self.status.set(value)
+                    # Late progress cannot hide the user's cancellation request.
+                    if not self._cancel_event.is_set():
+                        self.status.set(value)
                     self.output.configure(state="normal")
                     self.output.insert("end", value + "\n")
                     self.output.see("end")
                     self.output.configure(state="disabled")
+                elif kind in ("ready", "launch", "removed", "stopped", "error") and (
+                        self._closing or (self._cancellable and self._cancel_event.is_set())):
+                    # Close/Cancel wins even when success was already queued.
+                    # A queued launch still owns a service, so finish cleanup
+                    # off the UI thread before acknowledging cancellation.
+                    self._begin_cancel_cleanup()
                 elif kind == "launch":
                     self.launch_requested = True
                     self._hide_starting()
                     self.root.destroy()
                     return
+                elif kind == "closed":
+                    self._hide_starting()
+                    self.root.destroy()
+                    return
+                elif kind == "cancelled":
+                    self.ready = self.setup_completed = self.launch_requested = False
+                    self._cancellable = False
+                    self._set_busy(False)
+                    if self._closing:
+                        self._hide_starting()
+                        self.root.destroy()
+                        return
+                    self._show_setup()
+                    self.status.set("Setup cancelled. Unfinished model downloads can be resumed. Retry when ready.")
+                elif kind in ("close_error", "cancel_error"):
+                    self._closing = False
+                    self.ready = self.setup_completed = self.launch_requested = False
+                    self._cancellable = False
+                    self._set_busy(False)
+                    self._show_setup()
+                    self.status.set(value + " Close this window again to retry.")
                 else:
+                    self._cancellable = False
                     self.ready = kind == "ready"
                     if self.ready and getattr(self, "installer_mode", False):
                         self.setup_completed = True
@@ -761,17 +905,53 @@ class SetupWindow:
         self.root.after(SETUP_EVENT_POLL_INTERVAL_MS, self._drain)
 
     def open_translator(self):
-        if self.ready:
-            self.launch_requested = True
-            self.root.destroy()
+        if self.ready and not self.busy:
+            # Configuration has already released its service. Start and verify
+            # the saved runtime again before opening a working translator.
+            self.launch_existing()
+
+    def cancel_work(self):
+        if self.busy and self._cancellable:
+            self.ready = False
+            self._cancel_event.set()
+            self.status.set("Cancelling… Stopping setup's work and local service.")
+            self._sync_cancel_action()
+
+    def _begin_cancel_cleanup(self):
+        self._cancellable = False
+        self._set_busy(True)
+        def work():
+            try:
+                self._cleanup_services()
+            except Exception as exc:
+                self.events.put(("cancel_error", str(exc)))
+            else:
+                self.events.put(("cancelled", ""))
+        self._start_work(work)
 
     def close(self):
-        if self.busy:
-            if getattr(self, "_startup_frame", None) is not None:
-                return  # Startup completes or reveals a recoverable error.
-            messagebox.showinfo("Setup in progress", "Let the current download or verification finish. A failed download can be retried without redownloading completed model layers.", parent=self.root)
+        if self._closing:
             return
-        self.root.destroy()
+        self._closing = True
+        if self.busy:
+            if self._cancellable:
+                self.cancel_work()
+            else:
+                self.status.set("Closing… Waiting for local service cleanup.")
+            return
+        if not self._service_managers:
+            self.root.destroy()
+            return
+        self._set_busy(True)
+        self.status.set("Closing… Stopping the local translation service.")
+        def work():
+            try:
+                self._cleanup_services()
+            except Exception as exc:
+                self.events.put(("close_error", str(exc)))
+            else:
+                self.events.put(("closed", ""))
+        self._start_work(work)
 
 
 def main(argv=None) -> int:
@@ -864,19 +1044,25 @@ def main(argv=None) -> int:
                                    previous_update.get("message", "The last update could not be completed. Retry from Settings."),
                                    parent=root)
         window = SetupWindow(root, automatic=not (args.configure or args.install_model), installer_mode=args.install_model)
-        root.mainloop()
-        root = None
-        if args.install_model:
-            return 0 if window.setup_completed else 2
-        if window.launch_requested:
-            import translator_app
-            # Also makes source execution of this entrypoint use packaged prefs.
-            translator_app.SETTINGS = SETTINGS_PATH
-            location = read_json(RUNTIME_PATH)
-            if not location.get("data_root"):
-                raise ValueError("The configured local model folder is missing. Open setup and configure it again.")
-            translator_app.main(migrate_legacy_models=False, runtime_root=Path(location["data_root"]))
-        return 0
+        try:
+            root.mainloop()
+            root = None
+            if args.install_model:
+                return 0 if window.setup_completed else 2
+            if window.launch_requested:
+                import translator_app
+                # Also makes source execution of this entrypoint use packaged prefs.
+                translator_app.SETTINGS = SETTINGS_PATH
+                location = read_json(RUNTIME_PATH)
+                if not location.get("data_root"):
+                    raise ValueError("The configured local model folder is missing. Open setup and configure it again.")
+                translator_app.main(migrate_legacy_models=False, runtime_root=Path(location["data_root"]))
+            return 0
+        finally:
+            # Keep setup's exact-child ownership through import/configuration
+            # failures and the app's lifetime; an already-stopped child is a no-op.
+            # This runs before releasing the single-instance lock.
+            window.finish()
     except Exception as exc:
         if root is None:
             root = tk.Tk()

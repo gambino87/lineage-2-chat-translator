@@ -1,4 +1,4 @@
-LINEAGE 2 CHAT TRANSLATOR 1.7.11
+LINEAGE 2 CHAT TRANSLATOR 1.7.12
 
 Windows 10/11, 64-bit. Python is included; no separate Python installation is needed.
 The supplied L2CT artwork is used for the program, shortcuts and window icons.
@@ -63,9 +63,12 @@ The normal Windows installer progress window appears during replacement.
 Checks and downloads that fail can be retried from Settings. Installation or
 restart errors are reported; a rare Windows restart requirement needs your
 attention. Do not run another installer or uninstall while an update is active.
-Version 1.7.0 and later can install this release from Updates. Older versions
-need one manual installation to add the control. Source/development copies
-can check releases but must use the website installer to upgrade.
+Version 1.7.12 and later require an independent release signature before an
+update can run. Older versions cannot verify this signature: their first
+upgrade needs an installer obtained through a trusted source. Installing a
+signed-update-capable version adds protection for later updates; it cannot
+retroactively protect that first download. Source/development copies can check
+releases but must use the website installer to upgrade.
 
 PRIVACY
 
@@ -77,14 +80,21 @@ are copied to the Windows clipboard, including any history/sync you enable.
 Downloads and update checks contact external servers. They can see your IP
 address; update requests also include the app version, never chat text.
 Local diagnostics can contain account/folder names; redact them before sharing.
-This release is unsigned. HTTPS and checksums verify downloads from the trusted
-host, but are not independent code signing or protection from local malware.
+Updates require a release signature checked against a public key built into
+the app, in addition to HTTPS and the installer checksum. The signing key is
+kept separately from the download server. Windows publisher signing is not
+included, so Windows may still show an unknown-publisher prompt. Update
+signatures do not protect an already compromised computer.
 
 INITIAL INSTALLATION
 
 1. Install the translator for your Windows account. New installations default to
-   C:\Lineage 2 Chat Translator. You can choose another folder; upgrades reuse
-   the existing program folder.
+   %LOCALAPPDATA%\Programs\Lineage 2 Chat Translator. Program-folder permissions
+   are restricted to your account, Windows and administrators. Existing installs
+   keep their current folder, including the older C:\Lineage 2 Chat Translator
+   location, and setup repairs their permissions before replacing program files.
+   Setup stops if a folder cannot be protected safely. It does not change the
+   permissions of parent folders or move saved settings and models.
 2. The installer opens model setup before showing its completion page.
 3. Choose a model, a writable model storage folder, and your L2 system folder
    or game root before downloading. Setup requires the game folder and saves
@@ -99,6 +109,16 @@ If model setup is canceled or fails, the installer offers Retry. Cancel leaves
 the launcher installed and clearly reports that model setup is incomplete.
 Use Configure Lineage 2 Chat Translator to finish later. Failed model downloads
 keep their resumable layers until retried or uninstalled.
+
+During setup, Cancel stops the current operation and keeps the window open for
+retry. The window's close button cancels and then closes after its owned local
+service stops. Wait for Cancelling to finish; if cleanup fails, the window stays
+open with a retry message. Completed model layers and resumable model data are
+kept. An incomplete runtime ZIP is removed and downloads again on retry; a fully
+verified runtime ZIP is kept if extraction is cancelled.
+Each model download attempt has a two-hour limit even while progress continues.
+Retry reuses the model data already downloaded. The runtime download has a
+one-hour limit; model verification has its own shorter limit.
 
 After setup, the normal shortcut shows a small Starting translator window with
 an animated progress bar while Ollama starts and the saved model is verified.
@@ -126,6 +146,10 @@ GPU memory is shared with the game; speed varies by hardware and other GPU use.
 
 Use Configure Lineage 2 Chat Translator in the Start menu to change models or storage.
 Download & configure is the main setup button. After setup, it becomes Open translator.
+Configure releases any Ollama service it starts when setup or model removal
+finishes, including failed operations. Open translator starts and checks the
+service again. If cleanup fails, Close keeps the window open so you can retry;
+starting another operation also retries cleanup before starting a new service.
 Hardware information, download logs, removal and service controls are under
 Details & model tools. Closing the main translator window saves your preferences,
 requests that loaded models unload, then stops its verified dedicated Ollama
@@ -134,8 +158,9 @@ wait for that window to disappear before reopening the translator. If shutdown
 cannot be confirmed, the translator shows a warning before closing.
 Closing or hiding only the overlay keeps translation running. The next
 launch starts the service again. Model files stay installed. Use Stop local
-service in configuration if you need to stop a service started during setup
-before changing storage folders. Unrelated Ollama installations are left alone.
+service in configuration to explicitly stop the configured service. Configure's
+automatic cleanup leaves services it did not start alone. Unrelated Ollama
+installations are left alone.
 Shutdown diagnostics are saved in the selected data folder under logs/shutdown.log.
 Switching storage folders does not move or erase previously downloaded models.
 An existing custom chat-log path is preserved when no new L2 folder is selected.
