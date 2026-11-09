@@ -143,4 +143,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    sys.path.insert(0, str(HERE.parent))
+    from release_lock import release_lock
+    with release_lock(WORKSPACE):
+        main()

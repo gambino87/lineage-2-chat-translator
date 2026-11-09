@@ -55,6 +55,14 @@ restarted as part of translator website work.
    Check the release/version/download link and compare the downloaded bytes with
    both the manifest and `downloads/SHA256SUMS.txt`. Never execute the installer
    as part of download verification. Check that HTTP redirects to HTTPS.
+6. Publish the Sites mirror with the same verified files, then run
+   `.build-tools/venv/Scripts/python.exe -B packaging/complete_release.py`.
+   This required completion command verifies both live homepages, exact signed
+   metadata and complete installers, and the current GitHub source/version tag.
+   Only after every check passes does it automatically prune old local build
+   caches and redundant publication packages. An outdated mirror or any failed
+   check leaves files in place for retry. `--dry-run` performs the same live
+   checks and lists the proposed cleanup without deleting.
 
 The deployment helper also invokes the configured Discord release bot after
 publication. It independently verifies the public release before announcing the
@@ -69,6 +77,19 @@ build is only prepared, not published. Retain previous releases; never overwrite
 an installer with different bytes under the same version. Routine deployments
 need no Nginx reload and no game/service restart. Tooling or website-only changes
 do not require an app version bump or installer rebuild.
+
+The completion command preserves the newest build and recent/unpublished upload
+packages. Older timestamped build trees, known obsolete publication bundles and
+regenerable backend compiler/download caches are eligible. It never scans model
+storage for deletion. Keep every canonical `release/<version>/` installer and
+manifest: future DLL retirement checks depend on them. Site `dist` downloads,
+source and Git history, Python/Inno tools, the compiled protected backend and
+small verification records also remain. Backend-specific caches can download
+again when its source changes; ordinary app builds use the retained executable.
+Build, backend-build, source, export, page preparation and completion commands
+share a workspace lock. Run the documented command entry points; do not invoke
+internal helper functions concurrently. Reports stay under `.build/` and are
+excluded from public source and website output.
 
 Server layout:
 

@@ -220,4 +220,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    from release_lock import release_lock
+    with release_lock(ROOT):
+        main()

@@ -68,6 +68,16 @@ its attribution notice, and the trusted update and cleanup helpers. Personal set
 review data, development scripts, tests and model weights cannot enter this
 source staging directory. PyInstaller discovers Python/Tcl/Tk dependencies.
 
+After publication to both hosts, `packaging/complete_release.py` verifies the
+live signed release and GitHub source, then automatically prunes approved old
+build trees, redundant upload packages and backend tool/download caches. A failed
+release does not trigger cleanup. The newest build and recent packages remain,
+along with source, all canonical installers/manifests, Site downloads, the Python
+environment, Inno compiler and compiled protected backend. Models, installed
+applications and signing credentials are outside its deletion scope. Run it as
+the final step described in [HOSTING.md](HOSTING.md); `--dry-run` checks without
+deleting. All release/build command entry points share a workspace lock.
+
 Setup uses a fresh cancellation token per worker operation. Controlled HTTP
 connections register their sockets before proxy negotiation, TLS and response
 headers, so a watchdog can interrupt blocked reads without closing a buffered

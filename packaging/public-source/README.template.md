@@ -66,6 +66,11 @@ included in the installer, while GPU libraries and model weights download at set
 Generated files go into `.build/`, `release/` and the site's `dist/`, all ignored
 by Git. See [the build documentation](packaging/README.md) for details.
 
+Official release completion verifies both public hosts and GitHub before
+automatically pruning approved old build caches and redundant upload packages.
+Models, source, canonical installers/manifests, current build and required release
+tools are preserved. See [publication and cleanup](packaging/HOSTING.md).
+
 For a separately published fork, provision your own signing identity and update
 its public trust anchors and hosting configuration. See [update signing](packaging/UPDATE-SIGNING.md).
 Tests skip checks that require an unavailable platform facility; a successful

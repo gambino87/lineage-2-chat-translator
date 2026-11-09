@@ -17,6 +17,10 @@ no additional open-source license is selected for the original application.
    creates the server upload bundle only after source publication is verified.
 4. Publish and verify the website/installer on the main server and mirror using
    the existing hosting workflow. Confirm the returned GitHub commit and tag.
+5. Run `packaging/complete_release.py` to recheck both live releases and GitHub,
+   then automatically prune approved old local build caches/packages. A stale
+   or failed publication leaves retry artifacts intact. Canonical installers,
+   manifests, source and required build inputs are always retained.
 
 `source_release.py` uses a separate source-only Git checkout at
 `public-source/lineage-2-chat-translator`. It verifies the application and asset

@@ -167,7 +167,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "2c2aab1843dbfa265bf77b48f0f130f204c662ff7558de92a080baff3794595a"
+      "sha256": "59900933c53abb0ba4607852e904caee22da5ebd5466921e4fc46f209c28df99"
     },
     {
       "path": "Setup Ollama.ps1",
@@ -279,7 +279,7 @@
     },
     {
       "path": "packaging/HOSTING.md",
-      "sha256": "0ee409f0c4ec41a365568769a94eec82b2a825a046e1b1a3f86e00948c5b8607"
+      "sha256": "9be0832e695f1abc33287e4e6b4bdd7d4157397198a6c86f3d72622da45933a0"
     },
     {
       "path": "packaging/INSTALL-COMPLETE.txt",
@@ -287,11 +287,11 @@
     },
     {
       "path": "packaging/PUBLIC-SOURCE.md",
-      "sha256": "e8105d81cf8ff88ea30e85cfb27456711ecc4e53d875d75f1fd1baa64e617ac6"
+      "sha256": "6a43f47e1433dc44d3ef18491227b2a028455782d6ef601a8a5aabcb97b8ffa5"
     },
     {
       "path": "packaging/README.md",
-      "sha256": "33f48f1d59a20bf22a1ffb20aefa52a54454052a8531740a16b544d8a31859ef"
+      "sha256": "6c50c143ab94ae48202c83765a6a8576e68e75dd07553d5c03fc9e06e29c4866"
     },
     {
       "path": "packaging/THIRD-PARTY-NOTICES.txt",
@@ -311,11 +311,15 @@
     },
     {
       "path": "packaging/build.py",
-      "sha256": "d34645321439f0327b566a8a2b0e46d5f70f12fc34afeb150dc601650596de84"
+      "sha256": "9a0902d8670313c0520a1247a09647977ad81a181218654df6c8fa00a17364ed"
     },
     {
       "path": "packaging/build_environment.py",
       "sha256": "2576f52ab3cc0273066af56e21a0802936e956ed48a89188d76961554071bf91"
+    },
+    {
+      "path": "packaging/complete_release.py",
+      "sha256": "c45ad253f9c848518296e4a9079f8ac295e7ffc41c7b4fd86130d1bf2c34474c"
     },
     {
       "path": "packaging/download-page.html",
@@ -323,7 +327,7 @@
     },
     {
       "path": "packaging/export_main_server.py",
-      "sha256": "1492ab3500c34289a12417f72c4a0478cd2e3c82ce6a9a7eac40bcf601c8f046"
+      "sha256": "5f6b9f8c5b1cc59f5d4182880dad663b10aa81d27379a0085736eb4ba7f58172"
     },
     {
       "path": "packaging/installer.iss",
@@ -399,11 +403,11 @@
     },
     {
       "path": "packaging/public-source/README.template.md",
-      "sha256": "6920797214e372340b35cb58f1040ff15ee5760a5a7d814b50c93aba4634b552"
+      "sha256": "27d7cc0343915a669861a4043ceb91afe35e7f9dec7c301e0cc257dd82e846fb"
     },
     {
       "path": "packaging/public-source/allowlist.json",
-      "sha256": "1a4c45323fd17141f3d4cdb93539188a6b35e7dd210a9b058b4c2cc57b623871"
+      "sha256": "b4c90dbc51267d0dfaeae6a15512f8642e7e7da12829e52c3407db144b3aa255"
     },
     {
       "path": "packaging/public-source/gitattributes.txt",
@@ -414,8 +418,16 @@
       "sha256": "60489b424e2a64e6995f9abf6dae9964210a078478b78d0b286df11594c4393f"
     },
     {
+      "path": "packaging/release_cleanup.py",
+      "sha256": "12405b2aa86003a990747f70dd4cb7650a445476839ecd7868a780ddd56a0b65"
+    },
+    {
+      "path": "packaging/release_lock.py",
+      "sha256": "8372d7db9ba1e99b637c5a5f094ad3289ccefa6e5f13786b8da3935373d047ac"
+    },
+    {
       "path": "packaging/release_site.py",
-      "sha256": "dbf38635bafafd6e1616361fffe2060fc415aba35473c21b6481bcf586c0e613"
+      "sha256": "7100b85715296bbc519f62ffba88dfc028bee17fcc05e8f003404006960184c5"
     },
     {
       "path": "packaging/requirements-build.txt",
@@ -435,7 +447,7 @@
     },
     {
       "path": "packaging/secure-ollama/build_secure_ollama.py",
-      "sha256": "320f4a49741419dd4b92e8abb44a801a179edbc0d1a8aa3662df46a69dbfc707"
+      "sha256": "12e8c93ee6c3e3ad824b09ca1a750ed02c3b57c12cf466eef6637e55a5ba8e57"
     },
     {
       "path": "packaging/secure-ollama/overlay/l2ctsecurity/process_other.go",
@@ -479,7 +491,7 @@
     },
     {
       "path": "packaging/source_release.py",
-      "sha256": "0da2c2df37cd6fcd2adb794eb29b86ca95c5a3b371d2de56ba3c5ea6c6265cab"
+      "sha256": "2c1800e343d36526d98083562b8d3b2a6db118173a3be934b2b4337a07887fda"
     },
     {
       "path": "packaging/verify_dll_upgrade.py",
@@ -536,6 +548,10 @@
     {
       "path": "tests/test_chinese_staff_slang.py",
       "sha256": "7463d363a7134cb9a3d5225117f4744ac88b515c72023660cc7f076e8e499519"
+    },
+    {
+      "path": "tests/test_complete_release.py",
+      "sha256": "3ceef148ab8c334a36bce1d61f9fb0faf34b734a7475fa816f30d569000216e5"
     },
     {
       "path": "tests/test_discord_deploy_hook.py",
@@ -652,6 +668,14 @@
     {
       "path": "tests/test_price_recovery.py",
       "sha256": "ccc2cf03396c6fa2263c958e9ab0ab544215bba968d038fab60432767e3729eb"
+    },
+    {
+      "path": "tests/test_release_cleanup.py",
+      "sha256": "6c95a4124a80055026c9568e46f5c56a76d15ddd8b0a91ec55e2e4b7679723fc"
+    },
+    {
+      "path": "tests/test_release_lock.py",
+      "sha256": "3ec2b27371cc996c0b31cdda4fbbcfab16a6337e1cfb82d38517162893c90edd"
     },
     {
       "path": "tests/test_release_site.py",
