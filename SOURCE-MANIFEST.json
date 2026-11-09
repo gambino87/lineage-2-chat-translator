@@ -251,7 +251,7 @@
     },
     {
       "path": "packaging/HOSTING.md",
-      "sha256": "339569d0458183d8e1018be38d4f4a3e7582eab2f7c2cb2ccc23192c3c49cf0b"
+      "sha256": "ca587c82f3b844a90652b9c9652fa0412a75fe1f65b08d12465810a50063395f"
     },
     {
       "path": "packaging/INSTALL-COMPLETE.txt",
@@ -343,7 +343,7 @@
     },
     {
       "path": "packaging/main-server/https.conf",
-      "sha256": "f4fb6128a4c1f37957ad5062a27527043050774c6677e84ced1b3410965424a9"
+      "sha256": "1bc03925fd754880ba0565c71e49982f90d6adce239c3de869a97114dbd72e37"
     },
     {
       "path": "packaging/main-server/renew-nginx.sh",

@@ -12,6 +12,12 @@ before its verified installer. From v1.7.12, also publish `/downloads/release.si
 with the exact signed `release.json` bytes. Never reformat that JSON on the server
 or mirror. Site preparation signs locally and reuses the verified signature;
 check-only preparation does not sign. The server receives no signing key.
+The first signature-aware release also requires the exact `/downloads/release.sig`
+location in `main-server/https.conf`; the default download rule intentionally
+returns 404 for unlisted files. For that one-time change, preserve the active
+configuration, run `sudo nginx -t` and reload only Nginx. Future signed releases
+use the same route without configuration changes. Verify the live signature as
+well as the installer before considering publication complete.
 Keep silent upgrade support and `--self-test`
 compatible in subsequent releases; updates retain model files and preferences.
 
