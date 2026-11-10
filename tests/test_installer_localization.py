@@ -41,6 +41,7 @@ class InstallerLocalizationTests(unittest.TestCase):
 
     def test_installer_language_is_saved_before_model_setup_window(self):
         with patch.object(setup, "SingleInstance") as lock, \
+             patch.object(setup, "ActivationListener"), \
              patch.object(setup, "uninstall_in_progress", return_value=False), \
              patch.object(setup, "update_in_progress", return_value=False), \
              patch.object(setup, "cleanup_update_cache"), \

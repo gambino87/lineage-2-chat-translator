@@ -211,6 +211,7 @@ class ServiceShutdownTests(unittest.TestCase):
             runtime = Path(folder) / "runtime.json"
             runtime.write_text(json.dumps({"data_root": str(Path(folder) / "packaged-runtime")}))
             with patch.object(installer_main, "RUNTIME_PATH", runtime), \
+                 patch.object(installer_main, "ActivationListener") as activation, \
                  patch.object(installer_main, "SingleInstance") as mutex, \
                  patch.object(installer_main, "uninstall_in_progress", return_value=False), \
                  patch.object(installer_main, "update_in_progress", return_value=False), \
@@ -224,7 +225,8 @@ class ServiceShutdownTests(unittest.TestCase):
                 setup.return_value.launch_requested = True
                 launch.side_effect = lambda **kwargs: mutex.return_value.close.assert_not_called()
                 self.assertEqual(installer_main.main([]), 0)
-            launch.assert_called_once_with(migrate_legacy_models=False, runtime_root=Path(folder) / "packaged-runtime")
+            launch.assert_called_once_with(migrate_legacy_models=False, runtime_root=Path(folder) / "packaged-runtime",
+                                           activation=activation.return_value)
             mutex.return_value.close.assert_called_once()
 
     def test_main_cleans_service_when_window_cannot_be_created(self):
@@ -237,6 +239,21 @@ class ServiceShutdownTests(unittest.TestCase):
                 app_module.main(runtime_root=Path("selected-runtime"))
         shutdown.assert_called_once()
         error.assert_not_called()
+
+    def test_main_binds_activation_to_the_application_and_unbinds_before_cleanup(self):
+        listener, shutdown = Mock(), Mock()
+        with patch.object(app_module, "load_settings", return_value={}), \
+             patch.object(app_module, "service_shutdown_callback", return_value=shutdown), \
+             patch.object(app_module.tk, "Tk") as root, \
+             patch.object(app_module, "apply_window_icon"), \
+             patch.object(app_module, "TranslatorApp") as application:
+            root.return_value.mainloop.side_effect = lambda: listener.bind.assert_called_once_with(
+                root.return_value, application.return_value.activate)
+            shutdown.side_effect = lambda: listener.unbind.assert_called_once_with()
+            app_module.main(activation=listener)
+        listener.unbind.assert_called_once_with()
+        listener.close.assert_not_called()  # The entrypoint owns its lifetime.
+        shutdown.assert_called_once_with()
 
 
 if __name__ == "__main__":

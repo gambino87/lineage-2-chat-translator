@@ -14,6 +14,7 @@ from installer_runtime import DEFAULT_MODEL
 
 class InstallLifecycleTests(unittest.TestCase):
     def setUp(self):
+        self.enterContext(patch.object(setup, "ActivationListener"))
         self.enterContext(patch.object(setup, "storage_requires_confirmation", return_value=False))
         # Startup side effects belong to updater integration tests. Keep this
         # older lifecycle suite isolated from the real profile and OS notices.

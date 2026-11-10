@@ -419,6 +419,14 @@ class TranslatorApp:
         self.save_settings()
         self.tray.preference_changed()
 
+    def activate(self):
+        """Reveal this session, including its closing screen, on an EXE relaunch."""
+        if self._closing:
+            self.root.deiconify()
+            self.root.lift()
+        else:
+            self.tray.restore()
+
     def _window_close(self):
         """Window close may hide; tray Exit and update handoff always shut down."""
         if self._closing:
@@ -953,7 +961,7 @@ class TranslatorApp:
             self.root.destroy()
 
 
-def main(*, migrate_legacy_models: bool = True, runtime_root: Path | None = None):
+def main(*, migrate_legacy_models: bool = True, runtime_root: Path | None = None, activation=None):
     shutdown = service_shutdown_callback(load_settings(migrate_legacy_models=migrate_legacy_models), runtime_root)
     root = None
     application = None
@@ -961,6 +969,8 @@ def main(*, migrate_legacy_models: bool = True, runtime_root: Path | None = None
         root = tk.Tk()
         apply_window_icon(root)
         application = TranslatorApp(root, migrate_legacy_models=migrate_legacy_models, on_shutdown=shutdown)
+        if activation is not None:
+            activation.bind(root, application.activate)
         root.mainloop()
     except Exception as exc:
         if root is not None:
@@ -968,6 +978,8 @@ def main(*, migrate_legacy_models: bool = True, runtime_root: Path | None = None
             root.destroy()
         raise
     finally:
+        if activation is not None:
+            activation.unbind()
         if application is not None:
             try:
                 application.tray.close()

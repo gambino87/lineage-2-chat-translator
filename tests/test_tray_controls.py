@@ -213,6 +213,39 @@ class TrayStateTests(unittest.TestCase):
         native.close.assert_called_once()
         self.assertFalse(self.tray._hidden)
 
+    def application(self):
+        app = translator_app.TranslatorApp.__new__(translator_app.TranslatorApp)
+        app.root, app.tray, app._closing = self.root, self.tray, False
+        return app
+
+    def test_exe_activation_restores_tray_session_and_preserves_maximized_state(self):
+        self.root.window_state = "zoomed"
+        self.tray._configured(self.event)
+        native = self.minimize()
+        self.deliver(native, "ready")
+        self.application().activate()
+        self.assertEqual(self.root.state(), "zoomed")
+        native.close.assert_called_once()
+        self.assertFalse(self.tray._hidden)
+        self.on_exit.assert_not_called()
+
+    def test_exe_activation_cancels_delayed_tray_hide(self):
+        native = self.minimize()
+        self.application().activate()
+        self.deliver(native, "ready")
+        self.root.withdraw.assert_not_called()
+        self.assertEqual(self.root.state(), "normal")
+
+    def test_exe_activation_reveals_closing_screen_without_restarting_session(self):
+        app = self.application()
+        app._closing = True
+        self.tray.close()
+        self.root.state("iconic")
+        app.activate()
+        self.root.deiconify.assert_called_once()
+        self.root.lift.assert_called_once()
+        self.on_exit.assert_not_called()
+
     def test_icon_recovery_ready_does_not_remove_already_hidden_icon(self):
         native = self.minimize()
         self.deliver(native, "ready")

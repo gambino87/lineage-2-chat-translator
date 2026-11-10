@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.8.10",
+    "changes": [
+      "Opening the translator again brings the running window to the front instead of showing an already-open error. This also restores windows minimized to the taskbar or hidden in the system tray.",
+      "Repeated launches keep the existing translation session. During shutdown, opening the translator again shows its Closing window."
+    ]
+  },
+  {
     "version": "1.8.9",
     "changes": [
       "Moved the overlay lock control to the main window's Settings. Lock or unlock it there even when the overlay ignores mouse clicks or starts locked from saved preferences.",

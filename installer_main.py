@@ -18,6 +18,7 @@ import webbrowser
 
 from app_paths import default_data_directory, preferences_directory, runtime_file
 from app_version import VERSION
+from app_activation import ActivationListener, activate_existing
 from ui_i18n import (tr, set_language, get_language, normalize_language, LANGUAGE_NAMES,
                      language_choices, language_code, localize_tree, LocalizedStringVar,
                      set_message, catalog_issues)
@@ -1151,13 +1152,15 @@ def main(argv=None) -> int:
     mutex = SingleInstance()
     mutex_released = False
     root = None
+    activation = None
     try:
         if not mutex.acquire():
-            # Release both the mutex and this process's mapped program files.
-            # The detached system notice can remain after this copy exits.
+            # A second launcher never initializes Tk, services or preferences.
             mutex.close()
             mutex_released = True
-            detached_launch_notice("duplicate")
+            # Installer setup must still report incomplete setup to Inno.
+            if args.install_model or not activate_existing():
+                detached_launch_notice("duplicate")
             return 2 if args.install_model else 0
         # Check after acquiring the instance lock so a launch cannot slip
         # between data cleanup and Inno's subsequent program-file removal.
@@ -1173,6 +1176,12 @@ def main(argv=None) -> int:
             return 2
         if args.ui_language:
             save_ui_language(args.ui_language)
+        try:
+            activation = ActivationListener()
+        except OSError:
+            # Activation is optional; retain ordinary guarded startup if this
+            # session cannot create its native event/shared PID mapping.
+            pass
         ensure_no_interrupted_update(SETTINGS_PATH.parent)
         cleanup_update_cache(SETTINGS_PATH.parent, strict=False)
         root = tk.Tk()
@@ -1185,7 +1194,11 @@ def main(argv=None) -> int:
                                    parent=root)
         window = SetupWindow(root, automatic=not (args.configure or args.install_model), installer_mode=args.install_model)
         try:
+            if activation is not None:
+                activation.bind(root)
             root.mainloop()
+            if activation is not None:
+                activation.unbind()
             root = None
             if args.install_model:
                 return 0 if window.setup_completed else 2
@@ -1196,7 +1209,8 @@ def main(argv=None) -> int:
                 location = read_json(RUNTIME_PATH)
                 if not location.get("data_root"):
                     raise ValueError(tr('The configured local model folder is missing. Open setup and configure it again.'))
-                translator_app.main(migrate_legacy_models=False, runtime_root=Path(location["data_root"]))
+                translator_app.main(migrate_legacy_models=False, runtime_root=Path(location["data_root"]),
+                                    activation=activation)
             return 0
         finally:
             # Keep setup's exact-child ownership through import/configuration
@@ -1211,6 +1225,8 @@ def main(argv=None) -> int:
         messagebox.showerror(tr('Lineage 2 Chat Translator'), str(exc), parent=root)
         return 1
     finally:
+        if activation is not None:
+            activation.close()
         if root is not None:
             try:
                 root.destroy()

@@ -133,6 +133,8 @@ class UpdateEntrypointTests(unittest.TestCase):
         stack = self.enterContext(ExitStack())
         self.mutex = stack.enter_context(patch.object(setup, 'SingleInstance'))
         self.mutex.return_value.acquire.return_value = True
+        self.activation = stack.enter_context(patch.object(setup, 'ActivationListener'))
+        self.activate_existing = stack.enter_context(patch.object(setup, 'activate_existing', return_value=True))
         stack.enter_context(patch.object(setup, 'update_in_progress', return_value=update))
         stack.enter_context(patch.object(setup, 'uninstall_in_progress', return_value=uninstall))
         self.consume = stack.enter_context(patch.object(setup, 'consume_update_result', return_value=result))
@@ -181,9 +183,51 @@ class UpdateEntrypointTests(unittest.TestCase):
     def test_rejected_second_launch_releases_mutex_and_never_waits_for_its_notice(self):
         self.context()
         self.mutex.return_value.acquire.return_value = False
+        self.activate_existing.return_value = False
         self.notice_process.side_effect = lambda *args, **kwargs: self.mutex.return_value.close.assert_called_once()
         self.assertEqual(setup.main([]), 0)
         self.assert_detached_notice('already open or closing')
+
+    def test_second_launch_activates_existing_session_without_startup_or_notice(self):
+        for arguments in ([], ['--configure', '--ui-language', 'ja']):
+            with self.subTest(arguments=arguments):
+                self.context()
+                self.mutex.return_value.acquire.return_value = False
+                self.activate_existing.side_effect = lambda: (self.mutex.return_value.close.assert_called_once() is None)
+                with patch.object(setup, 'save_ui_language') as save:
+                    self.assertEqual(setup.main(arguments), 0)
+                self.activate_existing.assert_called_once_with()
+                self.activation.assert_not_called()
+                self.notice_process.assert_not_called()
+                self.root.assert_not_called()
+                self.window.assert_not_called()
+                self.consume.assert_not_called()
+                self.cleanup.assert_not_called()
+                save.assert_not_called()
+                self.mutex.return_value.close.assert_called_once()
+
+    def test_second_installer_launch_cannot_report_setup_complete_by_activation(self):
+        self.context()
+        self.mutex.return_value.acquire.return_value = False
+        self.assertEqual(setup.main(['--install-model']), 2)
+        self.activate_existing.assert_not_called()
+        self.assert_detached_notice('already open or closing')
+
+    def test_listener_failure_preserves_guarded_startup(self):
+        self.context()
+        self.activation.side_effect = OSError('event unavailable')
+        self.assertEqual(setup.main([]), 0)
+        self.window.assert_called_once()
+        self.mutex.return_value.close.assert_called_once()
+
+    def test_listener_spans_setup_and_closes_before_the_instance_lock(self):
+        self.context()
+        listener = self.activation.return_value
+        self.root.return_value.mainloop.side_effect = lambda: listener.bind.assert_called_once_with(self.root.return_value)
+        self.mutex.return_value.close.side_effect = lambda: listener.close.assert_called_once_with()
+        self.assertEqual(setup.main([]), 0)
+        listener.unbind.assert_called_once_with()
+        listener.close.assert_called_once_with()
 
     def test_uninstall_guard_exits_without_keeping_installed_files_open(self):
         self.context(uninstall=True)

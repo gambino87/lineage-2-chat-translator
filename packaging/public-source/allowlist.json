@@ -82,6 +82,7 @@
   "sites/l2-chat-translator/README.md",
   "sites/l2-chat-translator/changelog.json",
   "sites/l2-chat-translator/index.template.html",
+  "tests/test_app_activation.py",
   "tests/test_app_update_integration.py",
   "tests/test_app_updater.py",
   "tests/test_ascii_art.py",

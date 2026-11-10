@@ -33,7 +33,7 @@ SOURCES = (
     "game_log_setup.py", "chat_overlay.py", "overlay_tray.py", "reply_composer.py", "uninstall_data.py",
     "app_updater.py", "incremental_update.py", "update_trust.py", "update_controls.py", "installation_cleanup.py",
     "local_service.py", "runtime_integrity.py", "secure_storage.py", "update_network.py",
-    "windows_tray.py", "tray_controls.py",
+    "windows_tray.py", "tray_controls.py", "app_activation.py",
     "ui_i18n.py", "ui_strings_installer.py", "ui_strings_client.py", "ui_strings_overlay.py",
     "ui_strings_runtime.py",
 )
