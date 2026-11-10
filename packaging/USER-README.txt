@@ -1,4 +1,4 @@
-LINEAGE 2 CHAT TRANSLATOR 1.8.2
+LINEAGE 2 CHAT TRANSLATOR 1.8.3
 
 Windows 10/11, 64-bit. Python is included; no separate Python installation is needed.
 The supplied L2CT artwork is used for the program, shortcuts and window icons.
@@ -90,6 +90,9 @@ Party recruitment links show their translated description while preserving
 level ranges and player counts exactly, for example:
 Looking for a healer [12~19] (8/9)
 Linked items still use their English catalog names, even in the same message.
+Linked items appear in light grey and party recruitment links in light blue.
+Surrounding text and player names retain their chat-channel colors in the
+launcher and overlay, including optional original-message views.
 An unreadable party title appears as [Party link], not [Linked item]. Links are
 displayed as text; the overlay does not join parties or interact with the game.
 

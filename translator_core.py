@@ -18,6 +18,8 @@ from urllib import error, parse, request
 
 from game_slang import game_glossary as _game_glossary
 from item_catalog import get_catalog, resolve_item_title
+from chat_links import (ChatLinkSpan, LinkedText, PARTY_DETAIL as _PARTY_DETAIL,
+                        mark_link_boundaries, restore_link_boundaries, without_boundary_tokens)
 
 
 # Limits bound untrusted log/model data before it reaches parsers or the GPU.
@@ -136,6 +138,8 @@ class ChatRecord:
     source_language: str | None = None
     # Exact level/count strings from party links, not immutable item titles.
     party_details: tuple[str, ...] = ()
+    # Exact decoded occurrences, including full translatable party-link titles.
+    link_spans: tuple[ChatLinkSpan, ...] = ()
 
 
 _CHAT = re.compile(
@@ -160,9 +164,6 @@ _BROKEN_LINK = re.compile(
 )
 _CLASS_ID_FIELD = re.compile(r"(?:^|[ \t])ClassID\b(?P<value>[^ \t]*)", re.IGNORECASE)
 _CONTROL_CODES = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-# Preserve source spelling/spacing, not just numeric values. Ordinary bracketed
-# text becomes protected only when it came from an actual party-link title.
-_PARTY_DETAIL = re.compile(r"\[[ \t]*[0-9]+[ \t]*[~\-–—][ \t]*[0-9]+[ \t]*\]|\([ \t]*[0-9]+[ \t]*/[ \t]*[0-9]+[ \t]*\)")
 
 
 def _item_class_id(attributes: str) -> int | None:
@@ -176,7 +177,7 @@ def _item_class_id(attributes: str) -> int | None:
     return class_id if 0 < class_id <= MAX_SIGNED_INT32 else None
 
 
-def decode_chat_links(text: str) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
+def decode_chat_links_with_spans(text: str) -> tuple[str, tuple[str, ...], tuple[str, ...], tuple[ChatLinkSpan, ...]]:
     """Decode items and parties without conflating their translation rules.
 
     Only control-delimited links are decoded; ordinary text such as 'Type=1'
@@ -205,14 +206,29 @@ def decode_chat_links(text: str) -> tuple[str, tuple[str, ...], tuple[str, ...]]
     # Process occurrences once in source order. A shared backspace can close a
     # damaged link and open the next one; consuming it would expose attributes.
     parts = []
+    spans = []
+    visible_length = 0
     cursor = 0
     while start := _LINK_START.search(text, cursor):
-        parts.append(text[cursor:start.start()])
+        prefix = _CONTROL_CODES.sub("", text[cursor:start.start()])
+        parts.append(prefix)
+        visible_length += len(prefix)
         match = _TITLED_LINK.match(text, start.start()) or _BROKEN_LINK.match(text, start.start())
-        parts.append(replace_link(match))
+        label = replace_link(match)
+        parts.append(label)
+        if match.group("link_type") in (ITEM_LINK_TYPE, PARTY_LINK_TYPE):
+            kind = "item" if match.group("link_type") == ITEM_LINK_TYPE else "party"
+            spans.append(ChatLinkSpan(kind, visible_length, visible_length + len(label)))
+        visible_length += len(label)
         cursor = match.end()
-    parts.append(text[cursor:])
-    return _CONTROL_CODES.sub("", "".join(parts)), tuple(labels), tuple(party_details)
+    parts.append(_CONTROL_CODES.sub("", text[cursor:]))
+    return "".join(parts), tuple(labels), tuple(party_details), tuple(spans)
+
+
+def decode_chat_links(text: str) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
+    """Compatibility view; record readers also retain exact link occurrences."""
+    message, items, details, _spans = decode_chat_links_with_spans(text)
+    return message, items, details
 
 
 def decode_item_links(text: str) -> tuple[str, tuple[str, ...]]:
@@ -273,9 +289,9 @@ def parse_chat_line(line: str) -> ChatRecord | None:
     channel = int(channel_text)
     if not -MAX_SIGNED_INT32 - 1 <= channel <= MAX_SIGNED_INT32:
         return None
-    message, links, party_details = decode_chat_links(fields["message"])
+    message, links, party_details, spans = decode_chat_links_with_spans(fields["message"])
     return ChatRecord(fields["timestamp"], fields["sender"], message, channel, links,
-                      party_details=party_details)
+                      party_details=party_details, link_spans=spans)
 
 
 def _open_shared(path: Path) -> BinaryIO:
@@ -441,9 +457,17 @@ class OllamaError(RuntimeError):
     """A readable local model/server error."""
 
 
+class TranslationInvariantError(OllamaError):
+    """Model output did not preserve protected content; no network retry implied."""
+
+
+class TranslationOutputLimitError(OllamaError):
+    """The model reached its output budget before completing the translation."""
+
+
 def _translation_content(result: dict) -> str:
     if result.get("done_reason") == "length":
-        raise OllamaError("The model reached its output limit. The incomplete translation was not displayed.")
+        raise TranslationOutputLimitError("The model reached its output limit. The incomplete translation was not displayed.")
     message = result.get("message")
     content = message.get("content", "") if isinstance(message, dict) else ""
     if not isinstance(content, str) or not content.strip():
@@ -718,6 +742,32 @@ class OllamaClient:
             return None
         return next((name for name in REPLY_LANGUAGES if name.casefold() == language.strip().casefold()), None)
 
+    def translate_record(self, record: ChatRecord) -> LinkedText:
+        """Translate normally while retaining validated, non-visible link boundaries."""
+        options = {}
+        if record.item_links:
+            options["item_links"] = record.item_links
+        if record.party_details:
+            options["party_details"] = record.party_details
+
+        def without_boundaries():
+            result = self.translate(record.message, **options)
+            return LinkedText(result, record.link_spans if result == record.message else ())
+
+        marked, boundaries = mark_link_boundaries(record.message, record.link_spans)
+        # Formatting must not reduce the accepted message-length allowance.
+        if not boundaries or len(marked) > MAX_CHAT_CHARACTERS:
+            return without_boundaries()
+        markers = tuple(marker for boundary in boundaries for marker in (boundary.opening, boundary.closing))
+        try:
+            result = self.translate(marked, **dict(options, item_links=record.item_links + markers))
+        except (TranslationInvariantError, TranslationOutputLimitError):
+            # If a small model cannot retain display boundaries, retry the
+            # established translation without them; never guess colored spans.
+            # Connection/model failures are not retried by this cosmetic path.
+            return without_boundaries()
+        return restore_link_boundaries(result, boundaries)
+
     def _translate_fragments(self, model_text: str, protected: dict[str, str]) -> str:
         """Recover once by translating only words between immutable source spans.
 
@@ -750,7 +800,7 @@ class OllamaClient:
             "Translate only the supplied words. Do not complete unfinished sentences, add context, add quotation marks, or invent item names. "
             "Keep the meaning, negations and tone. Do not add punctuation at fragment boundaries. "
             "If a fragment is already in the target language, or is only a name or code, copy it exactly."
-        ) + _game_glossary(model_text, self.target_language)
+        ) + _game_glossary(without_boundary_tokens(model_text, protected), self.target_language)
         result = self._request("/api/chat", {
             "model": self.model,
             "messages": [{"role": "system", "content": system},
@@ -772,22 +822,22 @@ class OllamaClient:
         try:
             translated = json.loads(content, object_pairs_hook=unique_fields)
         except (ValueError, TypeError) as exc:
-            raise OllamaError("The local model could not recover the text around the linked items. Try translating again.") from exc
+            raise TranslationInvariantError("The local model could not recover the text around the linked items. Try translating again.") from exc
         if not isinstance(translated, dict) or set(translated) != set(fragments):
-            raise OllamaError("The local model returned incomplete text around the linked items. Try translating again.")
+            raise TranslationInvariantError("The local model returned incomplete text around the linked items. Try translating again.")
         marker_prefix = next(iter(protected))[2:-2].rstrip("0123456789")
         for key, value in translated.items():
             if not isinstance(value, str) or not value.strip():
-                raise OllamaError("The local model returned incomplete text around the linked items. Try translating again.")
+                raise TranslationInvariantError("The local model returned incomplete text around the linked items. Try translating again.")
             if re.search(r"</?think>", value, re.IGNORECASE):
-                raise OllamaError("The model returned reasoning instead of recovered chat text. Try translating again.")
+                raise TranslationInvariantError("The model returned reasoning instead of recovered chat text. Try translating again.")
             if re.search(re.escape(marker_prefix) + r"\d+", value, re.IGNORECASE):
-                raise OllamaError("The local model returned an unexpected item marker. Try translating again.")
+                raise TranslationInvariantError("The local model returned an unexpected item marker. Try translating again.")
             # Keep source boundary punctuation, not punctuation invented for an
             # isolated fragment. Never accept an empty recovered text fragment.
             translated[key] = value.strip(" \t\r\n,.;:!?")
             if not translated[key]:
-                raise OllamaError("The local model returned incomplete text around the linked items. Try translating again.")
+                raise TranslationInvariantError("The local model returned incomplete text around the linked items. Try translating again.")
         output = []
         for index, part in enumerate(parts):
             if part in protected:
@@ -869,10 +919,21 @@ class OllamaClient:
                 "Copy each token exactly once into the translated sentence in its appropriate position. "
                 "Never translate, change, expand, or omit these tokens."
             )
+            display_markers = [token for token, label in protected_links.items()
+                               if len(label) == 1 and 0xe000 <= ord(label) <= 0xf8ff]
+            if display_markers:
+                pairs = [f"{opening} ... {closing}"
+                         for opening, closing in zip(display_markers[::2], display_markers[1::2])]
+                system += (
+                    " These token pairs bracket linked display text: " + "; ".join(pairs) + ". "
+                    "Keep each opening and closing token around its corresponding translated text. "
+                    "Translate party descriptions between them normally. Keep neighboring words outside their pair, "
+                    "and never cross or nest the pairs."
+                )
         if party_details:
             system += " Some fixed tokens are party level ranges/player counts. Translate party recruitment descriptions, but keep those tokens in source order."
         # Linked names are already masked, so their words cannot become hints.
-        system += _game_glossary(model_text, self.target_language)
+        system += _game_glossary(without_boundary_tokens(model_text, protected_links), self.target_language)
         result = self._request("/api/chat", {
             "model": self.model,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": model_text}],
@@ -892,12 +953,12 @@ class OllamaClient:
                     text, fixed_labels, protect_prices=True, trade_context=_trade_context)
             recovered = self._translate_fragments(recovery_text, invariants)
             if expected_urls and url_values(recovered) != expected_urls:
-                raise OllamaError("The model changed a URL during recovery. Try translating again.")
+                raise TranslationInvariantError("The model changed a URL during recovery. Try translating again.")
             checked, _ = _protect_item_links(recovered, fixed_labels)
             if _PRICE.findall(checked) != expected_prices:
-                raise OllamaError("The model changed a price during recovery. Try translating again.")
+                raise TranslationInvariantError("The model changed a price during recovery. Try translating again.")
             if party_details and party_values(recovered) != expected_party_values:
-                raise OllamaError("The model changed party levels or player counts during recovery. Try translating again.")
+                raise TranslationInvariantError("The model changed party levels or player counts during recovery. Try translating again.")
             return recovered
 
         if protected_links:
@@ -921,7 +982,7 @@ class OllamaClient:
                 # Fragment recovery was validated for incoming English chat.
                 # Other targets can lose grammar/meaning across boundaries;
                 # do not copy a degraded outgoing reply as a successful result.
-                raise OllamaError("The model changed a linked item, URL, game abbreviation, or party detail. Try translating again.")
+                raise TranslationInvariantError("The model changed a linked item, URL, game abbreviation, or party detail. Try translating again.")
             # One substitution pass prevents an item name resembling a token
             # from being mistaken for another placeholder during restoration.
             def restore(match):
@@ -947,11 +1008,11 @@ class OllamaClient:
         if party_details and party_values(translated) != expected_party_values:
             if self.target_language.casefold() == "english":
                 return recover_fixed_text()
-            raise OllamaError("The model changed party levels or player counts. Try translating again.")
+            raise TranslationInvariantError("The model changed party levels or player counts. Try translating again.")
         if expected_urls and url_values(translated) != expected_urls:
             if self.target_language.casefold() == "english":
                 return recover_fixed_text()
-            raise OllamaError("The model changed a URL. Try translating again.")
+            raise TranslationInvariantError("The model changed a URL. Try translating again.")
         if self.target_language.casefold() == "english":
             checked, _ = _protect_item_links(translated, fixed_labels)
             if expected_prices and expected_prices != _PRICE.findall(checked):

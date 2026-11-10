@@ -20,6 +20,7 @@ from tkinter import filedialog, messagebox, ttk
 from translator_core import (ChatRecord, LogTail, OllamaClient, REPLY_LANGUAGES, MAX_CHAT_CHARACTERS,
                              UNIVERSAL_TRADE_LANGUAGE, is_universal_trade_message, read_recent_chat)
 from chat_overlay import CHANNEL_COLORS, ChatOverlay, normalize_overlay_settings
+from chat_links import LINK_COLORS, insert_linked_text, normalize_display
 from reply_composer import ReplyComposer
 from game_log_setup import resolve_system_log
 from app_paths import settings_file
@@ -321,6 +322,8 @@ class TranslatorApp:
         self.transcript.tag_bind("reply", "<Leave>", lambda _: self.transcript.configure(cursor="arrow"))
         for channel, color in CHANNEL_COLORS.items():
             self.transcript.tag_configure(f"channel{channel}", foreground=color)
+        for tag, color in LINK_COLORS.items():
+            self.transcript.tag_configure(tag, foreground=color)
         self._note("Waiting for new chat. Use Translate recent chat to read saved messages.")
 
         footer = ttk.Frame(outer)
@@ -478,13 +481,16 @@ class TranslatorApp:
         color = f"channel{record.channel}" if record.channel in CHANNEL_COLORS else "translation"
         self.transcript.insert("end", f"{record.timestamp}  ", "meta")
         self.transcript.insert("end", one_line(record.sender or tr("Notice")) + ": ", (color, "sender"))
-        self.transcript.insert("end", one_line(record.message if error else translated), color)
+        body = normalize_display(record.message, spans=record.link_spans) if error else normalize_display(translated)
+        insert_linked_text(self.transcript, body, color)
         self.transcript.insert("end", "  " + tr("Reply"), ("reply", tag))
         self.transcript.insert("end", "\n", "translation")
         if error:
             self.transcript.insert("end", "  " + tr("Translation unavailable: {error}", error=one_line(translated)) + "\n", "error")
         elif self.show_original.get() and record.message.strip() != translated.strip():
-            self.transcript.insert("end", "  " + one_line(record.message) + "\n", "original")
+            self.transcript.insert("end", "  ", "original")
+            insert_linked_text(self.transcript, normalize_display(record.message, spans=record.link_spans), "original")
+            self.transcript.insert("end", "\n", "original")
 
     def _render_rows(self):
         follow = self.transcript.yview()[1] >= AUTOSCROLL_BOTTOM_FRACTION
@@ -627,9 +633,9 @@ class TranslatorApp:
             try:
                 if self.stop.is_set():
                     break
-                # Identical visible text can come from plain chat or a party
-                # link; only the latter carries immutable range/count details.
-                key = (target, record.message, record.item_links, record.party_details)
+                # Identical visible text can have different actual link spans.
+                # Keep their translated text and display provenance together.
+                key = (target, record.message, record.item_links, record.party_details, record.link_spans)
                 if key in cache:
                     translated, source_language = cache[key]
                     cache.move_to_end(key)
@@ -639,7 +645,8 @@ class TranslatorApp:
                     options = {"item_links": record.item_links} if record.item_links else {}
                     if record.party_details:
                         options["party_details"] = record.party_details
-                    translated = clients[target].translate(record.message, **options)
+                    translated = (clients[target].translate_record(record) if record.link_spans
+                                  else clients[target].translate(record.message, **options))
                     if self.stop.is_set():
                         break
                     try:

@@ -28,7 +28,7 @@ from build_environment import clean_environment, windows_directories, write_spec
 
 SOURCES = (
     "installer_main.py", "installer_runtime.py", "app_paths.py", "app_version.py", "app_icon.py",
-    "translator_app.py", "translator_core.py", "game_slang.py", "item_catalog.py",
+    "translator_app.py", "translator_core.py", "game_slang.py", "item_catalog.py", "chat_links.py",
     "game_log_setup.py", "chat_overlay.py", "overlay_tray.py", "reply_composer.py", "uninstall_data.py",
     "app_updater.py", "update_trust.py", "update_controls.py", "installation_cleanup.py",
     "local_service.py", "runtime_integrity.py", "secure_storage.py", "update_network.py",

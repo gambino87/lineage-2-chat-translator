@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 from urllib import request
 
 import translator_core
+from chat_links import ChatLinkSpan
 from translator_core import ChatRecord, LogTail, OllamaClient, OllamaError, parse_chat_line, read_recent_chat
 
 
@@ -46,7 +47,8 @@ class ParserTests(unittest.TestCase):
         record = parse_chat_line(line("wts " + item_link(), "ExampleTrader", 25))
         self.assertEqual(record, ChatRecord(
             "16:23:42", "ExampleTrader", "wts [Necklace of Frintezza]", 25,
-            ("[Necklace of Frintezza]",)))
+            ("[Necklace of Frintezza]",),
+            link_spans=(ChatLinkSpan("item", 4, 4 + len("[Necklace of Frintezza]")),)))
 
     def test_multiple_and_repeated_links_preserve_surrounding_chat(self):
         first = item_link("Doom Plate Armor")
@@ -168,7 +170,8 @@ class TailTests(unittest.TestCase):
         live = self.tail.poll()
         self.assertEqual(live, [ChatRecord(
             "16:23:42", "Player", "Продам [Necklace of Freya] 10kk", 25,
-            ("[Necklace of Freya]",))])
+            ("[Necklace of Freya]",),
+            link_spans=(ChatLinkSpan("item", 7, 7 + len("[Necklace of Freya]")),))])
         self.assertEqual(read_recent_chat(self.path), live)
         self.assertEqual(self.tail.poll(), [])
 

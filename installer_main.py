@@ -235,6 +235,12 @@ def self_test() -> dict:
     if (party_record is None or party_record.message != "Need healer [12~19] (8/9)"
             or party_record.item_links or party_record.party_details != ("[12~19]", "(8/9)")):
         raise AssertionError("Bundled party-link separation failed.")
+    from chat_links import mark_link_boundaries, restore_link_boundaries, normalize_display
+    marked, boundaries = mark_link_boundaries(party_record.message, party_record.link_spans)
+    styled = normalize_display(restore_link_boundaries(marked, boundaries))
+    if (len(styled.link_spans) != 1 or styled.link_spans[0].kind != "party"
+            or styled[styled.link_spans[0].start:styled.link_spans[0].end] != party_record.message):
+        raise AssertionError("Bundled link display provenance failed.")
     import chat_overlay
     import reply_composer
     import translator_app
@@ -293,7 +299,7 @@ def self_test() -> dict:
             "models": list(MODEL_CATALOG), "settings_path": str(SETTINGS_PATH),
             "app_settings_path": str(translator_app.SETTINGS),
             "item_catalog_version": catalog.version, "item_catalog_entries": len(catalog.items),
-            "checks": ["bundled imports", "Tcl runtime", "native TLS, hashing and compression", "synthetic log parser", "model catalog", "loopback client", "bundled icon", "bundled item database", "localized item ID resolution", "party link separation", "source URL protection", "bundled update helper", "bundled external cleanup helper", "bundled installation permission helper", "offline interface language catalogs"] + (["bundled cleanup inventory", "no obsolete app-local UCRT"] if getattr(sys, "frozen", False) else []) + (["Windows system UCRT"] if system_ucrt else []),
+            "checks": ["bundled imports", "Tcl runtime", "native TLS, hashing and compression", "synthetic log parser", "model catalog", "loopback client", "bundled icon", "bundled item database", "localized item ID resolution", "party link separation", "link display provenance", "source URL protection", "bundled update helper", "bundled external cleanup helper", "bundled installation permission helper", "offline interface language catalogs"] + (["bundled cleanup inventory", "no obsolete app-local UCRT"] if getattr(sys, "frozen", False) else []) + (["Windows system UCRT"] if system_ucrt else []),
             "system_tray_imports": True,
             "windows_opened": False, "network_requests": False}
 

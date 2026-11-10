@@ -13,6 +13,7 @@ import tkinter as tk
 from tkinter import messagebox
 
 from translator_core import LANGUAGE_CODES, MAX_CHAT_CHARACTERS, UNIVERSAL_TRADE_LANGUAGE
+from chat_links import LINK_COLORS, insert_linked_text, normalize_display
 from reply_composer import whisper_recipient
 from overlay_tray import ChannelTray
 from ui_i18n import tr
@@ -147,7 +148,9 @@ def make_overlay_message(record, translated, source="Live", error=False) -> Over
     """Build a bounded display row without changing its original reply target."""
     sender = _one_line(record.sender, SENDER_DISPLAY_CHARACTERS) or ("Sample" if source == "Sample" else "Notice")
     return OverlayMessage(_one_line(record.timestamp, TIMESTAMP_DISPLAY_CHARACTERS), sender,
-                          _one_line(record.message), _one_line(translated, ERROR_DISPLAY_CHARACTERS if error else MAX_CHAT_CHARACTERS),
+                          normalize_display(record.message, spans=getattr(record, "link_spans", ()), limit=MAX_CHAT_CHARACTERS),
+                          normalize_display(translated, spans=() if error else None,
+                                            limit=ERROR_DISPLAY_CHARACTERS if error else MAX_CHAT_CHARACTERS),
                           int(record.channel), bool(error), record)
 
 
@@ -158,7 +161,7 @@ def message_parts(message: OverlayMessage, settings: dict) -> tuple[str, str, st
     language = "[--]" if source_language == UNIVERSAL_TRADE_LANGUAGE else f"[{LANGUAGE_CODES.get(source_language, '??')}]"
     sender = tr(message.sender) if message.record is not None and not str(getattr(message.record, "sender", message.sender)).strip() else message.sender
     name = f"[{sender}]: "
-    text = (tr("Translation unavailable: ") if message.error else "") + message.translated
+    text = tr("Translation unavailable: ") + str(message.translated) if message.error else message.translated
     original = message.original if settings.get("show_original") and message.original != message.translated else ""
     return timestamp, language, name, text, original
 
@@ -515,6 +518,8 @@ class ChatOverlay:
         self.text.tag_configure("error", foreground="#efb19b")
         self.text.tag_configure("reply", foreground=GOLD, underline=True,
                                 font=("Tahoma", max(8, size - 1)))
+        for tag, color in LINK_COLORS.items():
+            self.text.tag_configure(tag, foreground=color)
         self.window.attributes("-alpha", self.settings["opacity"])
         self.window.attributes("-topmost", True)
         if self._native:
@@ -651,9 +656,10 @@ class ChatOverlay:
         if self.on_reply and message.record is not None and whisper_recipient(message.record.sender):
             name_tags += ("whisper", tag)
         self.text.insert("end", name, name_tags)
-        self.text.insert("end", translated, color_tag)
+        insert_linked_text(self.text, translated, color_tag)
         if original:
-            self.text.insert("end", "\n  " + original, "original")
+            self.text.insert("end", "\n  ", "original")
+            insert_linked_text(self.text, original, "original")
 
     def add_message(self, record, translated, source="Live", error=False):
         if self._destroyed:

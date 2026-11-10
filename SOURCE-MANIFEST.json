@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "product": "Lineage 2 Chat Translator",
-  "version": "1.8.2",
+  "version": "1.8.3",
   "purpose": "Source published for transparency; not a claim of byte-for-byte binary reproducibility.",
   "published_installer": {
-    "file": "Lineage-2-Chat-Translator-1.8.2-Setup.exe",
-    "bytes": 21584438,
-    "sha256": "3c0cfbd4dff50b3d950868d25e8a1ce596d9679ad0e57a3e8db7d40261b58927",
-    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.8.2-Setup.exe"
+    "file": "Lineage-2-Chat-Translator-1.8.3-Setup.exe",
+    "bytes": 21592778,
+    "sha256": "2a6eec44ff64a07f9f451ee5c85af3a465d6e2cf8d0fdb5f27340079b5ac8ddb",
+    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.8.3-Setup.exe"
   },
   "release_toolchain": {
     "python": "3.12.10",
@@ -17,7 +17,7 @@
   "application_sources": [
     {
       "path": "installer_main.py",
-      "sha256": "d5b2edcb9176468d4a5836c34e6791200ef23b106945c2fd48e77bd77ce8daa9"
+      "sha256": "772f0fa24372518b33e7096c6e4fd80e3df249113a0a1b6097194d272b5a9981"
     },
     {
       "path": "installer_runtime.py",
@@ -29,7 +29,7 @@
     },
     {
       "path": "app_version.py",
-      "sha256": "85101b6c442f01a9eb51d209a20420ddb5570de9f8dd8a874174ad97ea4a03b9"
+      "sha256": "de934913f8a9b3b3172ca9d7736b9987259b61692fe01e6e6c9d461d1160b2f1"
     },
     {
       "path": "app_icon.py",
@@ -37,19 +37,23 @@
     },
     {
       "path": "translator_app.py",
-      "sha256": "0ce068d5a7984f7c166ff5143e1b89a795960f4548848943328d379ea193dee7"
+      "sha256": "6b25e68a43139dbed33cc7b70ccb0ac08e29ddac024698fec7aada436fb83d17"
     },
     {
       "path": "translator_core.py",
-      "sha256": "abf82927e94337273d3998310e0441d1cc57d5565171f6e298371f7b98892cec"
+      "sha256": "6957dc843097baea087df95306297640364bb1a0b9334a9861fc17adc9b29450"
     },
     {
       "path": "game_slang.py",
-      "sha256": "11dc04184c95dcfbe3ac15c21132845a5a6a241c382e108ba18d95e285bda03c"
+      "sha256": "b6c44a659fc96733293555e1576496291fe4c66029e7a8c4c719f63b856a6a9c"
     },
     {
       "path": "item_catalog.py",
       "sha256": "445ee410f2ddd4fd85b048bf6a0ebb368964fd8a34e80a44683d463027999f4e"
+    },
+    {
+      "path": "chat_links.py",
+      "sha256": "243c21bd85d259f1c11d9dc9cad1474453a03f947d701d29f15662d3d79a33c4"
     },
     {
       "path": "game_log_setup.py",
@@ -57,7 +61,7 @@
     },
     {
       "path": "chat_overlay.py",
-      "sha256": "d53f7cdc911773dae5fdeea4a177df218d78ed03e1e4059cd06692870c6f8540"
+      "sha256": "42b3a5a4c6dbf692651f6003504168e5e9d04e32211788e226435efba7e547e6"
     },
     {
       "path": "overlay_tray.py",
@@ -191,7 +195,7 @@
     },
     {
       "path": "CODEMAP.md",
-      "sha256": "56a9bb58a16971a73cd3b9641782a052a4e15b521ea41d80aafceba65acc0e9a"
+      "sha256": "c9b87456e8ebe9c8179c17ef1936514dee976642546d288482324afee9529654"
     },
     {
       "path": "LICENSE-NOTICE.md",
@@ -199,7 +203,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "300a2a9344b97128ba550dd69824ed6a902d7db96e84982f62e010ba4fe5ec8d"
+      "sha256": "1afe24d5831e62e4f7e8f0ad6632cbe06b560de4a4d8b98d7fce97e2feaebc31"
     },
     {
       "path": "SECURITY.md",
@@ -231,7 +235,7 @@
     },
     {
       "path": "app_version.py",
-      "sha256": "85101b6c442f01a9eb51d209a20420ddb5570de9f8dd8a874174ad97ea4a03b9"
+      "sha256": "de934913f8a9b3b3172ca9d7736b9987259b61692fe01e6e6c9d461d1160b2f1"
     },
     {
       "path": "assets/ITEM-CATALOG-NOTICE.txt",
@@ -266,8 +270,12 @@
       "sha256": "e5080513ef2a7c3085e6a87afc0ca14cb995d95557217b31d711379e6be2c9d1"
     },
     {
+      "path": "chat_links.py",
+      "sha256": "243c21bd85d259f1c11d9dc9cad1474453a03f947d701d29f15662d3d79a33c4"
+    },
+    {
       "path": "chat_overlay.py",
-      "sha256": "d53f7cdc911773dae5fdeea4a177df218d78ed03e1e4059cd06692870c6f8540"
+      "sha256": "42b3a5a4c6dbf692651f6003504168e5e9d04e32211788e226435efba7e547e6"
     },
     {
       "path": "game_log_setup.py",
@@ -275,11 +283,11 @@
     },
     {
       "path": "game_slang.py",
-      "sha256": "11dc04184c95dcfbe3ac15c21132845a5a6a241c382e108ba18d95e285bda03c"
+      "sha256": "b6c44a659fc96733293555e1576496291fe4c66029e7a8c4c719f63b856a6a9c"
     },
     {
       "path": "game_slang_research.json",
-      "sha256": "03222997e69445ca0067ff62ab1bd9ceb8f30bbdd6e7f1f00d39cb137a7debb2"
+      "sha256": "5cf6e9407c84a240cdea69dc1a28726dae0f6a12768a3de4e1cc35def6b9823b"
     },
     {
       "path": "installation_cleanup.py",
@@ -287,7 +295,7 @@
     },
     {
       "path": "installer_main.py",
-      "sha256": "d5b2edcb9176468d4a5836c34e6791200ef23b106945c2fd48e77bd77ce8daa9"
+      "sha256": "772f0fa24372518b33e7096c6e4fd80e3df249113a0a1b6097194d272b5a9981"
     },
     {
       "path": "installer_runtime.py",
@@ -339,7 +347,7 @@
     },
     {
       "path": "packaging/USER-README.txt",
-      "sha256": "e1ca985c8be840a361c2fa2773a6820840a487c718805c9745eb997357220d5c"
+      "sha256": "a131e78c6d414ca3119255f2d60799d4f5b42d68c0613a5f3733f87da535e77b"
     },
     {
       "path": "packaging/bootstrap-tools.ps1",
@@ -347,7 +355,7 @@
     },
     {
       "path": "packaging/build.py",
-      "sha256": "517bf642b748c49305e8854df665794dd5a1394a9a72cab79ccbb93cf79f45b8"
+      "sha256": "ec816b10d15b857bc2f41379f9857aeea16518e98f0f70157551652787dd6f59"
     },
     {
       "path": "packaging/build_environment.py",
@@ -491,11 +499,11 @@
     },
     {
       "path": "packaging/public-source/README.template.md",
-      "sha256": "0854d650ba7ef5a56f31111e588eba06b6cab106eeefbb355b65bb5d96cbfa90"
+      "sha256": "429340c5ca0217c11d336d4e4dc6883e409e24533aaa9b6fd4de0599f5ab685d"
     },
     {
       "path": "packaging/public-source/allowlist.json",
-      "sha256": "28162f34bc93dd86da50913c6faabc1471f83476b48c57565666bb334d5b06e9"
+      "sha256": "ca244dba3a601d2ab7d96894d98661b716ce0d5d2659c40bf1e2972b5c3e756a"
     },
     {
       "path": "packaging/public-source/gitattributes.txt",
@@ -611,11 +619,11 @@
     },
     {
       "path": "sites/l2-chat-translator/changelog.json",
-      "sha256": "2e276b2265d2da5adaf62dab746840d856e7133ff9fbd468593cbad1db6ec448"
+      "sha256": "322d1c14ecdf5e3167a0219a0235a70ffe48741b40b121a6d7a1d5609f709756"
     },
     {
       "path": "sites/l2-chat-translator/index.template.html",
-      "sha256": "49e97d5fd151cce53613345b15842ee98693dfd9eb39b08c4be337881a3aee09"
+      "sha256": "3013fc24841f1f5eeb42f413dcc0a4f846119b0b8009baaf27735894596eb08c"
     },
     {
       "path": "tests/test_app_update_integration.py",
@@ -628,6 +636,10 @@
     {
       "path": "tests/test_build_environment.py",
       "sha256": "2dd1631a1bbe5129ed25173879b8e185820469f4777ff0ab92eb11109db287e8"
+    },
+    {
+      "path": "tests/test_chat_links.py",
+      "sha256": "6427d4e1c1d070b4a201c3419bea8fb2a7cd01042a361c4a3c136d12c5754c38"
     },
     {
       "path": "tests/test_chat_overlay.py",
@@ -671,7 +683,7 @@
     },
     {
       "path": "tests/test_game_slang.py",
-      "sha256": "94cebdc9013d936f8840fff8ee997aafd50956c9ee61627470e79d8d7c70a737"
+      "sha256": "cb15b1a375d3d6d4e8ab91f592c041ad69eb4e8b2cc511b613e4e503de149f91"
     },
     {
       "path": "tests/test_install_directory_security.py",
@@ -714,6 +726,10 @@
       "sha256": "404975728367c7ef33ddf43013447b298c2da5e87dbfbfce44e1207bd65e0c81"
     },
     {
+      "path": "tests/test_link_rendering.py",
+      "sha256": "7573fae6f47bc629fbcc36e0d5c26a031adf1daa9c1abeebb0e9ebf37456ce0c"
+    },
+    {
       "path": "tests/test_local_service.py",
       "sha256": "5e259f46070ebc3210a9b4409c87ff43688f0a62cb372000f6c7d20142103d69"
     },
@@ -739,7 +755,7 @@
     },
     {
       "path": "tests/test_overlay_integration.py",
-      "sha256": "13f90686ec0706b7548c3cdec53d64a04dc1f312a520ae869253f147be0ebfc2"
+      "sha256": "945755d6cefd05ad5937e6db8b84bc7ef8b38416a456857751e6dad0db0f2dce"
     },
     {
       "path": "tests/test_overlay_localization.py",
@@ -811,7 +827,7 @@
     },
     {
       "path": "tests/test_translator_core.py",
-      "sha256": "292f1baaaed1286f8495a6ead8f28fe133ac25246a11fa1c3d8d1130f5726a20"
+      "sha256": "604c4d1c9fbda6f09db547c84c2f4c4cf0fcdc181528b2a419469215223690b0"
     },
     {
       "path": "tests/test_tray_controls.py",
@@ -867,11 +883,11 @@
     },
     {
       "path": "translator_app.py",
-      "sha256": "0ce068d5a7984f7c166ff5143e1b89a795960f4548848943328d379ea193dee7"
+      "sha256": "6b25e68a43139dbed33cc7b70ccb0ac08e29ddac024698fec7aada436fb83d17"
     },
     {
       "path": "translator_core.py",
-      "sha256": "abf82927e94337273d3998310e0441d1cc57d5565171f6e298371f7b98892cec"
+      "sha256": "6957dc843097baea087df95306297640364bb1a0b9334a9861fc17adc9b29450"
     },
     {
       "path": "tray_controls.py",

@@ -181,6 +181,14 @@ window belongs to this process before applying native styles/placement.
 ChatOverlay renders text, handles resize/move/click-through settings and routes
 reply selections back to the launcher.
 
+[chat_links.py](chat_links.py): ChatLinkSpan retains exact item/party link
+occurrences, including full translatable party titles. LinkedText carries
+validated translated spans in memory. normalize_display maps those spans across
+whitespace/truncation; insert_linked_text applies foreground colors to known
+links only. Invalid boundaries lose their styling without leaking private
+markers. The worker cache includes source spans so identical plain and linked
+text do not share display provenance.
+
 [overlay_tray.py](overlay_tray.py): tray_geometry and choice_columns calculate
 layout; ChannelTray manages the attached filter window, animation and selection
 callback. Neither module hooks the game or reads its memory/screen.

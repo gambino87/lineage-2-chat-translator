@@ -12,11 +12,13 @@ class Hint:
     pattern: re.Pattern
     meaning: str
     context: re.Pattern | None = None
+    exclude: re.Pattern | None = None
 
 
-def _hint(pattern, meaning, context=None):
+def _hint(pattern, meaning, context=None, *, exclude=None):
     return Hint(re.compile(pattern, re.IGNORECASE), meaning,
-                re.compile(context, re.IGNORECASE) if context else None)
+                re.compile(context, re.IGNORECASE) if context else None,
+                re.compile(exclude, re.IGNORECASE) if exclude else None)
 
 
 def _words(forms):
@@ -28,6 +30,9 @@ _ZH_COMBAT = r"(?:怪物|拉怪|引怪|刷怪|抢怪|搶怪|奶妈|奶媽|补师
 
 # Incoming non-English chat. Existing v1.3.5 hints retain their wording.
 _INCOMING = (
+    # Standalone approval; do not reinterpret a literal place or a question.
+    _hint(r"\A[\s¡!]*bien\s+ah[ií](?:[\s!.…]|[:;]-?[)D])*\Z",
+          'Spanish bien ahí / bien ahi = Nice!'),
     # Complete Greeklish say-so clauses: keep grammatical person distinct.
     _hint(r"(?<!\w)afou\s+to\s+lete\s+kai\s+oi\s+d(?:yo|io)(?=[.!?…\s]*\Z)",
           'Greeklish afou to lete kai oi dyo/dio (αφού το λέτε και οι δυο) = since both of you say so; kala (καλά) = okay/well'),
@@ -86,20 +91,45 @@ _INCOMING = (
           "мск = Moscow time (MSK)"),
 )
 
+
+# A Spanish reply gets only the narrow English gaming vocabulary below.
+# Real agriculture and noun/proper-name uses are deliberately excluded.
+_EN_LITERAL_FARMING = (r"(?<!\w)(?:agricultur\w*|crops?|wheat|corn|maize|rice|potatoes?|tomatoes?|"
+                       r"vegetables?|tractors?|livestock|cattle|dairy|barns?|pastures?|orchards?|harvest\w*)(?!\w)"
+                       r"|\bfarming\s+(?:is|was|industry|business|occupation|profession)\b"
+                       r"|\b(?:work|job|occupation|profession)\s+(?:in|is|was)\s+farming\b")
+_EN_FARMING_ACTIVITY = (r"\A\s*farming\b"
+                        r"|\b(?:am|is|are|was|were|be|been|not|keep|stop|start|started|stopped)\s+farming\b"
+                        r"|(?<!\w)(?:I['’]m|we['’]re|you['’]re|they['’]re)\s+farming\b")
+_EN_FARM_VERB = (r"(?<!\w)(?:I|we|you|they)\s+(?:(?:will|can|could|should|must|would|might|may)\s+(?:not\s+)?|(?:do|did)\s+not\s+|don['’]t\s+)?farm(?!\w)"
+                 r"|(?<!\w)(?:I|we|you|they)\s+(?:want|need|plan|like|love|hate|prefer)\s+to\s+farm(?!\w)"
+                 r"|(?<!\w)(?:let['’]s\s+(?:not\s+)?|(?:can|could|should)\s+(?:I|we|you|they)\s+)farm(?!\w)")
+_OUTGOING_SPANISH = (
+    _hint(_words("farming"),
+          'farming (gaming) = farmeando',
+          _EN_FARMING_ACTIVITY, exclude=_EN_LITERAL_FARMING),
+    _hint(_words("farm"), "farm (gaming) = farmear", _EN_FARM_VERB,
+          exclude=_EN_LITERAL_FARMING),
+)
+
 MAX_HINTS = 8
 MAX_HINT_CHARS = 1000
 
 
 def game_glossary(text: str, target_language: str) -> str:
     """Bound context size and select relevant hints without modifying text."""
-    # Outgoing English slang is documented, but candidate hints did not reliably
-    # improve replies on qwen2.5:3b. Leave that path unchanged.
-    if target_language.casefold() != "english":
+    target = target_language.casefold()
+    if target == "english":
+        rules = _INCOMING
+    elif target == "spanish":
+        rules = _OUTGOING_SPANISH
+    else:
         return ""
-    rules = _INCOMING
     meanings = []
     length = 0
     for rule in rules:
+        if rule.exclude and rule.exclude.search(text):
+            continue
         if not rule.pattern.search(text) or (rule.context and not rule.context.search(text)):
             continue
         if len(meanings) >= MAX_HINTS or length + len(rule.meaning) + 2 > MAX_HINT_CHARS:

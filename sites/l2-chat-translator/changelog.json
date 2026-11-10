@@ -1,5 +1,14 @@
 [
   {
+    "version": "1.8.3",
+    "changes": [
+      "Linked items now appear in light grey and party recruitment links in light blue in the launcher and overlay.",
+      "Surrounding text and player names keep their chat-channel colors. Party descriptions remain translated, and original-message views use the same link colors.",
+      "Improved standalone Spanish approval replies such as 'bien ahí' so they read naturally in English ('Nice!').",
+      "Added selected English farm/farming game vocabulary for Spanish replies, using farmear/farmeando in supported activity and verb contexts while retaining the original grammar and stated details."
+    ]
+  },
+  {
     "version": "1.8.2",
     "changes": [
       "Matched Shout chat and its channel labels to the in-game orange color."

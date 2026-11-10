@@ -434,5 +434,100 @@ class GreeklishClauseTests(unittest.TestCase):
                 self.assertEqual(game_glossary("kala afou to lete kai oi dyo", target), "")
 
 
+class SpanishNaturalnessTests(unittest.TestCase):
+    def client(self, *outputs, target="English"):
+        client = OllamaClient(target_language=target)
+        client._verify_local_model = Mock()
+        client._request = Mock(side_effect=[{"message": {"content": output}} for output in outputs])
+        return client
+
+    def test_standalone_approval_accepts_accents_case_punctuation_and_positive_emoticons(self):
+        for source in ("bien ahi", "¡Bien ahí!", " BIEN AHI!! ", "bien ahí...", "bien ahi :)", "bien ahí ;D"):
+            with self.subTest(source=source):
+                self.assertIn("Nice!", game_glossary(source, "English"))
+
+    def test_location_questions_negation_and_names_are_not_approval(self):
+        for source in ("Está bien ahí, no lo muevas.", "Ponlo bien ahí.", "Me va bien ahí.",
+                       "¿Bien ahí?", "¿Todo bien ahí?", "bien ahí?", "No está bien ahí.",
+                       "The clan is called 'Bien Ahi'.", "bien ahiPlayer", "Bien ahí, no lo vendas."):
+            with self.subTest(source=source):
+                self.assertNotIn("Nice!", game_glossary(source, "English"))
+
+    def test_spanish_inventory_selects_progressive_and_base_game_verbs(self):
+        for source, meaning in (("Farming before work starts", "farmeando"),
+                                ("I am farming adena", "farmeando"),
+                                ("She's here; she is farming mobs", "farmeando"),
+                                ("I am not farming today", "farmeando"),
+                                ("Keep farming", "farmeando"),
+                                ("We are farming mobs near the farm", "farmeando"),
+                                ("I will farm later, not now", "farmear"),
+                                ("We do not farm here", "farmear"),
+                                ("I want to farm adena", "farmear"),
+                                ("Can we farm later?", "farmear")):
+            with self.subTest(source=source):
+                self.assertIn(meaning, game_glossary(source, "sPaNiSh"))
+
+    def test_explicit_agriculture_and_noun_name_uses_get_no_game_verb_hint(self):
+        for source in ("Farming corn before work starts", "I am farming wheat", "We will farm rice",
+                       "Farming is my job", "I work in farming", "The farming industry is growing",
+                       "I grew up on a farm", "Meet me at the farm", "Can Farm join us?",
+                       "Farm, wait here", "I am playing Farming Simulator", "Hello FarmingPlayer"):
+            with self.subTest(source=source):
+                self.assertEqual(game_glossary(source, "Spanish"), "")
+
+    def test_protected_labels_and_urls_neither_supply_nor_suppress_game_cues(self):
+        for source, labels in (("Selling [Farming] 10kk", ("[Farming]",)),
+                               ("See https://example.com/farming", ()),
+                               ("[bien ahí] 10kk", ("[bien ahí]",))):
+            with self.subTest(source=source):
+                masked, _ = _protect_item_links(source, labels)
+                for target in ("English", "Spanish"):
+                    self.assertEqual(game_glossary(masked, target), "")
+        # An immutable game item named after a crop is not agriculture evidence.
+        masked, _ = _protect_item_links("Farming [Wheat]", ("[Wheat]",))
+        self.assertIn("farmeando", game_glossary(masked, "Spanish"))
+
+    def test_targets_keep_separate_vocabularies(self):
+        self.assertEqual(game_glossary("Farming before work starts", "English"), "")
+        self.assertEqual(game_glossary("bien ahi", "Spanish"), "")
+        self.assertEqual(game_glossary("Куплю соски. Bora upar, pj. 奶妈拉怪。", "Spanish"), "")
+        for target in ("Portuguese", "Greek", "Russian", "Chinese"):
+            for source in ("Farming before work starts", "bien ahi"):
+                with self.subTest(target=target, source=source):
+                    self.assertEqual(game_glossary(source, target), "")
+
+    def test_spanish_rules_share_count_character_and_exclusion_budgets(self):
+        rules = tuple(Hint(re.compile("trigger"), f"spanish_{n}") for n in range(game_slang.MAX_HINTS + 3))
+        with patch.object(game_slang, "_OUTGOING_SPANISH", rules):
+            result = game_glossary("trigger", "Spanish")
+        self.assertEqual(sum(f"spanish_{n}" in result for n in range(len(rules))), game_slang.MAX_HINTS)
+        excluded = Hint(re.compile("trigger"), "x" * (game_slang.MAX_HINT_CHARS + 1), exclude=re.compile("trigger"))
+        included = Hint(re.compile("trigger"), "selected_after_exclusion")
+        with patch.object(game_slang, "_OUTGOING_SPANISH", (excluded, included)):
+            self.assertIn("selected_after_exclusion", game_glossary("trigger", "Spanish"))
+        oversized = Hint(re.compile("trigger"), "x" * (game_slang.MAX_HINT_CHARS + 1))
+        with patch.object(game_slang, "_OUTGOING_SPANISH", (oversized,)):
+            self.assertEqual(game_glossary("trigger", "Spanish"), "")
+
+    def test_spanish_hint_preserves_source_roles_and_fixed_text(self):
+        source = "Farming [Club] before work; https://example.com/a 10kk"
+        masked, _ = _protect_item_links(source, ("[Club]",))
+        answer = masked.replace("Farming", "Farmeando").replace("before work", "antes del trabajo")
+        client = self.client(answer, target="Spanish")
+        self.assertEqual(client.translate(source, item_links=("[Club]",)),
+                         "Farmeando [Club] antes del trabajo; https://example.com/a 10kk")
+        payload = client._request.call_args.args[1]
+        self.assertEqual(payload["messages"][1], {"role": "user", "content": masked})
+        self.assertIn("untrusted", payload["messages"][0]["content"])
+
+    def test_damaged_spanish_placeholders_still_fail_without_fragment_recovery(self):
+        for answer in ("Farmeando un club", "Farmeando [[L2ITEM0]] [[L2ITEM0]]"):
+            with self.subTest(answer=answer):
+                client = self.client(answer, target="Spanish")
+                with self.assertRaises(OllamaError):
+                    client.translate("Farming [Club] before work", item_links=("[Club]",))
+                self.assertEqual(client._request.call_count, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -141,6 +141,7 @@ class OverlayMessageIntegrationTests(unittest.TestCase):
 
         client = Mock()
         client.translate.side_effect = translate
+        client.translate_record.side_effect = translate
         client.detect_language.return_value = language
         if detection_failure:
             client.detect_language.side_effect = RuntimeError(detection_failure)
@@ -374,8 +375,8 @@ class OverlayMessageIntegrationTests(unittest.TestCase):
         self.app.enqueue(record, "Live")
         translated = "Selling [Necklace of Frintezza] for 10kk"
         client = self.finish_one_job(translated=translated)
-        client.translate.assert_called_once_with(
-            "Продам [Necklace of Frintezza] за 10kk", item_links=("[Necklace of Frintezza]",))
+        client.translate_record.assert_called_once_with(record)
+        client.translate.assert_not_called()
         self.app.overlay.add_message.assert_called_once_with(
             replace(record, source_language="Russian"), translated, source="Live", error=False)
         overlay_line = make_overlay_message(*self.app.overlay.add_message.call_args.args)

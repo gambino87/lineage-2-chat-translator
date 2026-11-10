@@ -47,6 +47,7 @@
     .overlay-messages p{margin:0 0 4px;overflow-wrap:anywhere}
     .overlay-messages p:last-child{margin:0}
     .chat-party{color:#0cff0c}.chat-all{color:#f0f0ed}.chat-trade{color:#f15353}
+    .chat-item-link{color:#d3d3d3}.chat-party-link{color:#add8e6}
     .chat-time{color:#a59e8b;font-size:11px}
     .chat-language,.chat-name{text-decoration:underline;text-underline-offset:2px}
     .chat-name{font-weight:600}
@@ -107,13 +108,14 @@
       <h2 id="reply-title">Replies</h2>
       <p>Click a language code in the overlay to select a reply language, or a player name to address that player. Type in English and press Enter. The translation is copied to the clipboard for you to paste into the game.</p>
       <p class="muted">Recognized universal trade listings show <code>[--]</code>; choose their reply language manually. Change the game folder or translation preferences in the launcher’s Settings.</p>
+      <p class="muted">Linked items appear in light grey and party recruitment links in light blue in the launcher and overlay. The surrounding message keeps its chat-channel color.</p>
       <figure class="app-preview">
         <div class="overlay-example" aria-label="Illustrative translation overlay with sample messages">
           <div class="overlay-bar"><strong>Translations</strong><span class="overlay-model">{{MODEL_NAME}}</span><span class="overlay-controls" aria-hidden="true">Lock &nbsp; Channels ▴ &nbsp; Settings &nbsp; × &nbsp; ◥</span></div>
           <div class="overlay-messages">
-            <p class="chat-party"><span class="chat-time">[19:42:06]</span><span class="chat-language">[RU]</span><span class="chat-name">[Arven]</span>: Looking for a healer [12~19] (8/9)</p>
+            <p class="chat-party"><span class="chat-time">[19:42:06]</span><span class="chat-language">[RU]</span><span class="chat-name">[Arven]</span>: <span class="chat-party-link">Looking for a healer [12~19] (8/9)</span></p>
             <p class="chat-all"><span class="chat-time">[19:43:12]</span><span class="chat-language">[ES]</span><span class="chat-name">[Nira]</span>: We’re meeting at the Giran gate.</p>
-            <p class="chat-trade"><span class="chat-time">[19:43:20]</span><span class="chat-language">[--]</span><span class="chat-name">[Rook]</span>: WTS [Sword of Delusion] 12kk</p>
+            <p class="chat-trade"><span class="chat-time">[19:43:20]</span><span class="chat-language">[--]</span><span class="chat-name">[Rook]</span>: WTS <span class="chat-item-link">[Sword of Delusion]</span> 12kk</p>
           </div>
         </div>
         <div class="reply-example" aria-label="Illustrative English-to-Spanish direct reply">

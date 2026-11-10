@@ -6,7 +6,7 @@
     "Russian coverage is Cyrillic game slang, informal spellings and Latin transliteration, not asserted regional dialect identification. Ukrainian and Bulgarian are separate languages.",
     "Simplified/Traditional Chinese and Portuguese/Spanish spelling do not identify nationality or spoken dialect.",
     "Universal abbreviations and linked item names are protected independently. Shared vocabulary must not determine source language.",
-    "English outgoing hints were tested but not enabled because they did not reliably improve qwen2.5:3b replies.",
+    "Historical qwen2.5 outgoing experiments stayed disabled. Selected English farming activity hints now apply only to Spanish replies, after current local-model validation and literal-agriculture controls.",
     "Examples are synthetic. Source links support usage or broader context, not necessarily every alias; risks describe evidence limits."
   ],
   "entries": [
@@ -1643,6 +1643,61 @@
         {
           "source": "這把杖不能吃蛋。",
           "expected_notes": "This staff cannot use shots."
+        }
+      ]
+    },
+    {
+      "id": "es_standalone_bien_ahi",
+      "language": "Spanish",
+      "forms": [
+        "bien ahí",
+        "bien ahi"
+      ],
+      "english_gloss": "short casual approval: Nice!",
+      "context": "Complete short approving utterance, with case, exclamation punctuation or positive ASCII emoticons.",
+      "risks": "Do not activate for literal placement, questions, negation, embedded clauses, quoted names, linked labels or URLs. Do not invent a specific achievement or add missing context.",
+      "sources": [
+        "https://www.udep.edu.pe/castellanoactual/duda-resuelta-bien-ahi/"
+      ],
+      "examples": [
+        {
+          "source": "¡Bien ahí!",
+          "expected_notes": "Natural approval such as Nice! rather than a literal place."
+        },
+        {
+          "source": "Está bien ahí, no lo muevas.",
+          "expected_notes": "Literal location; keep the baseline spatial meaning."
+        }
+      ]
+    },
+    {
+      "id": "en_game_farming_to_spanish",
+      "language": "English",
+      "target_language": "Spanish",
+      "forms": [
+        "farming",
+        "farm"
+      ],
+      "english_gloss": "game resource-gathering activity; Spanish farmear/farmeando with source grammar retained",
+      "context": "Clear ongoing English activity or supported verb clauses in game chat. Bare ongoing farming defaults to the game sense when no explicit agricultural cues remain outside protected text.",
+      "risks": "Known explicit crop/livestock/industry cues and tested non-activity contexts suppress the hint. These syntax/keyword guards are not exhaustive sense detection: a bare Farming Simulator title or an unlisted crop can still select the game hint; no model-output regression for those cases was established here. Preserve source tense, person, negation, quantities and stated resources; do not add a resource, duration, shift or automation assumption. Ambiguous mixed game/agriculture sentences remain model-dependent.",
+      "sources": [
+        "https://catnessgames.com/es/wikigame/farmear/",
+        "https://worldofwarcraft.blizzard.com/es-es/news/20252902",
+        "https://l2.muplatas2.com/blog/economia-drop-spoil-adena"
+      ],
+      "examples": [
+        {
+          "source": "Farming before work starts",
+          "expected_notes": "Farmeando antes de que comience el trabajo, or another natural gaming equivalent without invented details."
+        },
+        {
+          "source": "I will farm later, not now.",
+          "expected_notes": "Future game activity with not-now contrast, using farmear."
+        },
+        {
+          "source": "Farming corn before work starts.",
+          "expected_notes": "Literal agriculture; no game vocabulary hint."
         }
       ]
     }
