@@ -1,5 +1,11 @@
 [
   {
+    "version": "1.8.2",
+    "changes": [
+      "Matched Shout chat and its channel labels to the in-game orange color."
+    ]
+  },
+  {
     "version": "1.8.1",
     "changes": [
       "Improved English translations of Greeklish 'afou to lete kai oi dyo/dio' endings ('since both of you say so'), including uppercase text. The similar 'to lene' form retains 'both of them'.",

@@ -42,8 +42,8 @@ HEADER = "#201f1a"
 BORDER = "#625841"
 GOLD = "#d4c59a"
 MUTED = "#a59e8b"
-# Whisper magenta, Party green and channel 25 red match the supplied chat references.
-CHANNEL_COLORS = {0: "#f0f0ed", 1: "#ffb769", 2: "#ff0cff",
+# Shout orange, Whisper magenta, Party green and channel 25 red match supplied chat references.
+CHANNEL_COLORS = {0: "#f0f0ed", 1: "#ff7b0c", 2: "#ff0cff",
                   3: "#0cff0c", 4: "#c2aeef", 8: "#e4b1d6",
                   9: "#b6dd89", 17: "#ffe390", 25: "#f15353"}
 # Filter labels use the same channel color/fallback as rendered messages.

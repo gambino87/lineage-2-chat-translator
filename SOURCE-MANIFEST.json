@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "product": "Lineage 2 Chat Translator",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "purpose": "Source published for transparency; not a claim of byte-for-byte binary reproducibility.",
   "published_installer": {
-    "file": "Lineage-2-Chat-Translator-1.8.1-Setup.exe",
-    "bytes": 21580865,
-    "sha256": "a9801ea6b27498500c9c054b00592c91ef2d2285dbd7879f5dd6f7a339139f8d",
-    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.8.1-Setup.exe"
+    "file": "Lineage-2-Chat-Translator-1.8.2-Setup.exe",
+    "bytes": 21584438,
+    "sha256": "3c0cfbd4dff50b3d950868d25e8a1ce596d9679ad0e57a3e8db7d40261b58927",
+    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.8.2-Setup.exe"
   },
   "release_toolchain": {
     "python": "3.12.10",
@@ -29,7 +29,7 @@
     },
     {
       "path": "app_version.py",
-      "sha256": "19dd5bc0ae9bc5ac854e13549ecee692eb916533a0d7bc6a9e3f1cfb09c526f3"
+      "sha256": "85101b6c442f01a9eb51d209a20420ddb5570de9f8dd8a874174ad97ea4a03b9"
     },
     {
       "path": "app_icon.py",
@@ -57,7 +57,7 @@
     },
     {
       "path": "chat_overlay.py",
-      "sha256": "f3f4d83f3e953735265331213bd554132d6bb22fb243db99803b26cfef04de1f"
+      "sha256": "d53f7cdc911773dae5fdeea4a177df218d78ed03e1e4059cd06692870c6f8540"
     },
     {
       "path": "overlay_tray.py",
@@ -199,7 +199,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "cbf3c8da66aee6d910f067e05b22a9bd50e45e1066d470950c9186af4a7a9af8"
+      "sha256": "300a2a9344b97128ba550dd69824ed6a902d7db96e84982f62e010ba4fe5ec8d"
     },
     {
       "path": "SECURITY.md",
@@ -231,7 +231,7 @@
     },
     {
       "path": "app_version.py",
-      "sha256": "19dd5bc0ae9bc5ac854e13549ecee692eb916533a0d7bc6a9e3f1cfb09c526f3"
+      "sha256": "85101b6c442f01a9eb51d209a20420ddb5570de9f8dd8a874174ad97ea4a03b9"
     },
     {
       "path": "assets/ITEM-CATALOG-NOTICE.txt",
@@ -267,7 +267,7 @@
     },
     {
       "path": "chat_overlay.py",
-      "sha256": "f3f4d83f3e953735265331213bd554132d6bb22fb243db99803b26cfef04de1f"
+      "sha256": "d53f7cdc911773dae5fdeea4a177df218d78ed03e1e4059cd06692870c6f8540"
     },
     {
       "path": "game_log_setup.py",
@@ -339,7 +339,7 @@
     },
     {
       "path": "packaging/USER-README.txt",
-      "sha256": "902e79cf6e38244a067f280d02605f375e7f45377afba99a4a7a95de81e807ea"
+      "sha256": "e1ca985c8be840a361c2fa2773a6820840a487c718805c9745eb997357220d5c"
     },
     {
       "path": "packaging/bootstrap-tools.ps1",
@@ -611,7 +611,7 @@
     },
     {
       "path": "sites/l2-chat-translator/changelog.json",
-      "sha256": "91c975dd7d3677353f944ecb5fa15135faa809fb5b2ba49cc90a776c03c1c68a"
+      "sha256": "2e276b2265d2da5adaf62dab746840d856e7133ff9fbd468593cbad1db6ec448"
     },
     {
       "path": "sites/l2-chat-translator/index.template.html",
