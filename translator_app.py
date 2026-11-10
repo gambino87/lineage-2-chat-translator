@@ -675,16 +675,11 @@ class TranslatorApp:
                                   else clients[target].translate(record.message, **options))
                     if self.stop.is_set():
                         break
-                    try:
-                        if is_universal_trade_message(record.message, **options):
-                            source_language = UNIVERSAL_TRADE_LANGUAGE
-                        else:
-                            language = clients[target].detect_language(record.message, **options)
-                            source_language = language if language in REPLY_LANGUAGES else "Unknown"
-                    except Exception:
-                        # An unavailable language label must not discard a good
-                        # translation. Reply can retry detection when clicked.
-                        source_language = None
+                    # Identify natural language only when Reply is selected. Keep
+                    # the inexpensive universal-trade classification for its UI label.
+                    source_language = (UNIVERSAL_TRADE_LANGUAGE
+                                       if is_universal_trade_message(record.message, **options)
+                                       else None)
                     cache[key] = (translated, source_language)
                     if len(cache) > MAX_CACHED_TRANSLATIONS:
                         cache.popitem(last=False)

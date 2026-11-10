@@ -224,9 +224,7 @@ class LinkedWorkerTests(unittest.TestCase):
 
         self.assertEqual([call.args[0] for call in client.translate_record.call_args_list], [first, second])
         client.translate.assert_called_once_with(text)
-        self.assertEqual(client.detect_language.call_count, 3)
-        self.assertEqual([call.kwargs for call in client.detect_language.call_args_list],
-                         [{"item_links": ("[Club]",)}, {"item_links": ("[Club]",)}, {}])
+        client.detect_language.assert_not_called()
         delivered = [data for kind, data in app.events.queue if kind == "result"]
         self.assertEqual(len(delivered), 4)
         for index, (record, translated, target, source, seconds, error, generation) in enumerate(delivered):

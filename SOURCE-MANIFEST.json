@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "product": "Lineage 2 Chat Translator",
-  "version": "1.8.12",
+  "version": "1.8.13",
   "purpose": "Source published for transparency; not a claim of byte-for-byte binary reproducibility.",
   "published_installer": {
-    "file": "Lineage-2-Chat-Translator-1.8.12-Setup.exe",
-    "bytes": 21674626,
-    "sha256": "2aa5f480239c16aa8fa0c0e665a38a5474333719b82cfd1bc2c9f1333dbf79ae",
-    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.8.12-Setup.exe"
+    "file": "Lineage-2-Chat-Translator-1.8.13-Setup.exe",
+    "bytes": 21673795,
+    "sha256": "f336a6edc1d140101425f0319ef7abbfee181571b4ca4ec25fe12d9306243298",
+    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.8.13-Setup.exe"
   },
   "release_toolchain": {
     "python": "3.12.10",
@@ -29,7 +29,7 @@
     },
     {
       "path": "app_version.py",
-      "sha256": "04256148bc2e718b58088efddc6d16e36e963e02b42c99d0a44ecacd85499094"
+      "sha256": "89012fe41829b3ee9400565e319056222b3a0278f3a58f4488ddea300f626287"
     },
     {
       "path": "app_icon.py",
@@ -37,7 +37,7 @@
     },
     {
       "path": "translator_app.py",
-      "sha256": "33e176f1fa2bf0dec6c59f818ad69b87a11ce4923ffdce6e91155f1b10a17078"
+      "sha256": "1d07fabc9c7ca00b2f46d69767f11920c260199576092cc155304b26d6faaef2"
     },
     {
       "path": "translator_core.py",
@@ -210,7 +210,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "7cb628c6a6383580d3825adda384c9231101c3dfb24f8b66b4dee5950e29a6b7"
+      "sha256": "4c67c23cb07e2f9ef6aef0d19641211b7704e586eb1eaa6cd88aaf94f1620562"
     },
     {
       "path": "SECURITY.md",
@@ -246,7 +246,7 @@
     },
     {
       "path": "app_version.py",
-      "sha256": "04256148bc2e718b58088efddc6d16e36e963e02b42c99d0a44ecacd85499094"
+      "sha256": "89012fe41829b3ee9400565e319056222b3a0278f3a58f4488ddea300f626287"
     },
     {
       "path": "assets/ITEM-CATALOG-NOTICE.txt",
@@ -362,7 +362,7 @@
     },
     {
       "path": "packaging/USER-README.txt",
-      "sha256": "fce28a02df58975728a1b2e911d8c37a543e2bdf7ab75276694fba9538e878bb"
+      "sha256": "0576e273c4764cbb7f7e3907db5f1d64b1a04dc978040ba6396224fb8ce511c2"
     },
     {
       "path": "packaging/bootstrap-tools.ps1",
@@ -522,7 +522,7 @@
     },
     {
       "path": "packaging/public-source/allowlist.json",
-      "sha256": "48b2d27055e352debcb08a55c451de43fd7c275de884530264d60d88a4a98b7a"
+      "sha256": "5d90ae929fb5ea9a399d12d4e9a48cd1f316dec45b0520c67e9353abeab1967e"
     },
     {
       "path": "packaging/public-source/gitattributes.txt",
@@ -642,11 +642,11 @@
     },
     {
       "path": "sites/l2-chat-translator/changelog.json",
-      "sha256": "5ba8cdd8117f5c0a090fdeb79fbfd8f7254b3b1af523f054bf7e467b5cd44ad2"
+      "sha256": "69ace73f5c9f763f531e7d1dedafb14bbd9a100c5ea68e214f6a217c5d4decc4"
     },
     {
       "path": "sites/l2-chat-translator/index.template.html",
-      "sha256": "cda57d7195b3aa18c8d65ff5eb92f5403d64c9590ee11a8077a502f6cdfb9d8f"
+      "sha256": "ff1a6ca8b75296595d4020b904b8c7b142bf98efded8d1486877bd00b259eb74"
     },
     {
       "path": "tests/test_app_activation.py",
@@ -687,6 +687,10 @@
     {
       "path": "tests/test_complete_release.py",
       "sha256": "13dd9d3ee77d0fdd307cfa6d35f78f25465a87e73ee4559af2968a466404f858"
+    },
+    {
+      "path": "tests/test_deferred_detection.py",
+      "sha256": "f01dfbe8d27482463e29dfb6a17b126889738822acc5f9c932126a74013e5c33"
     },
     {
       "path": "tests/test_discord_deploy_hook.py",
@@ -782,7 +786,7 @@
     },
     {
       "path": "tests/test_link_rendering.py",
-      "sha256": "7573fae6f47bc629fbcc36e0d5c26a031adf1daa9c1abeebb0e9ebf37456ce0c"
+      "sha256": "c43d4d1c8f908fefde1ccff93d189c0aa2bc59098d289b0d67f9a5cdff5bedfc"
     },
     {
       "path": "tests/test_local_service.py",
@@ -810,7 +814,7 @@
     },
     {
       "path": "tests/test_overlay_integration.py",
-      "sha256": "db7ae1a019b27b4823a6f1f44699eb975c470907ee4891dd0e956f9b469427b1"
+      "sha256": "8d6faa7324847861d622be2bbae09f511aef8da0c2295d76975c6c59018fbb9f"
     },
     {
       "path": "tests/test_overlay_localization.py",
@@ -938,7 +942,7 @@
     },
     {
       "path": "translator_app.py",
-      "sha256": "33e176f1fa2bf0dec6c59f818ad69b87a11ce4923ffdce6e91155f1b10a17078"
+      "sha256": "1d07fabc9c7ca00b2f46d69767f11920c260199576092cc155304b26d6faaef2"
     },
     {
       "path": "translator_core.py",
@@ -996,9 +1000,9 @@
   "published_incremental_update": {
     "schema_version": 1,
     "manifest": {
-      "file": "updates/1.8.12/files.json",
+      "file": "updates/1.8.13/files.json",
       "bytes": 274969,
-      "sha256": "69af19052bfb4a6351a3109d0000cce67b40c6767272fe21bdc0264d9811c35b"
+      "sha256": "89cd20e0abdfb9ca4809135bb898a38a23c699f1ffd6bde4475d7056d18ae5ba"
     }
   }
 }

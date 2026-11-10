@@ -1,5 +1,11 @@
 [
   {
+    "version": "1.8.13",
+    "changes": [
+      "Incoming translations display sooner and use fewer LLM calls: source-language detection now runs when you select Reply instead of delaying every incoming message."
+    ]
+  },
+  {
     "version": "1.8.12",
     "changes": [
       "Reorganized client Settings into Translation, Overlay and Window groups with consistent spacing and a clearer reading order.",

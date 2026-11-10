@@ -133,6 +133,7 @@
   "tests/test_release_cleanup.py",
   "tests/test_release_lock.py",
   "tests/test_release_site.py",
+  "tests/test_deferred_detection.py",
   "tests/test_reply_composer.py",
   "tests/test_runtime_integrity.py",
   "tests/test_secure_storage.py",

@@ -158,7 +158,7 @@ class OverlayMessageIntegrationTests(unittest.TestCase):
         client = self.finish_one_job(translated="Looking for a healer for the party.")
         client.translate.assert_called_once_with(self.record.message)
         self.app.overlay.add_message.assert_called_once_with(
-            replace(self.record, source_language="Russian"), "Looking for a healer for the party.", source="Live", error=False)
+            replace(self.record, source_language=None), "Looking for a healer for the party.", source="Live", error=False)
         self.assertIn(self.record.message, self.app.transcript.text)
         self.assertIn("Player: Looking for a healer for the party.  Reply", self.app.transcript.text)
         self.assertEqual(self.app.completed, 1)
@@ -185,11 +185,11 @@ class OverlayMessageIntegrationTests(unittest.TestCase):
         self.assertEqual(self.app.completed, 1)
         self.assertFalse(self.app.translation_error)
 
-    def test_ambiguous_source_is_marked_unknown_instead_of_translation_target(self):
+    def test_source_language_is_deferred_instead_of_using_translation_target(self):
         self.app.enqueue(self.record, "Live")
         self.finish_one_job(translated="WTS sword", language=None)
         record = self.app.overlay.add_message.call_args.args[0]
-        self.assertEqual(record.source_language, "Unknown")
+        self.assertIsNone(record.source_language)
 
     def test_universal_trade_reaches_overlay_with_neutral_language_without_model_detection(self):
         source = replace(self.record, message="WTS [Club] +6 10kk PM me", item_links=("[Club]",))
@@ -200,14 +200,14 @@ class OverlayMessageIntegrationTests(unittest.TestCase):
         self.assertEqual(delivered.item_links, source.item_links)
         client.detect_language.assert_not_called()
 
-    def test_trade_with_natural_language_keeps_detected_language(self):
+    def test_trade_with_natural_language_defers_detection(self):
         source = replace(self.record, message="WTS [Club] aceito ofertas", item_links=("[Club]",))
         self.app.enqueue(source, "Live")
         client = self.finish_one_job(translated="WTS [Club] accepting offers", language="Portuguese")
-        self.assertEqual(self.app.overlay.add_message.call_args.args[0].source_language, "Portuguese")
-        client.detect_language.assert_called_once_with(source.message, item_links=source.item_links)
+        self.assertIsNone(self.app.overlay.add_message.call_args.args[0].source_language)
+        client.detect_language.assert_not_called()
 
-    def test_repeated_text_reuses_language_and_translation_for_each_sender(self):
+    def test_repeated_text_reuses_translation_without_detection_for_each_sender(self):
         second = replace(self.record, sender="Another player")
         self.app.enqueue(self.record, "Live")
         self.app.enqueue(second, "Live")
@@ -228,10 +228,10 @@ class OverlayMessageIntegrationTests(unittest.TestCase):
         self.app.stop.clear()
         self.app._drain_events()
         client.translate.assert_called_once_with(self.record.message)
-        client.detect_language.assert_called_once_with(self.record.message)
+        client.detect_language.assert_not_called()
         delivered = [call.args[0] for call in self.app.overlay.add_message.call_args_list]
         self.assertEqual([record.sender for record in delivered], [self.record.sender, second.sender])
-        self.assertEqual([record.source_language for record in delivered], ["Russian", "Russian"])
+        self.assertEqual([record.source_language for record in delivered], [None, None])
 
     def test_party_details_reach_translation_detection_and_both_displays(self):
         record = replace(self.record,
@@ -242,8 +242,8 @@ class OverlayMessageIntegrationTests(unittest.TestCase):
         client = self.finish_one_job(translated=translated)
         options = {"item_links": record.item_links, "party_details": record.party_details}
         client.translate.assert_called_once_with(record.message, **options)
-        client.detect_language.assert_called_once_with(record.message, **options)
-        delivered = replace(record, source_language="Russian")
+        client.detect_language.assert_not_called()
+        delivered = replace(record, source_language=None)
         self.app.overlay.add_message.assert_called_once_with(delivered, translated, source="Live", error=False)
         self.assertIn(translated, self.app.transcript.text)
         self.assertEqual(next(iter(self.app._reply_records.values())).party_details, record.party_details)
@@ -273,7 +273,7 @@ class OverlayMessageIntegrationTests(unittest.TestCase):
         self.assertEqual(client.translate.call_count, 2)
         self.assertEqual(client.translate.call_args_list[0].kwargs, {})
         self.assertEqual(client.translate.call_args_list[1].kwargs, {"party_details": party.party_details})
-        self.assertEqual(client.detect_language.call_count, 2)
+        client.detect_language.assert_not_called()
         delivered = [call.args[1] for call in self.app.overlay.add_message.call_args_list]
         self.assertEqual(delivered, ["Plain chat translation", "Party listing translation", "Party listing translation"])
 
@@ -379,7 +379,7 @@ class OverlayMessageIntegrationTests(unittest.TestCase):
         client.translate_record.assert_called_once_with(record)
         client.translate.assert_not_called()
         self.app.overlay.add_message.assert_called_once_with(
-            replace(record, source_language="Russian"), translated, source="Live", error=False)
+            replace(record, source_language=None), translated, source="Live", error=False)
         overlay_line = make_overlay_message(*self.app.overlay.add_message.call_args.args)
         self.assertEqual(overlay_line.translated, translated)
         self.assertEqual(overlay_line.original, record.message)
@@ -409,7 +409,7 @@ class OverlayMessageIntegrationTests(unittest.TestCase):
         self.app.enqueue(self.record, "Live")
         self.finish_one_job(translated="Fresh result")
         self.app.overlay.add_message.assert_called_once_with(
-            replace(self.record, source_language="Russian"), "Fresh result", source="Live", error=False)
+            replace(self.record, source_language=None), "Fresh result", source="Live", error=False)
         self.assertNotIn("Old result", self.app.transcript.text)
 
     def test_delayed_error_from_cleared_generation_does_not_poison_new_screen(self):
