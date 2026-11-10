@@ -110,6 +110,7 @@ def headless_app():
     app.log_path = Value(ORIGINS_LOG)
     app.notices = Value(False)
     app.show_original = Value(True)
+    app.overlay_locked = Value(False)
     app.status = Value("")
     app.counter = Value("")
     app.connection = Value("LOCAL · READY")
@@ -499,10 +500,107 @@ class OverlaySettingsIntegrationTests(unittest.TestCase):
         self.assertEqual(saved["log_path"], ORIGINS_LOG)
         self.assertEqual(saved["overlay"], app.overlay.settings)
         self.assertTrue(saved["overlay"]["enabled"])
+        self.assertTrue(app.overlay_locked.get())
         self.assertEqual((saved["overlay"]["x"], saved["overlay"]["y"]), (-900, 80))
         self.assertEqual((saved["overlay"]["width"], saved["overlay"]["height"]), (720, 310))
         self.assertEqual(translator_app.load_settings()["overlay"], app.overlay.settings)
         self.assertFalse(self.settings_path.with_suffix(".tmp").exists())
+
+    def test_main_settings_unlocks_saved_overlay_without_opening_a_drawer(self):
+        from test_overlay_channel_filters import overlay_with
+
+        for enabled in (True, False):
+            with self.subTest(enabled=enabled):
+                saved_overlay = dict(placed_overlay(), enabled=enabled)
+                self.settings_path.write_text(json.dumps({"overlay": saved_overlay}), encoding="utf-8")
+                app = headless_app()
+                app.config = translator_app.load_settings()
+                app.overlay = overlay_with()
+                app.overlay.settings = dict(app.config["overlay"])
+                app.overlay._native = Mock()
+                self.assertTrue(app.overlay.supports_lock)
+                app.overlay.on_change = app._overlay_changed
+                app.overlay.open_settings = Mock()
+                app.overlay_locked.set(app.overlay.settings["locked"])
+
+                app.overlay_locked.set(False)
+                app._overlay_lock_changed()
+
+                app.overlay._native.style.assert_called_once_with(False, saved_overlay["opacity"])
+                expected = dict(saved_overlay, locked=False)
+                self.assertEqual(app.overlay.settings, expected)
+                self.assertEqual(app.config["overlay"], expected)
+                self.assertEqual(translator_app.load_settings()["overlay"], expected)
+                self.assertFalse(app.overlay_locked.get())
+                app.overlay.open_settings.assert_not_called()
+                self.assertIsNone(app.overlay._settings_drawer)
+                self.assertIsNone(app.overlay._tray)
+
+                app.overlay._native.style.reset_mock()
+                app.overlay_locked.set(True)
+                app._overlay_lock_changed()
+
+                app.overlay._native.style.assert_called_once_with(True, saved_overlay["opacity"])
+                self.assertEqual(translator_app.load_settings()["overlay"], saved_overlay)
+                self.assertTrue(app.overlay_locked.get())
+                app.overlay.open_settings.assert_not_called()
+
+    def test_main_lock_control_tracks_native_failure_and_saved_recovery_state(self):
+        from test_overlay_channel_filters import overlay_with
+
+        app = headless_app()
+        app.overlay = overlay_with()
+        app.overlay._native = Mock()
+        app.overlay._native.style.side_effect = [OSError("Overlay style unavailable"), None]
+        app.overlay.on_change = app._overlay_changed
+        app.overlay_locked.set(True)
+
+        with patch("chat_overlay.messagebox.showerror") as showerror:
+            app._overlay_lock_changed()
+
+        self.assertEqual(app.overlay._native.style.call_count, 2)
+        app.overlay._native.style.assert_any_call(True, app.overlay.settings["opacity"])
+        app.overlay._native.style.assert_any_call(False, app.overlay.settings["opacity"])
+        self.assertFalse(app.overlay.settings["locked"])
+        self.assertFalse(app.overlay_locked.get())
+        self.assertFalse(translator_app.load_settings()["overlay"]["locked"])
+        showerror.assert_called_once()
+
+    def test_main_lock_control_tracks_rejected_lock_without_native_support(self):
+        from test_overlay_channel_filters import overlay_with
+
+        app = headless_app()
+        app.overlay = overlay_with()
+        self.assertFalse(app.overlay.supports_lock)
+        app.overlay.on_change = app._overlay_changed
+        app.overlay_locked.set(True)
+
+        app._overlay_lock_changed()
+
+        self.assertFalse(app.overlay.settings["locked"])
+        self.assertFalse(app.overlay_locked.get())
+        self.assertFalse(translator_app.load_settings()["overlay"]["locked"])
+
+    def test_reset_placement_updates_main_lock_control_and_saved_preferences(self):
+        from test_overlay_channel_filters import overlay_with
+
+        app = headless_app()
+        app.overlay = overlay_with()
+        app.overlay.settings = placed_overlay()
+        app.overlay._native = Mock()
+        app.overlay._native.bounds.return_value = (0, 0, 1920, 1080)
+        app.overlay.root.winfo_screenheight.return_value = 1080
+        app.overlay.on_change = app._overlay_changed
+        app.overlay_locked.set(True)
+
+        app.overlay._reset_placement()
+
+        expected = dict(placed_overlay(), x=32, y=780, width=540, height=230, locked=False)
+        self.assertEqual(app.overlay.settings, expected)
+        self.assertEqual(translator_app.load_settings()["overlay"], expected)
+        self.assertFalse(app.overlay_locked.get())
+        app.overlay._native.style.assert_any_call(False, expected["opacity"])
+        app.overlay._native.place.assert_any_call(32, 780, 540, 230)
 
     def test_close_preserves_active_log_and_latest_overlay_settings(self):
         app = headless_app()

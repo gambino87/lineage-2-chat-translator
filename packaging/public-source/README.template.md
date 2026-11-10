@@ -16,6 +16,7 @@ order and maps each module to its side effects and tests.
 
 - Reads chat from a supported Lineage II client's existing `Network.log`.
 - Translates through a local Ollama model and displays an always-on-top overlay.
+- Locks and unlocks the overlay from the main window's Settings, keeping the control accessible while mouse clicks pass through the overlay.
 - Preserves item names, prices and common game abbreviations; offers channel filters.
 - Translates replies into the selected language and copies them to the clipboard.
 - Localizes the installer, launcher and overlay in 11 languages. Setup asks for language first; a persistent selector at the top of the launcher changes the interface independently of chat translation.

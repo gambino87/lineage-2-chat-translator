@@ -194,7 +194,10 @@ layout; AnimatedDrawer owns shared animation and cancellation. ChannelTray manag
 filter choices; SettingsDrawer fits and scrolls the settings controls. ChatOverlay
 queues drawer switches until the old window withdraws, and clears pending opens
 on owner hide/shutdown. Launcher settings access remains available when the
-overlay is hidden or locked. Neither module hooks the game or reads its memory/screen.
+overlay is hidden or locked. The main window's Settings owns the lock checkbox;
+ChatOverlay.set_locked applies it, and _overlay_changed synchronizes the accepted
+state back to the checkbox and saved preferences. Neither module hooks the game
+or reads its memory/screen.
 
 TranslatorApp.save_settings saves known preferences rather than transcripts.
 _open_discord opens a fixed invite on a click without appending diagnostics.

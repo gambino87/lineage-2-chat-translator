@@ -352,8 +352,6 @@ class ChatOverlay:
         self.channels_button = self._header_button("Channels", self._toggle_channel_tray)
         self.channels_button.pack(side="right")
         self._tray_open_changed(False)
-        self.lock_button = self._header_button("Lock", lambda: self._change("locked", True))
-        self.lock_button.pack(side="right")
         titles = tk.Frame(self.header, bg=HEADER)
         titles.pack(side="left", fill="x", expand=True)
         self.caption = self._label(titles, text="Translations", bg=HEADER, fg=GOLD,
@@ -604,7 +602,14 @@ class ChatOverlay:
         if self.settings["locked"]:
             caption += " · " + tr("locked")
         self.caption.configure(text=caption)
-        self.lock_button.configure(text=tr("Locked" if self.settings["locked"] else "Lock"))
+
+    @property
+    def supports_lock(self):
+        return self._native is not None
+
+    def set_locked(self, locked):
+        """Apply lock changes from the always-interactive launcher settings."""
+        self._change("locked", locked)
 
     def _change(self, key, value):
         previous = dict(self.settings)
@@ -899,11 +904,6 @@ class ChatOverlay:
             widget.pack(anchor="w", fill="x", pady=3)
             return widget
         checkbox("enabled", "Show overlay", lambda: self.show() if self._vars["enabled"].get() else self.hide())
-        lock = checkbox("locked", "Lock placement and pass mouse clicks through")
-        if self._native is None:
-            lock.configure(state="disabled")
-        self._label(content, text="To unlock, return to the main translator → Overlay settings.",
-                 bg=HEADER, fg=MUTED, font=("Tahoma", 9), wraplength=526, justify="left").pack(anchor="w", padx=(24, 0), pady=(0, 10))
         for key, label, lower, upper in (("opacity", "Opacity", *(round(value * 100) for value in OPACITY_RANGE)),
                                         ("font_size", "Text size", *FONT_SIZE_RANGE)):
             row = tk.Frame(content, bg=HEADER)

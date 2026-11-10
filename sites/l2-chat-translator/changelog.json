@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.8.9",
+    "changes": [
+      "Moved the overlay lock control to the main window's Settings. Lock or unlock it there even when the overlay ignores mouse clicks or starts locked from saved preferences.",
+      "Removed the Lock button and lock checkbox from the overlay so its controls cannot lock themselves out."
+    ]
+  },
+  {
     "version": "1.8.8",
     "changes": [
       "Removed Translate recent chat and simplified the main toolbar. The translator continues reading new chat as it appears."

@@ -1,4 +1,4 @@
-LINEAGE 2 CHAT TRANSLATOR 1.8.8
+LINEAGE 2 CHAT TRANSLATOR 1.8.9
 
 Windows 10/11, 64-bit. Python is included; no separate Python installation is needed.
 The supplied L2CT artwork is used for the program, shortcuts and window icons.
@@ -91,7 +91,11 @@ between Channels and Settings finishes closing the current drawer before the
 other opens. Click Settings again, Done, the close button, or Escape to collapse
 it. Settings follows the overlay's width and scrolls on smaller screens. The
 launcher's Overlay settings button also opens this drawer, including when the
-overlay is hidden or locked, so you can show it or unlock it.
+overlay is hidden or locked.
+
+Lock or unlock the overlay in the main window's Settings using "Lock overlay
+and pass mouse clicks through". The control remains accessible while the overlay
+ignores mouse clicks, including when starting with a saved locked overlay.
 
 Drag the overlay's top-right grip to resize it while keeping its bottom-left
 corner fixed. Hiding or locking the overlay also closes the channel tray.

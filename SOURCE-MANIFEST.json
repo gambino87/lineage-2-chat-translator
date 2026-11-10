@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "product": "Lineage 2 Chat Translator",
-  "version": "1.8.8",
+  "version": "1.8.9",
   "purpose": "Source published for transparency; not a claim of byte-for-byte binary reproducibility.",
   "published_installer": {
-    "file": "Lineage-2-Chat-Translator-1.8.8-Setup.exe",
-    "bytes": 21666054,
-    "sha256": "57a17577353b535f81ffddc58db2cf498ca6a16c9759dd1108c62b03c0c3628f",
-    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.8.8-Setup.exe"
+    "file": "Lineage-2-Chat-Translator-1.8.9-Setup.exe",
+    "bytes": 21666903,
+    "sha256": "0c35889f96066254eacdb56674870fbe53a2af6ad06364939a87c6779304d28b",
+    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.8.9-Setup.exe"
   },
   "release_toolchain": {
     "python": "3.12.10",
@@ -29,7 +29,7 @@
     },
     {
       "path": "app_version.py",
-      "sha256": "dc52604840b249b779490f07923fdf0ab9ab67a51184a130d20bbb9f0d871e2f"
+      "sha256": "d0d9368ac8634f0406fba47ea9a65b304f83768851d75a4d2988121047ddcb88"
     },
     {
       "path": "app_icon.py",
@@ -37,7 +37,7 @@
     },
     {
       "path": "translator_app.py",
-      "sha256": "001c56002bd64126f3dd3510bc2cd21a21e312569de7323702e84b5bdad1d2d2"
+      "sha256": "daf8b33843f88ef13b56ca01a12d3a830eed2cb07f455904d1d5e5ec234ced8f"
     },
     {
       "path": "translator_core.py",
@@ -61,7 +61,7 @@
     },
     {
       "path": "chat_overlay.py",
-      "sha256": "fb6e30338c6be80e70656477bf0e1a88cb9807a5a4f7c87db4b50e7cbc307aaa"
+      "sha256": "944d9b69b0797af93cc9b8a3283c5726de9daa4facdeaf04044b88fc553823d4"
     },
     {
       "path": "overlay_tray.py",
@@ -133,7 +133,7 @@
     },
     {
       "path": "ui_strings_overlay.py",
-      "sha256": "08eee77f21b4882526b3dbb98d9c7a0848e1d6f4bf010b0d6860329d16832345"
+      "sha256": "646f977c195dabf1482fadefcb19fdfd176fcc64cdee16188d866fa8a895efd7"
     },
     {
       "path": "ui_strings_runtime.py",
@@ -199,7 +199,7 @@
     },
     {
       "path": "CODEMAP.md",
-      "sha256": "a831849a2ac7d3689df699aeb921e52d20440c8c16b939979f93f8267899bd98"
+      "sha256": "e591ab0ee286b2ee4c9b8fa340daf9519969e87f68b00f0ec41993ccfbae0314"
     },
     {
       "path": "LICENSE-NOTICE.md",
@@ -207,7 +207,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "41e07cea967397277eab547067f98de0b4ea1ea9ed6652a34e03ef7eb3ca885c"
+      "sha256": "f674d84156eabb4f6d3d5bdf513189514886958623f284c14f3989776d7179ca"
     },
     {
       "path": "SECURITY.md",
@@ -239,7 +239,7 @@
     },
     {
       "path": "app_version.py",
-      "sha256": "dc52604840b249b779490f07923fdf0ab9ab67a51184a130d20bbb9f0d871e2f"
+      "sha256": "d0d9368ac8634f0406fba47ea9a65b304f83768851d75a4d2988121047ddcb88"
     },
     {
       "path": "assets/ITEM-CATALOG-NOTICE.txt",
@@ -279,7 +279,7 @@
     },
     {
       "path": "chat_overlay.py",
-      "sha256": "fb6e30338c6be80e70656477bf0e1a88cb9807a5a4f7c87db4b50e7cbc307aaa"
+      "sha256": "944d9b69b0797af93cc9b8a3283c5726de9daa4facdeaf04044b88fc553823d4"
     },
     {
       "path": "game_log_setup.py",
@@ -355,7 +355,7 @@
     },
     {
       "path": "packaging/USER-README.txt",
-      "sha256": "0fbf0538e9040fcdd530b189dd3f7e33c684cea9c2c834328fb8b85fb1753d99"
+      "sha256": "82215d0917fa8ece6e7cf059edb238da106ca813ede522adadcf4cff868ba0e3"
     },
     {
       "path": "packaging/bootstrap-tools.ps1",
@@ -511,7 +511,7 @@
     },
     {
       "path": "packaging/public-source/README.template.md",
-      "sha256": "ad1bdee308c63b2208a50a4722da59ccf5d2011239890658b51b040dbbd73bab"
+      "sha256": "127273b888acb524e5c15111b8c854cc6a469b68fd493e42db3c941c760b32eb"
     },
     {
       "path": "packaging/public-source/allowlist.json",
@@ -635,11 +635,11 @@
     },
     {
       "path": "sites/l2-chat-translator/changelog.json",
-      "sha256": "fc8f11c5eca682c9d6f6ac98479340d4bba896c67276616377c25ae07ed7df85"
+      "sha256": "d96c05d11259c79f443825e8d805642009a1be3657d2a3539b92f5162e130ad3"
     },
     {
       "path": "sites/l2-chat-translator/index.template.html",
-      "sha256": "f52bb89b289153579886ee7940d1d718d0edc2fd7003b3a0f7297deaed672d9f"
+      "sha256": "d3dfd58d05f0fb59df2ba8b15a7ceef796ee40c7084a8cfb06d524d066df0147"
     },
     {
       "path": "tests/test_app_update_integration.py",
@@ -795,15 +795,15 @@
     },
     {
       "path": "tests/test_overlay_channel_filters.py",
-      "sha256": "eb38e80c38c73c29e2b4ed3b1b04f932574e193580a26175c130959c21262928"
+      "sha256": "0ffe4f1eee02517282cde8e524c013b01d4874db10d6aba3d71bf8bbc6e1ab8b"
     },
     {
       "path": "tests/test_overlay_integration.py",
-      "sha256": "b297d3011ebf6af8cf686935f7536926473fb8f0c20fb92041d34b6ac20c2008"
+      "sha256": "9dca54f820283d456e00771a8259d96aed8e924fe5d16bad261f31cf72e96d1c"
     },
     {
       "path": "tests/test_overlay_localization.py",
-      "sha256": "72f810a883520ae44ba8d416c715d1abaf5e72821366e7492a1ada418635ceec"
+      "sha256": "ce79c988131f0026700f901ea4679c089eff777e2d4e7e4bc86151beb38aaf41"
     },
     {
       "path": "tests/test_overlay_tray.py",
@@ -811,7 +811,7 @@
     },
     {
       "path": "tests/test_overlay_tray_integration.py",
-      "sha256": "0d5742a56dc6cfd6a8417d4c725bf9cf8e44e4fad596e75fd6351ba05f004071"
+      "sha256": "eb5abeb31f212584569f905fdb9f75bf668b42d230c6e0840caa6a45a003017f"
     },
     {
       "path": "tests/test_party_links.py",
@@ -927,7 +927,7 @@
     },
     {
       "path": "translator_app.py",
-      "sha256": "001c56002bd64126f3dd3510bc2cd21a21e312569de7323702e84b5bdad1d2d2"
+      "sha256": "daf8b33843f88ef13b56ca01a12d3a830eed2cb07f455904d1d5e5ec234ced8f"
     },
     {
       "path": "translator_core.py",
@@ -951,7 +951,7 @@
     },
     {
       "path": "ui_strings_overlay.py",
-      "sha256": "08eee77f21b4882526b3dbb98d9c7a0848e1d6f4bf010b0d6860329d16832345"
+      "sha256": "646f977c195dabf1482fadefcb19fdfd176fcc64cdee16188d866fa8a895efd7"
     },
     {
       "path": "ui_strings_runtime.py",
@@ -985,9 +985,9 @@
   "published_incremental_update": {
     "schema_version": 1,
     "manifest": {
-      "file": "updates/1.8.8/files.json",
+      "file": "updates/1.8.9/files.json",
       "bytes": 274967,
-      "sha256": "47059adaf386eb5b5adae90f2d43fef76b2613a8cc27ae9112bd280ad23b4e34"
+      "sha256": "59adc4e33d332e83cace534105aa013dca5fa572d8b08f16496c8611376db6c2"
     }
   }
 }

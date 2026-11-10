@@ -127,6 +127,8 @@ class OverlayLanguageTests(unittest.TestCase):
         overlay._settings_drawer = Mock(is_open=True)
         by_caption = {widget.options.get("text"): widget for widget in widgets}
         self.assertIn(tr("Show overlay"), by_caption)
+        self.assertNotIn("locked", overlay._vars)
+        self.assertNotIn(tr("Lock overlay and pass mouse clicks through"), by_caption)
         self.assertIn(tr("Command channel"), by_caption)
         all_button = by_caption[tr("All")]
         set_language("fr")

@@ -1,6 +1,6 @@
 # Lineage 2 Chat Translator
 
-Source for **v1.8.8**, published so users can inspect how the translator works
+Source for **v1.8.9**, published so users can inspect how the translator works
 before installing it. This repository contains the application, installer and
 build scripts, tests, item catalog, artwork, and website source.
 
@@ -16,6 +16,7 @@ order and maps each module to its side effects and tests.
 
 - Reads chat from a supported Lineage II client's existing `Network.log`.
 - Translates through a local Ollama model and displays an always-on-top overlay.
+- Locks and unlocks the overlay from the main window's Settings, keeping the control accessible while mouse clicks pass through the overlay.
 - Preserves item names, prices and common game abbreviations; offers channel filters.
 - Translates replies into the selected language and copies them to the clipboard.
 - Localizes the installer, launcher and overlay in 11 languages. Setup asks for language first; a persistent selector at the top of the launcher changes the interface independently of chat translation.
@@ -102,7 +103,7 @@ official version or upload it to the official update feed.
 
 ## Relationship to the published installer
 
-[SOURCE-MANIFEST.json](SOURCE-MANIFEST.json) records the v1.8.8 release installer
+[SOURCE-MANIFEST.json](SOURCE-MANIFEST.json) records the v1.8.9 release installer
 checksum and the SHA-256 hashes of its application modules and assets.
 From v1.7.12, clients verify a separate release signature against the public key
 bundled in the app. The signing key stays off the download server and is never
@@ -116,7 +117,7 @@ Git preserves their original line endings so those hashes remain checkable.
 Documentation and test fixtures are adapted for publication: example player
 names, a streamer URL path and a private operator key-file location are replaced
 with generic examples, and the user guide's version heading is corrected to
-1.8.8. These changes are listed in the source manifest. The
+1.8.9. These changes are listed in the source manifest. The
 private development diary and review tooling/data are omitted.
 
 This is a source transparency snapshot, **not a claim of byte-for-byte binary

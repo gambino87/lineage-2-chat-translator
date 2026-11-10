@@ -73,22 +73,12 @@ _ROWS = {
     "Show overlay": (
         "Mostrar superposición", "Mostrar sobreposição", "Показывать оверлей", "Pokaż nakładkę", "Overlay anzeigen",
         "Afficher la superposition", "Katmanı göster", "오버레이 표시", "オーバーレイを表示", "显示悬浮窗"),
-    "Lock placement and pass mouse clicks through": (
-        "Fijar posición y permitir clics a través", "Fixar posição e permitir cliques através", "Закрепить окно и пропускать щелчки мыши",
-        "Zablokuj położenie i przepuszczaj kliknięcia myszy", "Position sperren und Mausklicks durchlassen",
-        "Verrouiller la position et laisser passer les clics", "Konumu kilitle ve fare tıklamalarını geçir",
-        "위치 잠금 및 마우스 클릭 통과", "位置を固定し、マウスクリックを背後に通す", "锁定位置并让鼠标点击穿透"),
-    "To unlock, return to the main translator → Overlay settings.": (
-        "Para desbloquear, vuelve al traductor principal → Ajustes de superposición.",
-        "Para desbloquear, volte ao tradutor principal → Configurações da sobreposição.",
-        "Чтобы снять закрепление, вернитесь в главное окно → Настройки оверлея.",
-        "Aby odblokować, wróć do głównego okna tłumacza → Ustawienia nakładki.",
-        "Zum Entsperren im Hauptfenster des Übersetzers die Overlay-Einstellungen öffnen.",
-        "Pour déverrouiller, revenez au traducteur principal → Paramètres de superposition.",
-        "Kilidi açmak için ana çeviriciye dönün → Katman ayarları.",
-        "잠금을 해제하려면 기본 번역기 → 오버레이 설정으로 돌아가세요.",
-        "固定を解除するには、メイン画面 → オーバーレイ設定に戻ってください。",
-        "要解锁，请返回翻译器主窗口 → 悬浮窗设置。"),
+    "Lock overlay and pass mouse clicks through": (
+        "Bloquear superposición y permitir clics a través", "Bloquear sobreposição e permitir cliques através",
+        "Закрепить оверлей и пропускать щелчки мыши", "Zablokuj nakładkę i przepuszczaj kliknięcia myszy",
+        "Overlay sperren und Mausklicks durchlassen", "Verrouiller la superposition et laisser passer les clics",
+        "Katmanı kilitle ve fare tıklamalarını geçir", "오버레이 잠금 및 마우스 클릭 통과",
+        "オーバーレイを固定し、マウスクリックを背後に通す", "锁定悬浮窗并让鼠标点击穿透"),
     "Opacity": (
         "Opacidad", "Opacidade", "Непрозрачность", "Nieprzezroczystość", "Deckkraft", "Opacité", "Opaklık", "불투명도", "不透明度", "不透明度"),
     "Text size": (

@@ -38,7 +38,6 @@ def overlay_with(channels=None, limit=250):
     overlay.root = Mock()
     overlay.window = Mock()
     overlay.caption = Mock()
-    overlay.lock_button = Mock()
     overlay.latest = Mock()
     overlay.on_reply = Mock()
     overlay.on_change = Mock()

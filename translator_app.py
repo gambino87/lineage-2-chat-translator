@@ -189,6 +189,7 @@ class TranslatorApp:
         self.show_original = tk.BooleanVar(value=self.config["show_original"])
         self.minimize_to_tray = tk.BooleanVar(value=self.config["minimize_to_tray"])
         self.close_to_tray = tk.BooleanVar(value=self.config["close_to_tray"])
+        self.overlay_locked = tk.BooleanVar(value=self.config["overlay"]["locked"])
         self.on_top = tk.BooleanVar(value=False)
         self.status = LocalizedStringVar(value="Connecting to local Ollama…")
         self.counter = LocalizedStringVar(value="No messages translated yet")
@@ -197,6 +198,9 @@ class TranslatorApp:
         self.overlay = ChatOverlay(self.root, self.config["overlay"], on_change=self._overlay_changed,
                                    on_reply=self.select_reply, model=self.config["model"])
         self.overlay_button.configure(text=tr("Hide overlay" if self.overlay.settings["enabled"] else "Show overlay"))
+        self.overlay_locked.set(self.overlay.settings["locked"])
+        if not self.overlay.supports_lock:
+            self.overlay_lock_button.configure(state="disabled")
         self.tray = TrayControls(self.root, enabled=self.minimize_to_tray.get,
                                  close_enabled=self.close_to_tray.get,
                                  on_exit=self.close, on_error=self.status.set)
@@ -285,6 +289,10 @@ class TranslatorApp:
         ttk.Checkbutton(controls, text="Include notices", variable=self.notices).grid(row=1, column=2, sticky="w", padx=12)
         ttk.Checkbutton(controls, text="Main window on top", variable=self.on_top,
                         command=lambda: self.root.attributes("-topmost", self.on_top.get())).grid(row=0, column=2, sticky="w", padx=12)
+        self.overlay_lock_button = ttk.Checkbutton(self.settings_panel,
+            text="Lock overlay and pass mouse clicks through", variable=self.overlay_locked,
+            command=self._overlay_lock_changed)
+        self.overlay_lock_button.pack(anchor="w", pady=(0, 6))
         ttk.Checkbutton(self.settings_panel, text="Minimize to system tray", variable=self.minimize_to_tray,
                         command=self._tray_setting_changed).pack(anchor="w", pady=(0, 6))
         ttk.Checkbutton(self.settings_panel, text="Close to system tray", variable=self.close_to_tray,
@@ -788,8 +796,12 @@ class TranslatorApp:
             self.toggle_reading()
         return self.save_settings()
 
+    def _overlay_lock_changed(self):
+        self.overlay.set_locked(self.overlay_locked.get())
+
     def _overlay_changed(self, settings):
         self.config["overlay"] = dict(settings)
+        self.overlay_locked.set(settings["locked"])
         self.overlay_button.configure(text=tr("Hide overlay" if settings["enabled"] else "Show overlay"))
         if not self.stop.is_set():
             self.save_settings()

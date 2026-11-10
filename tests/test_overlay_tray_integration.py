@@ -185,6 +185,8 @@ class TrayIntegrationTests(unittest.TestCase):
         self.assertIsNot(overlay.grip.parent, overlay.bottom)
         self.assertEqual(overlay.channels_button.options['command'], overlay._toggle_channel_tray)
         self.assertEqual(overlay.settings_button.options['command'], overlay._toggle_settings_drawer)
+        self.assertNotIn('Lock', [w.options.get('text') for w in header_widgets])
+        self.assertFalse(hasattr(overlay, 'lock_button'))
 
 
 class DrawerSwitchTests(unittest.TestCase):
