@@ -1,5 +1,11 @@
 [
   {
+    "version": "1.7.15",
+    "changes": [
+      "Channel names in the overlay's Channels tray and Overlay settings now match their chat colors. The colors stay consistent while hovering or selecting options."
+    ]
+  },
+  {
     "version": "1.7.14",
     "changes": [
       "Added an optional Minimize to system tray setting. Minimizing hides the launcher behind the existing app icon while translation and the overlay keep running.",

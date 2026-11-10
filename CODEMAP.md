@@ -1,6 +1,6 @@
 # Code reading guide
 
-This guide follows the v1.7.14 application in execution order. It names the
+This guide follows the v1.7.15 application in execution order. It names the
 functions to inspect, their inputs and side effects, and the checks protecting
 each boundary. Read [SECURITY.md](SECURITY.md) for the threat model and limits.
 The public README is generated from

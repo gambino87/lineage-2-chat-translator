@@ -1,4 +1,4 @@
-LINEAGE 2 CHAT TRANSLATOR 1.7.14
+LINEAGE 2 CHAT TRANSLATOR 1.7.15
 
 Windows 10/11, 64-bit. Python is included; no separate Python installation is needed.
 The supplied L2CT artwork is used for the program, shortcuts and window icons.
@@ -44,7 +44,9 @@ OVERLAY CHAT FILTERS
 
 Click Channels on the overlay to slide open its filter tray. For only Say and
 Party, click None, then select Say and Party. Changes apply immediately
-and are saved for the next launch. All restores every channel. Other / notices
+and the channel option names use their chat colors in both the tray and Overlay
+settings. Command channel and Other / notices use the normal chat fallback color.
+Selections are saved for the next launch. All restores every channel. Other / notices
 covers remaining channels; system notices also need Include notices in Settings.
 The launcher transcript keeps all received chat. Hidden messages remain in the
 recent in-memory history, so reselecting a channel restores its retained rows.

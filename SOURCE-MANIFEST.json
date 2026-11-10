@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "product": "Lineage 2 Chat Translator",
-  "version": "1.7.14",
+  "version": "1.7.15",
   "purpose": "Source published for transparency; not a claim of byte-for-byte binary reproducibility.",
   "published_installer": {
-    "file": "Lineage-2-Chat-Translator-1.7.14-Setup.exe",
-    "bytes": 21419597,
-    "sha256": "4fbd6ae4245c26835f9c8f70d7856ecf58201dde495e87a7ed6d8ddb9b75874c",
-    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.7.14-Setup.exe"
+    "file": "Lineage-2-Chat-Translator-1.7.15-Setup.exe",
+    "bytes": 21416331,
+    "sha256": "a9155b52c889a9c1be2737a5d85341fa94a7805a62ebe6bfb566ff8b2a1b700e",
+    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.7.15-Setup.exe"
   },
   "release_toolchain": {
     "python": "3.12.10",
@@ -29,7 +29,7 @@
     },
     {
       "path": "app_version.py",
-      "sha256": "a94d88f7cf725dcbe9623caf7c3298695b531b5ac6061386aac7cce1f794e689"
+      "sha256": "c993713bea4ed16dbc3ad17e77b1cc9ca4fbbc855e8444831cc3023c20849403"
     },
     {
       "path": "app_icon.py",
@@ -57,11 +57,11 @@
     },
     {
       "path": "chat_overlay.py",
-      "sha256": "a9ed481ad1189eb353c5ce85ba3a93309407abb2d1cac3e1e9d4fd199ae91be8"
+      "sha256": "c68760f6c5a78bf2ab74de5cc66520ef3839d35a39e82ee6288068c0d45da590"
     },
     {
       "path": "overlay_tray.py",
-      "sha256": "ee9283c0a3a6c8549b58ca277109c99e03a549c8596e5ca57c6c36f5b8089d31"
+      "sha256": "f1c39148ddf45964307a2ea786a1792204fd000f13a21b5cd7ae018bf1de5220"
     },
     {
       "path": "reply_composer.py",
@@ -171,7 +171,7 @@
     },
     {
       "path": "CODEMAP.md",
-      "sha256": "912ce681bd2ab44906e584c179b0f7e5cfa9c0ab9d7bdf6ebeff602999710073"
+      "sha256": "4932908d548ce23cb48825c778250f7331e2317826f10a11cdc545e5ffe2db22"
     },
     {
       "path": "LICENSE-NOTICE.md",
@@ -179,7 +179,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "95d16982d6017cb742245d35c6e0d8e9b95b1672eb9321523b696b01c6335783"
+      "sha256": "fc85d1c902b371106ff388e8ad23c8fadc6a76665b186f12c2c42a1608433f15"
     },
     {
       "path": "SECURITY.md",
@@ -211,7 +211,7 @@
     },
     {
       "path": "app_version.py",
-      "sha256": "a94d88f7cf725dcbe9623caf7c3298695b531b5ac6061386aac7cce1f794e689"
+      "sha256": "c993713bea4ed16dbc3ad17e77b1cc9ca4fbbc855e8444831cc3023c20849403"
     },
     {
       "path": "assets/ITEM-CATALOG-NOTICE.txt",
@@ -247,7 +247,7 @@
     },
     {
       "path": "chat_overlay.py",
-      "sha256": "a9ed481ad1189eb353c5ce85ba3a93309407abb2d1cac3e1e9d4fd199ae91be8"
+      "sha256": "c68760f6c5a78bf2ab74de5cc66520ef3839d35a39e82ee6288068c0d45da590"
     },
     {
       "path": "game_log_setup.py",
@@ -287,7 +287,7 @@
     },
     {
       "path": "overlay_tray.py",
-      "sha256": "ee9283c0a3a6c8549b58ca277109c99e03a549c8596e5ca57c6c36f5b8089d31"
+      "sha256": "f1c39148ddf45964307a2ea786a1792204fd000f13a21b5cd7ae018bf1de5220"
     },
     {
       "path": "packaging/DISCORD.md",
@@ -319,7 +319,7 @@
     },
     {
       "path": "packaging/USER-README.txt",
-      "sha256": "9939439051526e17dda8a75bb6a03d572b12f5b637ffa203ee56f43e675122a0"
+      "sha256": "5225ef1217386b1623ce9b82074f686db8612cd8121a2385c8e48df79cd80d4f"
     },
     {
       "path": "packaging/bootstrap-tools.ps1",
@@ -347,7 +347,7 @@
     },
     {
       "path": "packaging/installer.iss",
-      "sha256": "b2371e5d3c0c1978cb966fb9bb51faffa582f832e589d53fc819db2dc6fc04b3"
+      "sha256": "ec3d72787bf39b9e8839be929a176776dbe2b3cf28f503cd58eca42ecb4d9893"
     },
     {
       "path": "packaging/licenses/INNO-SETUP.txt",
@@ -539,11 +539,11 @@
     },
     {
       "path": "sites/l2-chat-translator/changelog.json",
-      "sha256": "f5a5400944587d20d0b202f0bb1f185f48910f18a7f542a06e414b26054ea951"
+      "sha256": "e051bf30cfaca944b78e7c6c3e83dbcb74b5af984555349b20d05831ef344a41"
     },
     {
       "path": "sites/l2-chat-translator/index.template.html",
-      "sha256": "6fe4e475f4b16c6af6d828476e4ccf3722c7f2211473bcb71576852cbeaa7474"
+      "sha256": "42b56780c0b1e5fdb9cd8ee30986a65cb8feb6f1ae15be8fb96998d2ac72aa40"
     },
     {
       "path": "tests/test_app_update_integration.py",

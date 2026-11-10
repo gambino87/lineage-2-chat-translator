@@ -45,6 +45,9 @@ MUTED = "#a59e8b"
 CHANNEL_COLORS = {0: "#f0f0ed", 1: "#ffb769", 2: "#e9a5ed",
                   3: "#0cff0c", 4: "#c2aeef", 8: "#e4b1d6",
                   9: "#b6dd89", 17: "#ffe390", 25: "#f15353"}
+# Filter labels use the same channel color/fallback as rendered messages.
+CHANNEL_FILTER_COLORS = {key: CHANNEL_COLORS.get(ids[0] if ids else 0, CHANNEL_COLORS[0])
+                         for key, _label, ids in CHANNEL_FILTERS}
 HISTORY_LIMIT = 250  # Bounded in-memory display only; never persisted as chat.
 OPACITY_RANGE = (0.35, 1.0)
 FONT_SIZE_RANGE = (8, 22)
@@ -404,6 +407,7 @@ class ChatOverlay:
                 native_factory=_WindowsOverlay if self._native else None,
                 palette={"background": BACKGROUND, "header": HEADER, "border": BORDER,
                          "foreground": GOLD, "muted": MUTED},
+                channel_colors=CHANNEL_FILTER_COLORS,
                 opacity=self.settings["opacity"], on_open_change=self._tray_open_changed)
         self._tray.toggle()
 
@@ -817,8 +821,9 @@ class ChatOverlay:
         for index, (key, label, _ids) in enumerate(CHANNEL_FILTERS):
             variable = tk.BooleanVar(value=key in self.settings["channels"])
             self._channel_vars[key] = variable
+            color = CHANNEL_FILTER_COLORS[key]
             tk.Checkbutton(choices, text=label, variable=variable, command=self._channels_changed,
-                           bg=HEADER, fg="#dedbcf", activebackground=HEADER, activeforeground=GOLD,
+                           bg=HEADER, fg=color, activebackground=HEADER, activeforeground=color,
                            selectcolor=BACKGROUND, anchor="w", font=("Tahoma", 9)).grid(
                                row=index // CHANNEL_FILTER_COLUMNS, column=index % CHANNEL_FILTER_COLUMNS,
                                sticky="w", padx=(0, 10), pady=2)

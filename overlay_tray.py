@@ -40,13 +40,14 @@ class ChannelTray:
     """A separate clipped popup; its transient animation is never persisted."""
 
     def __init__(self, owner, *, options, selected, on_change, get_anchor,
-                 get_bounds, native_factory, palette, opacity, on_open_change):
+                 get_bounds, native_factory, palette, opacity, on_open_change, channel_colors=None):
         self.options = tuple(options)
         self.on_change = on_change
         self.get_anchor = get_anchor
         self.get_bounds = get_bounds
         self.on_open_change = on_open_change
         self.palette = palette
+        self.channel_colors = dict(channel_colors or {})
         self._opacity = opacity
         self._open = False
         self._shown = False
@@ -102,10 +103,11 @@ class ChannelTray:
         for key, label in self.options:
             variable = tk.BooleanVar(master=self.window, value=False)
             self._variables[key] = variable
+            color = self.channel_colors.get(key, colors["foreground"])
             self._choices.append(tk.Checkbutton(
                 self.choices, text=label, variable=variable, command=self._selected,
-                bg=colors["header"], fg=colors["foreground"],
-                activebackground=colors["header"], activeforeground=colors["foreground"],
+                bg=colors["header"], fg=color,
+                activebackground=colors["header"], activeforeground=color,
                 selectcolor=colors["background"], anchor="w", font=("Tahoma", 9),
                 highlightcolor=colors["foreground"], cursor="hand2"))
 

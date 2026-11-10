@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "1.7.14"
+  #define AppVersion "1.7.15"
 #endif
 #ifndef AppSource
   #error AppSource must point to the verified PyInstaller application folder
