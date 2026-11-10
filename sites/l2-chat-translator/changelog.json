@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.8.1",
+    "changes": [
+      "Improved English translations of Greeklish 'afou to lete kai oi dyo/dio' endings ('since both of you say so'), including uppercase text. The similar 'to lene' form retains 'both of them'.",
+      "This improvement applies to complete say-so clauses at the end of a message. Other Greeklish phrases can still be mistranslated."
+    ]
+  },
+  {
     "version": "1.8.0",
     "changes": [
       "Added interface translations for English, Spanish, Brazilian Portuguese, Russian, Polish, German, French, Turkish, Korean, Japanese and Simplified Chinese across the installer, launcher and chat overlay.",

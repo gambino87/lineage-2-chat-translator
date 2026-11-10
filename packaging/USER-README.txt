@@ -1,4 +1,4 @@
-LINEAGE 2 CHAT TRANSLATOR 1.8.0
+LINEAGE 2 CHAT TRANSLATOR 1.8.1
 
 Windows 10/11, 64-bit. Python is included; no separate Python installation is needed.
 The supplied L2CT artwork is used for the program, shortcuts and window icons.
@@ -11,6 +11,13 @@ and are remembered for future launches. Supported languages: English, Spanish,
 Brazilian Portuguese, Russian, Polish, German, French, Turkish, Korean, Japanese
 and Simplified Chinese. The interface language is separate from chat translation
 and reply language; changing menus does not alter translated chat or replies.
+
+GREEKLISH SAY-SO CLAUSES
+
+Greeklish is Greek written with Latin letters. English translations now include
+contextual help for complete "afou to lete kai oi dyo/dio" endings ("since both
+of you say so") and "to lene" variants ("both of them"). This is a scoped
+vocabulary improvement; other Greeklish messages can still translate incorrectly.
 
 PT-BR STREAM PROMOTIONS
 

@@ -28,6 +28,11 @@ _ZH_COMBAT = r"(?:怪物|拉怪|引怪|刷怪|抢怪|搶怪|奶妈|奶媽|补师
 
 # Incoming non-English chat. Existing v1.3.5 hints retain their wording.
 _INCOMING = (
+    # Complete Greeklish say-so clauses: keep grammatical person distinct.
+    _hint(r"(?<!\w)afou\s+to\s+lete\s+kai\s+oi\s+d(?:yo|io)(?=[.!?…\s]*\Z)",
+          'Greeklish afou to lete kai oi dyo/dio (αφού το λέτε και οι δυο) = since both of you say so; kala (καλά) = okay/well'),
+    _hint(r"(?<!\w)afou\s+to\s+lene\s+kai\s+oi\s+d(?:yo|io)(?=[.!?…\s]*\Z)",
+          'Greeklish afou to lene kai oi dyo/dio (αφού το λένε και οι δυο) = since both of them say so; kala (καλά) = okay/well'),
     # A promotional ending, not a quoted title or a phrase followed by other chat.
     _hint(r"(?<!\w)s[oó]\s+vem[\s,;:!.-]+o\s+pai\s+t[aá]\s+on(?=[.!?…\s]*\Z)",
           "In a Brazilian Portuguese streaming invitation, so vem o pai ta on (or só vem o pai tá on) means come join me, I'm live. Translate the invitation, and keep the whole channel title including its language tag unchanged",
