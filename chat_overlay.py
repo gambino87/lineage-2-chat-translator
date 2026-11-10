@@ -903,7 +903,6 @@ class ChatOverlay:
                 command=command or (lambda: self._change(key, variable.get())))
             widget.pack(anchor="w", fill="x", pady=3)
             return widget
-        checkbox("enabled", "Show overlay", lambda: self.show() if self._vars["enabled"].get() else self.hide())
         for key, label, lower, upper in (("opacity", "Opacity", *(round(value * 100) for value in OPACITY_RANGE)),
                                         ("font_size", "Text size", *FONT_SIZE_RANGE)):
             row = tk.Frame(content, bg=HEADER)

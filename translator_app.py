@@ -189,6 +189,7 @@ class TranslatorApp:
         self.show_original = tk.BooleanVar(value=self.config["show_original"])
         self.minimize_to_tray = tk.BooleanVar(value=self.config["minimize_to_tray"])
         self.close_to_tray = tk.BooleanVar(value=self.config["close_to_tray"])
+        self.overlay_enabled = tk.BooleanVar(value=self.config["overlay"]["enabled"])
         self.overlay_locked = tk.BooleanVar(value=self.config["overlay"]["locked"])
         self.on_top = tk.BooleanVar(value=False)
         self.status = LocalizedStringVar(value="Connecting to local Ollama…")
@@ -197,7 +198,7 @@ class TranslatorApp:
         self._build()
         self.overlay = ChatOverlay(self.root, self.config["overlay"], on_change=self._overlay_changed,
                                    on_reply=self.select_reply, model=self.config["model"])
-        self.overlay_button.configure(text=tr("Hide overlay" if self.overlay.settings["enabled"] else "Show overlay"))
+        self.overlay_enabled.set(self.overlay.settings["enabled"])
         self.overlay_locked.set(self.overlay.settings["locked"])
         if not self.overlay.supports_lock:
             self.overlay_lock_button.configure(state="disabled")
@@ -269,11 +270,6 @@ class TranslatorApp:
         self.read_button = ttk.Button(toolbar, text="Start reading", style="Accent.TButton", command=self.toggle_reading)
         self.read_button.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=(0, 5))
         ttk.Button(toolbar, text="Clear", command=self.clear).grid(row=0, column=1, sticky="ew", pady=(0, 5))
-        self.overlay_button = ttk.Button(toolbar, text="Show overlay", command=lambda: self.overlay.toggle())
-        self.overlay_button.grid(row=1, column=0, sticky="ew", padx=(0, 6))
-        ttk.Button(toolbar, text="Overlay settings…", command=lambda: self.overlay.open_settings()).grid(
-            row=1, column=1, sticky="ew")
-
         self.settings_panel = ttk.Frame(outer)
         self.settings_panel.grid(row=3, column=0, sticky="ew", pady=(0, 8))
         controls = ttk.Frame(self.settings_panel)
@@ -289,6 +285,9 @@ class TranslatorApp:
         ttk.Checkbutton(controls, text="Include notices", variable=self.notices).grid(row=1, column=2, sticky="w", padx=12)
         ttk.Checkbutton(controls, text="Main window on top", variable=self.on_top,
                         command=lambda: self.root.attributes("-topmost", self.on_top.get())).grid(row=0, column=2, sticky="w", padx=12)
+        self.overlay_button = ttk.Checkbutton(self.settings_panel, text="Show overlay",
+            variable=self.overlay_enabled, command=lambda: self.overlay.toggle())
+        self.overlay_button.pack(anchor="w", pady=(0, 6))
         self.overlay_lock_button = ttk.Checkbutton(self.settings_panel,
             text="Lock overlay and pass mouse clicks through", variable=self.overlay_locked,
             command=self._overlay_lock_changed)
@@ -371,7 +370,7 @@ class TranslatorApp:
         self.target_display.set(tr(self.target.get()))
         self.settings_button.configure(text=tr("Hide settings" if self.settings_panel.winfo_ismapped() else "Settings"))
         self.read_button.configure(text=tr("Pause reading" if self.reading else "Start reading" if self.connected else "Retry connection"))
-        self.overlay_button.configure(text=tr("Hide overlay" if self.overlay.settings["enabled"] else "Show overlay"))
+        self.overlay_enabled.set(self.overlay.settings["enabled"])
         for variable in (self.status, self.counter, self.connection):
             variable.refresh_language()
         self.overlay.refresh_language()
@@ -810,7 +809,7 @@ class TranslatorApp:
     def _overlay_changed(self, settings):
         self.config["overlay"] = dict(settings)
         self.overlay_locked.set(settings["locked"])
-        self.overlay_button.configure(text=tr("Hide overlay" if settings["enabled"] else "Show overlay"))
+        self.overlay_enabled.set(settings["enabled"])
         if not self.stop.is_set():
             self.save_settings()
 

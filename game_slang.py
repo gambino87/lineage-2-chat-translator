@@ -30,6 +30,12 @@ _ZH_COMBAT = r"(?:怪物|拉怪|引怪|刷怪|抢怪|搶怪|奶妈|奶媽|补师
 
 # Incoming non-English chat. Existing v1.3.5 hints retain their wording.
 _INCOMING = (
+    _hint('\\A\\s*(?a:d[ih]moskop[ih]s[ih])[ \\t]*:[ \\t]*(?a:[A-Za-z][A-Za-z0-9_-]{1,39}(?:[ \\t]+[A-Za-z][A-Za-z0-9_-]{1,39}){0,2}[ \\t]+[0-9]{1,3}[ \\t]+xron[wo]n[ \\t]+[hi][ \\t]+[A-Za-z][A-Za-z0-9_-]{1,39}(?:[ \\t]+[A-Za-z][A-Za-z0-9_-]{1,39}){0,2}[ \\t]+afrato[ \\t]+neo[ \\t]+k[wo]li[ \\t]+pou[ \\t]+gamagate)[ \\t.!?…]*\\Z',
+          'Greeklish DHMOSKOPHSH = Poll; xronwn = years old; H between options = or; afrato neo kwli = soft young ass; pou gamagate after that noun = that you (plural) used to fuck. Keep the names, stated age, choice and vulgarity; no future or conditional marker is explicitly written'),
+    _hint('\\A\\s*(?a:poutanas[ \\t]+gioi[ \\t]+panathinaikoi)[ \\t.!?…]*\\Z',
+          'Greeklish poutanas gioi = sons of bitches (a strong plural insult); panathinaikoi = fans of Panathinaikos, the football club. Keep sons plural and use the club name Panathinaikos in English. Return only the translated insult, without Greeklish, a label or an equals sign'),
+    _hint('\\A\\s*(?a:kanoniste[ \\t]+ell[ih]narades[ \\t]+na[ \\t]+kanete[ \\t]+clans[ \\t]+kai[ \\t]+na[ \\t]+kanete[ \\t]+wars[ \\t]+meta(?:ks|x)[uiy][ \\t]+sas[ \\t]+anti[ \\t]+na[ \\t]+pame[ \\t]+na[ \\t]+tous)[ \\t]*(?:\\.{3,}|…)[ \\t]*(?a:olous)[ \\t.!?…]*\\Z',
+          'Greeklish kanoniste Ellinarades na kanete clans kai na kanete wars metaksu sas = Go ahead, you Greeks, form clans and wage wars among yourselves. Translate anti na pame na tous ... olous exactly as instead of us going and ... all of them. The ... represents an unstated verb; it must remain before all of them. Ellinarades is emphatic and possibly ironic, not a name or a political claim'),
     # Complete all-group greetings, optionally excluding one named addressee.
     _hint(r"\A\s*(?a:kal[ih]spera[ \t]+se[ \t]+olous[ \t]+tous[ \t]+"
           r"[A-Za-z][A-Za-z0-9_-]{1,39}(?:[ \t]+ektos[ \t]+apo[ \t]+ton[ \t]+"

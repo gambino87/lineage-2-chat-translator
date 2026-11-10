@@ -1764,6 +1764,74 @@
           "expected_notes": "Good evening to all friends except PlayerOne; no invented my or clan membership."
         }
       ]
+    },
+    {
+      "id": "el_greeklish_clans_wars_omitted_action",
+      "language": "Greek (Latin-script Greeklish)",
+      "forms": [
+        "kanoniste Ellinarades na kanete clans kai na kanete wars metaksu sas anti na pame na tous ... olous"
+      ],
+      "english_gloss": "Go ahead, you Greeks, form clans and wage wars among yourselves instead of us going and ... all of them.",
+      "context": "Complete matched clan-war clause with the supplied omitted-action dots, supported Ellinarades/Ellhnarades and metaksu/metaxy-style spellings, and original grammatical persons.",
+      "risks": "Keep you-plural among yourselves, then us going, then all of them. The final verb is absent: do not invent an action, move the gap to trailing hesitation, manufacture a negative command, or assign political beliefs. Ellinarades is emphatic/possibly ironic. Exact punctuation may normalize. Changed persons, explicit verbs, quotes and added clauses stay outside this rule.",
+      "sources": [
+        "https://pyli.greeklanguage.gr/index.php?catid=69&id=630&option=com_content&pageS=198&tab=2&view=article",
+        "https://www.pyli.greeklanguage.gr/index.php?catid=69&id=611&option=com_content&pageS=1018&tab=2&view=article",
+        "https://www.greek-language.gr/greekLang/modern_greek/tools/lexica/triantafyllides/search.html?lq=%CE%BC%CE%B5%CF%84%CE%B1%CE%BE%CF%8D",
+        "https://www.greek-language.gr/greekLang/modern_greek/tools/lexica/triantafyllides/search.html?lq=%CE%B1%CE%BD%CF%84%CE%AF"
+      ],
+      "examples": [
+        {
+          "source": "Kanoniste Ellinarades na kanete clans kai na kanete wars metaksu sas anti na pame na tous ... olous ..",
+          "expected_notes": "Keep the unknown action as a gap before all of them; preserve the plural you/us/them distinction."
+        }
+      ]
+    },
+    {
+      "id": "el_greeklish_colloquial_poll",
+      "language": "Greek (Latin-script Greeklish)",
+      "forms": [
+        "dhmoskophsh",
+        "xronwn",
+        "h between choices",
+        "afrato neo kwli",
+        "pou gamagate"
+      ],
+      "english_gloss": "Poll; years old; or; soft young ass; a literal noun-following reading of that you (plural) used to fuck.",
+      "context": "Complete supported poll shape with two bounded synthetic-name fields, a stated numeric age and the exact noun-following pou gamagate ending.",
+      "risks": "The original syntax is ambiguous. Gamagate is plural imperfect; a contextual hypothetical reading is possible, but an explicit which-person/would question is not supplied. This lexical hint uses a defensible literal relative reading and retains you as subject. Preserve names, stated age, alternatives and vulgarity. Do not fact-correct ages or reinterpret the person described as the subject of gamagate. Present, explicitly conditional, negated and changed-relative forms remain outside this rule.",
+      "sources": [
+        "https://language.ntlab.gr/download.php?c=grammar_pdf&file=GG30_2056.pdf",
+        "https://ebooks.edu.gr/ebooks/v/html/8547/2192/Glossa_D-Dimotikou_html-empl/indexu_00.html",
+        "https://christikolexico.greeklanguage.gr/index.php?catid=2&id=2&option=com_content&pageS=2854&view=article",
+        "https://www.greek-language.gr/greekLang/modern_greek/tools/lexica/triantafyllides/search.html?lq=%CE%9A&page=447"
+      ],
+      "examples": [
+        {
+          "source": "DHMOSKOPHSH : AERIA VEX 50 XRONWN H PLAYERONE AFRATO NEO KWLI POU GAMAGATE",
+          "expected_notes": "Deidentified adult poll: retain the two labels, 50 years old, or, the crude body description and you as the subject. Do not assert a unique intended reading of the malformed ending."
+        }
+      ]
+    },
+    {
+      "id": "el_greeklish_football_plural_insult",
+      "language": "Greek (Latin-script Greeklish)",
+      "forms": [
+        "poutanas gioi panathinaikoi"
+      ],
+      "english_gloss": "Sons of bitches, Panathinaikos fans!",
+      "context": "The complete supported football insult, case insensitive, with optional terminal punctuation.",
+      "risks": "Preserve the plural conventional insult and the Panathinaikos fan reference. Do not sanitize the profanity, add threats or politics, echo an untranslated source/glossary equation, or reduce sons of bitches to bitches. Other targets, teams, singular forms and quoted titles stay outside this rule.",
+      "sources": [
+        "https://dictionaries.greeklanguage.gr/index.php?chronoform=ShowLima&limaID=12904&option=com_chronoforms5",
+        "https://www.pao.gr/en/fc/7525-these-are-panathinaikos-fans/"
+      ],
+      "examples": [
+        {
+          "source": "POUTANAS GIOI PANATHINAIKOI",
+          "expected_notes": "Translate the plural vulgar fan insult into English without echoing the Greeklish or adding an equals sign."
+        }
+      ]
     }
   ]
 }

@@ -12,6 +12,46 @@ import update_trust
 
 
 class UpdateRunnerTests(unittest.TestCase):
+    def test_progress_window_lifecycle_follows_verified_handoff(self):
+        source = app_updater.RUNNER_PATH.read_text(encoding='utf-8')
+        main = source.split('\ntry {\n    $checkedJob', 1)[1]
+        opened = main.index('$progressWindow = New-UpdateProgressWindow')
+        self.assertLess(main.index('$parentExited = $true'), opened)
+        self.assertLess(main.index('Assert-SignedRelease'), opened)
+        self.assertLess(opened, main.index('$restartExecutable = Invoke-IncrementalUpdate'))
+        installer = main.index('$installerProcess = Start-VerifiedProcess')
+        self.assertLess(main.index('Close-UpdateProgressWindow'), installer)
+        final = main.split("    Set-UpdateProgress 'Finishing update...'", 1)[1]
+        self.assertLess(final.index('Close-UpdateProgressWindow'),
+                        final.index('$restarted = Start-VerifiedProcess'))
+        self.assertLess(final.index('Close-UpdateProgressWindow'),
+                        final.index('[Windows.Forms.MessageBox]::Show'))
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows Forms compile-only validation')
+    def test_progress_window_compiles_without_creating_a_window(self):
+        # Compile the shipped C# and inspect its API. Never call its constructor,
+        # start the UI thread or enter the updater's install/process entry point.
+        declarations = app_updater.RUNNER_PATH.read_text(encoding='utf-8').split(
+            '\ntry {\n    $checkedJob', 1)[0].replace(
+                'param([Parameter(Mandatory = $true)][string]$JobPath)', '')
+        declarations = declarations.replace('return [L2Update.ProgressWindow]::new()',
+                                            'return [L2Update.ProgressWindow]')
+        harness = r'''
+$type = New-UpdateProgressWindow
+if (-not [IDisposable].IsAssignableFrom($type)) { throw 'Progress window cannot be disposed.' }
+if ($null -eq $type.GetMethod('Report', [type[]]@([string], [int]))) { throw 'Progress reporting API is missing.' }
+'progress-window-compiled-without-opening'
+'''
+        with tempfile.TemporaryDirectory(prefix='l2-update-progress-') as folder:
+            script = Path(folder) / 'compile.ps1'
+            script.write_text(declarations + '\n' + harness, encoding='utf-8-sig')
+            result = subprocess.run([
+                str(app_updater._powershell()), '-NoLogo', '-NoProfile', '-NonInteractive',
+                '-ExecutionPolicy', 'Bypass', '-File', str(script),
+            ], capture_output=True, text=True, timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('progress-window-compiled-without-opening', result.stdout)
+
     def test_both_verifiers_pin_the_same_key(self):
         source = app_updater.RUNNER_PATH.read_text(encoding='utf-8')
         key = re.search(r"\$releasePublicKeyBlob = '([^']+)'", source).group(1)

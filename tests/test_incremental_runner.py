@@ -26,6 +26,26 @@ class IncrementalRunnerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return json.loads(result.stdout)
 
+    def test_progress_reports_to_an_inert_sink_without_creating_a_window(self):
+        result = self.run_harness(r'''
+$progressWindow=$null
+Set-UpdateProgress 'No window is needed by headless transactions.'
+$script:progressEvents=[Collections.Generic.List[object]]::new()
+$progressWindow=[pscustomobject]@{}
+$progressWindow|Add-Member ScriptMethod Report {
+    param([string]$Text,[int]$Percent)
+    $script:progressEvents.Add(@{text=$Text;percent=$Percent})
+}
+Set-UpdateProgress 'Checking the updated translator...'
+Set-UpdateProgress 'Installing application files...' 42
+@{events=$script:progressEvents.ToArray();window_created=$false}|ConvertTo-Json -Compress -Depth 4
+''')
+        self.assertEqual(result['events'], [
+            {'text': 'Checking the updated translator...', 'percent': -1},
+            {'text': 'Installing application files...', 'percent': 42},
+        ])
+        self.assertFalse(result['window_created'])
+
     def test_real_signed_manifest_validation_rejects_unsafe_or_changed_records(self):
         result = self.run_harness(r'''
 $stage=$TestDirectory
@@ -165,6 +185,11 @@ $testKey=[Security.Cryptography.RSACng]::new(3072)
 $releasePublicKeyBlob=[Convert]::ToBase64String($testKey.Key.Export([Security.Cryptography.CngKeyBlobFormat]::GenericPublicBlob))
 $job=[pscustomobject]@{version='99.8.7';from_version='1.8.7';installer_file='Lineage-2-Chat-Translator-99.8.7-Setup.exe';installer_bytes=2048;installer_sha256=''}
 $cases=[Collections.Generic.List[string]]::new()
+$progressWindow=[pscustomobject]@{}
+$progressWindow|Add-Member ScriptMethod Report {
+    param([string]$Text,[int]$Percent)
+    $script:progressEvents.Add([pscustomobject]@{text=$Text;percent=$Percent})
+}
 function New-FullInstallerRequest([string]$Url){
     if($Url -cne 'https://40.160.140.227/downloads/Lineage-2-Chat-Translator-99.8.7-Setup.exe'){throw 'Fallback URL changed'}
     $script:requests++
@@ -177,7 +202,9 @@ try{
     foreach($scenario in @('valid','bad signature','redirect','truncated','oversized','wrong checksum','bad executable header')){
         $stage=Join-Path $TestDirectory ($scenario.Replace(' ','-')+'-download')
         $null=[IO.Directory]::CreateDirectory($stage)
-        $body=[byte[]]::new(2048);$body[0]=77;$body[1]=90
+        $script:progressEvents=[Collections.Generic.List[object]]::new()
+        $job.installer_bytes=if($scenario -eq 'valid'){600000}else{2048}
+        $body=[byte[]]::new($job.installer_bytes);$body[0]=77;$body[1]=90
         if($scenario -eq 'bad executable header'){$body[0]=0}
         $sha=[Security.Cryptography.SHA256]::Create()
         try{$job.installer_sha256=[BitConverter]::ToString($sha.ComputeHash($body)).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}
@@ -200,6 +227,15 @@ try{
         if($scenario -eq 'valid'){
             if($rejected){throw 'Valid signed installer fallback was rejected'}
             $lock=Open-VerifiedInstaller (Join-Path $stage 'installer.exe');$lock.Dispose()
+            $download=@($script:progressEvents|Where-Object{$_.text -ceq 'Downloading the full installer...'})
+            if($download.Count -lt 3 -or $download[0].percent -ne 0 -or $download[-1].percent -ne 100){throw 'Fallback download did not show start, byte progress and completion'}
+            $previous=-1
+            foreach($event in $download){
+                if($event.percent -lt $previous -or $event.percent -gt 100){throw 'Fallback download percentage moved backwards or exceeded its signed size'}
+                $previous=$event.percent
+            }
+            if(@($download|Where-Object{$_.percent -gt 0 -and $_.percent -lt 100}).Count -lt 1){throw 'Fallback download omitted intermediate byte progress'}
+            if($script:progressEvents[-1].text -cne 'Verifying the installer...'){throw 'Fallback download did not report installer verification'}
         }elseif(-not $rejected -or [IO.File]::Exists((Join-Path $stage 'installer.exe'))){throw ('Accepted unsafe fallback: '+$scenario)}
         if($scenario -eq 'bad signature' -and $script:requests -ne 0){throw 'Fetched installer before signature verification'}
         $script:inputStream.Dispose()
@@ -233,6 +269,11 @@ function Test-InstalledProgram {
     if($script:failSelfTest){throw 'inert fixture self-test failure'}
     return (Join-Path $root 'Lineage2ChatTranslator.exe')
 }
+$progressWindow=[pscustomobject]@{}
+$progressWindow|Add-Member ScriptMethod Report {
+    param([string]$Text,[int]$Percent)
+    $script:progressEvents.Add([pscustomobject]@{text=$Text;percent=$Percent})
+}
 $originalWriteTransaction=${function:Write-Transaction}
 function Write-Transaction($Value) {
     if($scenario -eq 'partial temporary rollback' -and -not $script:injectedFailure -and
@@ -243,7 +284,7 @@ function Write-Transaction($Value) {
     & $originalWriteTransaction $Value
 }
 $cases=[Collections.Generic.List[string]]::new()
-foreach($scenario in @('success','selftest rollback','partial temporary rollback','missing payload','changed payload','modified obsolete DLL')) {
+foreach($scenario in @('success','already current files','selftest rollback','partial temporary rollback','missing payload','changed payload','modified obsolete DLL')) {
     $root=Join-Path $TestDirectory ($scenario.Replace(' ','-')+'-install')
     $stage=Join-Path $TestDirectory ($scenario.Replace(' ','-')+'-stage')
     $null=[IO.Directory]::CreateDirectory($root)
@@ -253,6 +294,7 @@ foreach($scenario in @('success','selftest rollback','partial temporary rollback
     $null=[IO.Directory]::CreateDirectory($preferences)
     $job=[pscustomobject]@{nonce=('a'*32);version='99.8.7';from_version='1.8.7';preferences=$preferences}
     $restartPermitted=$true;$preserveStage=$false;$script:probes=0
+    $script:progressEvents=[Collections.Generic.List[object]]::new()
     $script:injectedFailure=$false
     $script:failSelfTest=$scenario -eq 'selftest rollback'
     try {
@@ -271,8 +313,10 @@ foreach($scenario in @('success','selftest rollback','partial temporary rollback
             if($file.path -ne '_internal/keep.dll'){
                 $text=switch($file.path){'Lineage2ChatTranslator.exe'{'new-exe'}'_internal/change.dll'{'new-library'}default{'new-dependency'}}
                 Write-Fixture (Join-Path $stage ($file.sha256+'.payload')) $text
+                if($scenario -eq 'already current files'){Write-Fixture (Get-ProgramFile $root $file.path) $text}
             }
         }
+        if($scenario -eq 'already current files'){[IO.File]::Delete((Join-Path $root '_internal/retired.dll'))}
         $manifest=@{schema_version=1;product=$productName;platform='windows-x64';version=$job.version;files=$files;cleanup=@{schema_version=1;product=$productName;version=$job.version;current_paths=@($files|ForEach-Object{$_.path});obsolete_files=@(@{path='_internal/retired.dll';hashes=@((Identity-Bytes 'known-retired').sha256)},@{path='_internal/modified.txt';hashes=@((Identity-Bytes 'earlier-data').sha256)})}}
         [IO.File]::WriteAllText((Join-Path $stage 'files.json'),($manifest|ConvertTo-Json -Compress -Depth 10),[Text.UTF8Encoding]::new($false))
         Write-Fixture (Join-Path $stage 'release.json') 'inert-already-verified-release'
@@ -285,8 +329,24 @@ foreach($scenario in @('success','selftest rollback','partial temporary rollback
         $rejected=$false
         $failure=''
         try {$null=Invoke-IncrementalUpdate $root}catch{$rejected=$true;$failure=$_.Exception.Message}
-        if($scenario -eq 'success'){
+        if($scenario -in @('success','already current files')){
             if($rejected){throw ('The valid file transaction failed: '+$failure)}
+            $stages=@($script:progressEvents|ForEach-Object{$_.text})
+            $previous=-1
+            foreach($text in @('Checking installed files...','Backing up application files...','Installing application files...','Verifying installed files...','Checking the updated translator...','Saving update information...')){
+                $position=[Array]::IndexOf($stages,$text)
+                if($position -le $previous){throw ('Update progress omitted or reordered '+$text)}
+                $previous=$position
+            }
+            foreach($text in @('Checking installed files...','Backing up application files...','Installing application files...','Verifying installed files...')){
+                $events=@($script:progressEvents|Where-Object{$_.text -ceq $text})
+                if($events.Count -lt 2 -or $events[0].percent -ne 0 -or $events[-1].percent -ne 100){throw ('Update phase did not report file completion: '+$text)}
+                $previous=-1
+                foreach($event in $events){
+                    if($event.percent -lt $previous -or $event.percent -gt 100){throw ('Invalid update percentage: '+$text)}
+                    $previous=$event.percent
+                }
+            }
             foreach($file in $files){Assert-FileMatches (Get-ProgramFile $root $file.path) $file}
             if([IO.File]::Exists((Join-Path $root '_internal/retired.dll'))){throw 'Retired file survived'}
             if((Read-Record (Join-Path $stage 'transaction.json') $maxFileManifestBytes).state -cne 'committed'){throw 'Transaction not committed'}
@@ -297,6 +357,8 @@ foreach($scenario in @('success','selftest rollback','partial temporary rollback
             if([IO.File]::ReadAllText((Join-Path $root '_internal/change.dll')) -cne 'old-library'){throw 'Original library not restored'}
             if([IO.File]::Exists((Join-Path $root '_internal/new/dependency.dll'))){throw 'New dependency not rolled back'}
             if($scenario -in @('selftest rollback','partial temporary rollback')){
+                if(@($script:progressEvents|Where-Object{$_.text -ceq 'Restoring the previous version...'}).Count -eq 0){throw 'Failed update did not report restoration progress'}
+                if(@($script:progressEvents|Where-Object{$_.text -ceq 'Saving update information...'}).Count -gt 0){throw 'Failed update reported saving a successful update'}
                 if([IO.File]::ReadAllText((Join-Path $root '_internal/retired.dll')) -cne 'known-retired'){throw 'Retired file not restored'}
                 if((Read-Record (Join-Path $stage 'transaction.json') $maxFileManifestBytes).state -cne 'rolled_back'){throw 'Rollback journal not complete'}
                 if(-not $restartPermitted -or $preserveStage){throw 'Successful rollback prevented retry'}
@@ -308,12 +370,15 @@ foreach($scenario in @('success','selftest rollback','partial temporary rollback
         if([IO.File]::ReadAllText((Join-Path $root 'settings.json')) -cne 'preferences-fixture'){throw 'Settings changed'}
         if((Get-Item -LiteralPath (Join-Path $root '_internal/keep.dll')).LastWriteTimeUtc -ne $unchanged){throw 'Unchanged file rewritten'}
         if(@(Get-ChildItem -LiteralPath $root -Recurse -File|Where-Object{$_.Name -like '*.l2ct-*'}).Count -ne 0){throw 'Temporary program file survived rollback'}
+        foreach($event in $script:progressEvents){
+            if($event.percent -lt -1 -or $event.percent -gt 100){throw 'Progress percentage outside the supported range'}
+        }
         $cases.Add($scenario)
     }finally{$pathLocks.Dispose()}
 }
 @{cases=$cases.ToArray();application_executed=$false}|ConvertTo-Json -Compress -Depth 3
 ''')
-        self.assertEqual(result['cases'], ['success', 'selftest rollback', 'partial temporary rollback', 'missing payload',
+        self.assertEqual(result['cases'], ['success', 'already current files', 'selftest rollback', 'partial temporary rollback', 'missing payload',
                                           'changed payload', 'modified obsolete DLL'])
         self.assertFalse(result['application_executed'])
 

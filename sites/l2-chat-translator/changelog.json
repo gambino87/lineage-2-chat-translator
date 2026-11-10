@@ -1,5 +1,16 @@
 [
   {
+    "version": "1.8.11",
+    "changes": [
+      "Improved the reported Greeklish clan-war sentence while keeping who is being addressed and leaving its omitted final action unstated.",
+      "Added contextual help for the reported Greeklish poll, retaining names, stated ages, alternatives and crude wording. Its ambiguous ending uses a literal reading.",
+      "Improved the reported Greeklish football-fan insult, preserving the plural profanity and Panathinaikos reference.",
+      "Updates started from this version show a responsive progress window for file checks, backups, installation, verification, recovery and full-installer fallback downloads.",
+      "Moved the Show overlay checkbox into the client Settings and removed it from overlay settings.",
+      "Removed the Overlay settings button from the client. Open overlay settings from the overlay."
+    ]
+  },
+  {
     "version": "1.8.10",
     "changes": [
       "Opening the translator again brings the running window to the front instead of showing an already-open error. This also restores windows minimized to the taskbar or hidden in the system tray.",
@@ -55,7 +66,7 @@
     "changes": [
       "Linked items now appear in light grey and party recruitment links in light blue in the launcher and overlay.",
       "Surrounding text and player names keep their chat-channel colors. Party descriptions remain translated, and original-message views use the same link colors.",
-      "Improved standalone Spanish approval replies such as 'bien ahí' so they read naturally in English ('Nice!').",
+      "Improved standalone Spanish approval replies such as 'bien ahÃ­' so they read naturally in English ('Nice!').",
       "Added selected English farm/farming game vocabulary for Spanish replies, using farmear/farmeando in supported activity and verb contexts while retaining the original grammar and stated details."
     ]
   },
@@ -85,7 +96,7 @@
   {
     "version": "1.7.16",
     "changes": [
-      "Improved English translations of mixed English/PT-BR stream promotions ending in 'só vem o pai tá on' ('come join me, I'm live'), including unaccented forms. This improvement is limited to promotional endings."
+      "Improved English translations of mixed English/PT-BR stream promotions ending in 'sÃ³ vem o pai tÃ¡ on' ('come join me, I'm live'), including unaccented forms. This improvement is limited to promotional endings."
     ]
   },
   {

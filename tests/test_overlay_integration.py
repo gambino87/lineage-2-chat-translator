@@ -110,6 +110,7 @@ def headless_app():
     app.log_path = Value(ORIGINS_LOG)
     app.notices = Value(False)
     app.show_original = Value(True)
+    app.overlay_enabled = Value(False)
     app.overlay_locked = Value(False)
     app.status = Value("")
     app.counter = Value("")

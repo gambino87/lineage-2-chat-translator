@@ -48,11 +48,107 @@ $restartPermitted = $true
 $preserveStage = $false
 $signedRelease = $null
 $fileManifest = $null
+$progressWindow = $null
 $status = 'error'
 $message = 'The update did not complete. Saved models and settings have not been removed.'
 
 function Assert-Condition([bool]$Condition, [string]$Description) {
     if (-not $Condition) { throw $Description }
+}
+
+function New-UpdateProgressWindow {
+    if ($null -eq ('L2Update.ProgressWindow' -as [type])) {
+        Add-Type -ReferencedAssemblies System.Windows.Forms, System.Drawing -TypeDefinition @'
+using System;
+using System.Drawing;
+using System.Threading;
+using System.Windows.Forms;
+namespace L2Update {
+    // Only this thread owns the controls. File verification, copying and the
+    // installed self-test cannot block its message loop or progress animation.
+    public sealed class ProgressWindow : IDisposable {
+        private readonly object gate = new object();
+        private readonly ManualResetEvent ready = new ManualResetEvent(false);
+        private readonly Thread worker;
+        private string text = "Preparing update...";
+        private int percent = -1;
+        private bool stopping;
+        private Exception startupError;
+        public ProgressWindow() {
+            worker = new Thread(Run);
+            worker.IsBackground = true;
+            worker.SetApartmentState(ApartmentState.STA);
+            worker.Start();
+            if (!ready.WaitOne(10000)) {
+                Dispose();
+                throw new InvalidOperationException("The update progress window could not open. Please retry the update.");
+            }
+            if (startupError != null) {
+                Dispose();
+                throw new InvalidOperationException("The update progress window could not open. Please retry the update.", startupError);
+            }
+        }
+        public void Report(string value, int completed) {
+            lock (gate) { text = value; percent = Math.Max(-1, Math.Min(100, completed)); }
+        }
+        public void Dispose() {
+            lock (gate) { stopping = true; }
+            worker.Join(5000);
+        }
+        private void Run() {
+            try {
+                using (var form = new Form())
+                using (var timer = new System.Windows.Forms.Timer()) {
+                    form.Text = "Lineage 2 Chat Translator - Update";
+                    form.ClientSize = new Size(480, 158);
+                    form.AutoScaleMode = AutoScaleMode.Dpi;
+                    form.Font = new Font("Segoe UI", 10F);
+                    form.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    form.StartPosition = FormStartPosition.CenterScreen;
+                    form.MaximizeBox = false;
+                    form.MinimizeBox = false;
+                    form.ControlBox = false;
+                    var label = new Label { Left = 24, Top = 22, Width = 432, Height = 28, Text = text };
+                    var bar = new ProgressBar { Left = 24, Top = 62, Width = 432, Height = 22,
+                        Style = ProgressBarStyle.Marquee, MarqueeAnimationSpeed = 25 };
+                    var note = new Label { Left = 24, Top = 102, Width = 432, Height = 40,
+                        Text = "Please wait. The translator will reopen when finished." };
+                    form.Controls.AddRange(new Control[] { label, bar, note });
+                    // Alt+F4/session close cannot interrupt a file transaction.
+                    form.FormClosing += delegate(object sender, FormClosingEventArgs e) {
+                        lock (gate) { e.Cancel = !stopping; }
+                    };
+                    form.Shown += delegate { ready.Set(); };
+                    timer.Interval = 100;
+                    timer.Tick += delegate {
+                        lock (gate) {
+                            if (stopping) { form.Close(); return; }
+                            label.Text = text;
+                            bar.Style = percent < 0 ? ProgressBarStyle.Marquee : ProgressBarStyle.Continuous;
+                            if (percent >= 0) bar.Value = percent;
+                        }
+                    };
+                    timer.Start();
+                    Application.Run(form);
+                }
+            } catch (Exception error) { startupError = error; }
+            finally { ready.Set(); }
+        }
+    }
+}
+'@
+    }
+    return [L2Update.ProgressWindow]::new()
+}
+
+function Set-UpdateProgress([string]$Text, [int]$Percent = -1) {
+    if ($null -ne $progressWindow) { $progressWindow.Report($Text, $Percent) }
+}
+
+function Close-UpdateProgressWindow {
+    if ($null -ne $progressWindow) {
+        try { $progressWindow.Dispose() } finally { $script:progressWindow = $null }
+    }
 }
 
 function New-UpdatePathLocks {
@@ -611,6 +707,7 @@ function Save-InstalledReceipts($Transaction) {
 }
 
 function Restore-IncrementalTransaction($Transaction, [string]$Root) {
+    Set-UpdateProgress 'Restoring the previous version...'
     # Every backup was verified and flushed before the journal became active.
     # Restore all planned paths: this also covers a crash between mutation/journal writes.
     foreach ($entry in $Transaction.entries) {
@@ -663,11 +760,15 @@ function Restore-IncrementalTransaction($Transaction, [string]$Root) {
 }
 
 function Invoke-IncrementalUpdate([string]$Root) {
+    Set-UpdateProgress 'Checking installed files...' 0
     Assert-FileManifest
     $entries = [Collections.Generic.List[object]]::new()
+    $checkedFiles = 0
     foreach ($file in $fileManifest.files) {
         $destination = Get-ProgramFile $Root $file.path
         $identity = Get-FileIdentity $destination
+        $checkedFiles++
+        Set-UpdateProgress 'Checking installed files...' ([int](100 * $checkedFiles / $fileManifest.files.Count))
         if ($null -ne $identity -and $identity.bytes -eq $file.bytes -and $identity.sha256 -ceq $file.sha256) { continue }
         $payload = Assert-PlainPath ([IO.Path]::Combine($stage, $file.sha256 + '.payload'))
         Assert-FileMatches $payload $file
@@ -686,6 +787,7 @@ function Invoke-IncrementalUpdate([string]$Root) {
             backup=''; target_sha256=''; remove=$true; temporary=($old.path+'.l2ct-'+$job.nonce); temporary_id=''})
     }
     # Snapshot every original before allowing a single installation change.
+    Set-UpdateProgress 'Backing up application files...' 0
     for ($index = 0; $index -lt $entries.Count; $index++) {
         $entry = $entries[$index]
         $destination = Get-ProgramFile $Root $entry.path
@@ -704,13 +806,17 @@ function Invoke-IncrementalUpdate([string]$Root) {
         } else {
             Assert-Condition (-not [IO.File]::Exists($destination)) 'A new program path changed before installation.'
         }
+        Set-UpdateProgress 'Backing up application files...' ([int](100 * ($index + 1) / $entries.Count))
     }
+    Set-UpdateProgress 'Backing up application files...' 100
     $transaction = [pscustomobject]@{app_id=$appIdentity; schema_version=1; nonce=$job.nonce;
         state='applying'; version=$job.version; from_version=$job.from_version; entries=$entries.ToArray();
         receipts=(New-InstalledReceipts $entries.Count)}
     Write-Transaction $transaction
     $script:restartPermitted = $false
     try {
+        Set-UpdateProgress 'Installing application files...' 0
+        $appliedFiles = 0
         foreach ($entry in $entries) {
             Write-Transaction $transaction
             $destination = Get-ProgramFile $Root $entry.path
@@ -739,9 +845,20 @@ function Invoke-IncrementalUpdate([string]$Root) {
                 if ($entry.existed) { [L2Update.PathLocks]::ReplaceFile($temporary, $destination) }
                 else { [IO.File]::Move($temporary, $destination) }
             }
+            $appliedFiles++
+            Set-UpdateProgress 'Installing application files...' ([int](100 * $appliedFiles / $entries.Count))
         }
-        foreach ($file in $fileManifest.files) { Assert-FileMatches (Get-ProgramFile $Root $file.path) $file }
+        Set-UpdateProgress 'Installing application files...' 100
+        Set-UpdateProgress 'Verifying installed files...' 0
+        $verifiedFiles = 0
+        foreach ($file in $fileManifest.files) {
+            Assert-FileMatches (Get-ProgramFile $Root $file.path) $file
+            $verifiedFiles++
+            Set-UpdateProgress 'Verifying installed files...' ([int](100 * $verifiedFiles / $fileManifest.files.Count))
+        }
+        Set-UpdateProgress 'Checking the updated translator...'
         $verified = Test-InstalledProgram @($job.version)
+        Set-UpdateProgress 'Saving update information...'
         Save-InstalledReceipts $transaction
         $transaction.state = 'committed'
         Write-Transaction $transaction
@@ -774,6 +891,7 @@ function New-FullInstallerRequest([string]$Url) {
 }
 
 function Download-FullInstaller {
+    Set-UpdateProgress 'Downloading the full installer...' 0
     Assert-SignedRelease
     $url = 'https://40.160.140.227/downloads/' + $job.installer_file
     $request = New-FullInstallerRequest $url
@@ -796,9 +914,11 @@ function Download-FullInstaller {
             $received += $count
             Assert-Condition ($received -le $job.installer_bytes) 'The installer fallback exceeded its signed size.'
             $output.Write($buffer, 0, $count)
+            Set-UpdateProgress 'Downloading the full installer...' ([int](100 * $received / $job.installer_bytes))
         }
         $output.Flush($true); $output.Dispose(); $output = $null
         Assert-Condition ($received -eq $job.installer_bytes) 'The installer fallback download was incomplete.'
+        Set-UpdateProgress 'Verifying the installer...'
         $lock = Open-VerifiedInstaller $part
         try {
             $lock.Position = 0
@@ -919,6 +1039,10 @@ try {
     $committed = $true
     Assert-Condition ($originalProcess.WaitForExit($parentExitTimeoutMs)) 'The translator did not finish closing. No installer was run.'
     $parentExited = $true
+    if ($incrementalMode) {
+        $progressWindow = New-UpdateProgressWindow
+        Set-UpdateProgress 'Checking installed files...'
+    }
     Assert-Condition (-not [IO.File]::Exists($cancelPath)) 'The update was canceled.'
     Assert-Installation $executable | Out-Null
     Assert-InstalledVersion $executable
@@ -952,6 +1076,7 @@ try {
         # parents pinned and bind the root's object ID across this handoff.
         $pathLocks.ReleaseDescendantsForInstaller([IO.Path]::GetDirectoryName($executable))
         $pathLocks.ReleaseForInstaller([IO.Path]::GetDirectoryName($executable))
+        Close-UpdateProgressWindow
         $installerProcess = Start-VerifiedProcess $installer $arguments $false
         # Inno shows its normal progress window; it never closes unrelated apps.
         $installerProcess.WaitForExit()
@@ -969,6 +1094,8 @@ try {
         if ($installerProcess) { $installerProcess.Dispose() }
         $installerLock.Dispose()
     }
+    if ($incrementalMode) { $progressWindow = New-UpdateProgressWindow }
+    Set-UpdateProgress 'Checking the updated translator...'
     $restartExecutable = Test-InstalledProgram @($job.version)
     }
     # The uninstaller registration remains the same; Settings and Windows now
@@ -988,6 +1115,7 @@ try {
         }
     }
 } finally {
+    Set-UpdateProgress 'Finishing update...'
     if ($originalProcess) { $originalProcess.Dispose() }
     if ($safeStage) {
         try { Remove-OwnedStage } catch {
@@ -1007,6 +1135,8 @@ try {
         if ($mutexHeld) { $helperMutex.ReleaseMutex() }
         $helperMutex.Dispose()
     }
+    Set-UpdateProgress 'Reopening the translator...'
+    Close-UpdateProgressWindow
 }
 
 if ($restartExecutable) {

@@ -42,6 +42,7 @@ class ClientLanguageTests(unittest.TestCase):
         app.settings_panel.winfo_ismapped.return_value = False
         app.settings_button = Mock()
         app.read_button = Mock()
+        app.overlay_enabled = Mock()
         app.overlay_button = Mock()
         app.status = LocalizedStringVar(master=self.interpreter, value="Watching for new chat…")
         app.counter = LocalizedStringVar(master=self.interpreter)
