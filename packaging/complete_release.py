@@ -36,7 +36,17 @@ MAX_PAGE_BYTES = 1024 * 1024
 MAX_CHECKSUM_BYTES = 64 * 1024
 MAX_PROVIDER_SCRIPT_BYTES = 16 * 1024
 MAX_INSTALLER_BYTES = 256 * 1024 * 1024
+UPDATE_FETCH_WORKERS = 4
+UPDATE_FETCH_ATTEMPTS = 3
+# curl transport failures only: connect, partial transfer, timeout, TLS handshake,
+# empty reply, send/receive failure and HTTP/2 stream reset. Certificate, HTTP
+# status and size-limit failures remain immediate verification failures.
+TRANSIENT_CURL_CODES = frozenset({7, 18, 28, 35, 52, 55, 56, 92})
 require = release_site.require
+
+
+class TransientHTTPSError(ValueError):
+    """A bounded public transfer failed before it could be authenticated."""
 
 
 def fetch_https(url: str, limit: int) -> bytes:
@@ -52,11 +62,26 @@ def fetch_https(url: str, limit: int) -> bytes:
              "--max-filesize", str(limit), url],
             capture_output=True, check=True, timeout=REQUEST_SECONDS + 5,
         )
-    except (OSError, subprocess.SubprocessError) as exc:
+    except subprocess.CalledProcessError as exc:
+        failure = TransientHTTPSError if exc.returncode in TRANSIENT_CURL_CODES else ValueError
+        raise failure(f"Could not verify {url}; cleanup has not run.") from None
+    except subprocess.TimeoutExpired:
+        raise TransientHTTPSError(f"Could not verify {url}; cleanup has not run.") from None
+    except (OSError, subprocess.SubprocessError):
         # External errors may contain response content; show only the public URL.
-        raise ValueError(f"Could not verify {url}; cleanup has not run.") from exc
+        raise ValueError(f"Could not verify {url}; cleanup has not run.") from None
     require(len(result.stdout) <= limit, "Public response exceeded its expected size.")
     return result.stdout
+
+
+def fetch_update_object(url: str, limit: int) -> bytes:
+    """Retry only transport failures; successful bytes still require all hashes."""
+    for attempt in range(UPDATE_FETCH_ATTEMPTS):
+        try:
+            return fetch_https(url, limit)
+        except TransientHTTPSError:
+            if attempt + 1 == UPDATE_FETCH_ATTEMPTS:
+                raise
 
 
 def page_matches(actual: bytes, expected: bytes, *, allow_provider_script: bool) -> bool:
@@ -77,21 +102,21 @@ def page_matches(actual: bytes, expected: bytes, *, allow_provider_script: bool)
 
 
 def verify_update_host(base: str, public: dict):
-    """Audit all current live update objects with a bounded eight-connection pool."""
+    """Audit current objects with bounded transfer retries and concurrency."""
     if "incremental" not in public:
         return None, set()
     from incremental_update import validate_descriptor, validate_manifest
     descriptor = validate_descriptor(public["incremental"], public["version"])
     manifest = descriptor["manifest"]
-    data = fetch_https(base + "/" + manifest["file"], manifest["bytes"])
+    data = fetch_update_object(base + "/" + manifest["file"], manifest["bytes"])
     require(len(data) == manifest["bytes"] and hashlib.sha256(data).hexdigest() == manifest["sha256"],
             "Live update manifest differs from its signed release; cleanup has not run.")
     document = validate_manifest(data, public["version"])
     tools = release_site.update_tools()
     requests = {tools.blob_path(row): row["blob"]["bytes"] for row in document["files"]}
     cache = {manifest["file"]: data}
-    with ThreadPoolExecutor(max_workers=8) as workers:
-        pending = {workers.submit(fetch_https, base + "/" + name, limit): name for name, limit in requests.items()}
+    with ThreadPoolExecutor(max_workers=UPDATE_FETCH_WORKERS) as workers:
+        pending = {workers.submit(fetch_update_object, base + "/" + name, limit): name for name, limit in requests.items()}
         for future in as_completed(pending):
             cache[pending[future]] = future.result()
     return tools.verify_public(lambda name, limit: cache[name], public)

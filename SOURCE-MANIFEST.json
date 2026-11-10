@@ -371,7 +371,7 @@
     },
     {
       "path": "packaging/complete_release.py",
-      "sha256": "ac26ad8085ff72be9458dd1f4948b0132dce303b465cc2b671b159149c9eeeff"
+      "sha256": "f9d62aea02a7a5291f58460d69aed7b9b4f23beef01ed98898b380dbb8e8ccd9"
     },
     {
       "path": "packaging/download-page.html",
@@ -675,7 +675,7 @@
     },
     {
       "path": "tests/test_complete_release.py",
-      "sha256": "48626c8a972a47afe6f5f1e46e34ca312f39f7efc7f395dc5a156d443ee5a185"
+      "sha256": "13dd9d3ee77d0fdd307cfa6d35f78f25465a87e73ee4559af2968a466404f858"
     },
     {
       "path": "tests/test_discord_deploy_hook.py",

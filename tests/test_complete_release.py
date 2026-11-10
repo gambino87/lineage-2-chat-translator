@@ -271,6 +271,32 @@ class RetainedInputTests(unittest.TestCase):
 
 
 class FetchBoundaryTests(unittest.TestCase):
+    def test_update_fetch_retries_transport_failure_but_not_integrity_failure(self):
+        with patch.object(complete, 'fetch_https', side_effect=[complete.TransientHTTPSError('timeout'), b'ok']) as fetch:
+            self.assertEqual(complete.fetch_update_object('https://example.test/object', 2), b'ok')
+        self.assertEqual(fetch.call_count, 2)
+        with patch.object(complete, 'fetch_https', side_effect=complete.TransientHTTPSError('timeout')) as fetch:
+            with self.assertRaises(complete.TransientHTTPSError):
+                complete.fetch_update_object('https://example.test/object', 2)
+        self.assertEqual(fetch.call_count, complete.UPDATE_FETCH_ATTEMPTS)
+        with patch.object(complete, 'fetch_https', side_effect=ValueError('invalid response')) as fetch:
+            with self.assertRaises(ValueError):
+                complete.fetch_update_object('https://example.test/object', 2)
+        self.assertEqual(fetch.call_count, 1)
+
+    def test_certificate_http_and_size_failures_are_never_classified_as_retryable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            system = Path(temporary)
+            (system / 'curl.exe').write_bytes(b'fixture, never executed')
+            with patch.object(complete, 'windows_directories', return_value=(system, system)):
+                for code in (7, 18, 28, 35, 52, 55, 56, 92, 22, 60, 63):
+                    with self.subTest(code=code), patch.object(complete.subprocess, 'run',
+                            side_effect=subprocess.CalledProcessError(code, ['synthetic-curl'])):
+                        with self.assertRaises(ValueError) as caught:
+                            complete.fetch_https('https://example.test/object', 2)
+                        self.assertEqual(isinstance(caught.exception, complete.TransientHTTPSError),
+                                         code in complete.TRANSIENT_CURL_CODES)
+
     def test_system_curl_has_bounded_time_size_and_no_user_config_or_redirect(self):
         with tempfile.TemporaryDirectory() as temporary:
             system = Path(temporary)
