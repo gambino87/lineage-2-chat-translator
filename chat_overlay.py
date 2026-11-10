@@ -15,7 +15,7 @@ from tkinter import messagebox
 from translator_core import LANGUAGE_CODES, MAX_CHAT_CHARACTERS, UNIVERSAL_TRADE_LANGUAGE
 from chat_links import LINK_COLORS, insert_linked_text, normalize_display
 from reply_composer import whisper_recipient
-from overlay_tray import ChannelTray
+from overlay_tray import ChannelTray, SettingsDrawer, choice_columns
 from ui_i18n import tr
 
 
@@ -31,7 +31,6 @@ CHANNEL_FILTERS = (
 )
 ALL_CHANNEL_FILTERS = tuple(key for key, _label, _ids in CHANNEL_FILTERS)
 CHANNEL_FILTER_BY_ID = {channel: key for key, _label, ids in CHANNEL_FILTERS for channel in ids}
-CHANNEL_FILTER_COLUMNS = 3
 DEFAULT_OVERLAY = {
     "enabled": False, "opacity": 0.85, "font_size": 11,
     "width": 540, "height": 230, "x": None, "y": None,
@@ -306,6 +305,8 @@ class ChatOverlay:
         self._geometry_timer = None
         self._layout_timer = None
         self._settings_window = None
+        self._settings_drawer = None
+        self._pending_drawer = None
         self._vars = {}
         self._channel_vars = {}
         self._tray = None
@@ -345,7 +346,9 @@ class ChatOverlay:
         self.grip.bind("<B1-Motion>", self._resize)
         self.grip.bind("<ButtonRelease-1>", self._end_geometry)
         self._header_button("×", self.hide).pack(side="right")
-        self._header_button("Settings", self.open_settings).pack(side="right")
+        self.settings_button = self._header_button("Settings", self._toggle_settings_drawer)
+        self.settings_button.pack(side="right")
+        self._settings_open_changed(False)
         self.channels_button = self._header_button("Channels", self._toggle_channel_tray)
         self.channels_button.pack(side="right")
         self._tray_open_changed(False)
@@ -431,35 +434,94 @@ class ChatOverlay:
             widget.configure(text=tr(source))
         self._update_caption()
         self._tray_open_changed(self._tray.is_open if self._tray is not None else False)
+        self._settings_open_changed(self._settings_drawer.is_open if self._settings_drawer is not None else False)
         if self._settings_window is not None:
             self._settings_window.title(tr("Chat overlay settings"))
         if self._tray is not None:
             self._tray.refresh_language()
+        if self._settings_drawer is not None:
+            self._settings_drawer.refresh_language()
         self._render_all()
         self.latest.configure(text=tr("{count} new · Latest ↓", count=self._unseen) if self._unseen else "")
 
     def _toggle_channel_tray(self):
         if self._destroyed or self.settings["locked"]:
             return
-        if self._tray is None:
+        self._request_drawer("channels", toggle=True)
+
+    def _toggle_settings_drawer(self):
+        self._request_drawer("settings", toggle=True)
+
+    def _drawer_options(self, on_open_change):
+        return dict(get_anchor=self._rect, get_bounds=self._tray_bounds,
+                    native_factory=_WindowsOverlay if self._native else None,
+                    palette={"background": BACKGROUND, "header": HEADER, "border": BORDER,
+                             "foreground": GOLD, "muted": MUTED},
+                    opacity=self.settings["opacity"], on_open_change=on_open_change,
+                    on_closed=self._drawer_closed)
+
+    def _request_drawer(self, name, *, toggle=False):
+        """Wait for the old popup to withdraw before mapping the requested one."""
+        if self._destroyed or (name == "channels" and self.settings["locked"]):
+            return
+        if self._pending_drawer == name:
+            if toggle:
+                self._pending_drawer = None
+            return
+        self._pending_drawer = None
+        drawer = self._tray if name == "channels" else self._settings_drawer
+        if drawer is not None and drawer.is_open:
+            if toggle:
+                drawer.close()
+            return
+        other = self._settings_drawer if name == "channels" else self._tray
+        if other is not None and other.is_shown:
+            self._pending_drawer = name
+            other.close()
+            return
+        if drawer is None and name == "channels":
             self._tray = ChannelTray(
                 self.window, options=[(key, label) for key, label, _ids in CHANNEL_FILTERS],
                 selected=self.settings["channels"], on_change=lambda selected: self._change("channels", selected),
-                get_anchor=self._rect, get_bounds=self._tray_bounds,
-                native_factory=_WindowsOverlay if self._native else None,
-                palette={"background": BACKGROUND, "header": HEADER, "border": BORDER,
-                         "foreground": GOLD, "muted": MUTED},
                 channel_colors=CHANNEL_FILTER_COLORS,
-                opacity=self.settings["opacity"], on_open_change=self._tray_open_changed)
-        self._tray.toggle()
+                **self._drawer_options(self._tray_open_changed))
+            drawer = self._tray
+        elif drawer is None:
+            self._settings_text_start = len(self._localized_widgets)
+            self._settings_drawer = SettingsDrawer(
+                self.window, build_content=self._build_settings_content,
+                layout_content=self._layout_settings_content,
+                **self._drawer_options(self._settings_open_changed))
+            drawer = self._settings_drawer
+            self._settings_window = drawer.window
+        self._sync_vars()
+        drawer.open()
+
+    def _drawer_closed(self):
+        name = self._pending_drawer
+        self._pending_drawer = None
+        if name is not None:
+            self._request_drawer(name)
 
     def _tray_open_changed(self, opened):
         if not self._destroyed:
             self.channels_button.configure(text=tr("Channels") + (" ▾" if opened else " ▴"))
 
+    def _settings_open_changed(self, opened):
+        if not self._destroyed and getattr(self, "settings_button", None) is not None:
+            self.settings_button.configure(text=tr("Settings") + (" ▾" if opened else " ▴"))
+
     def _reposition_tray(self):
         if getattr(self, "_tray", None) is not None:
             self._tray.reposition()
+        if getattr(self, "_settings_drawer", None) is not None:
+            self._settings_drawer.reposition()
+
+    def _hide_drawers(self):
+        self._pending_drawer = None
+        for drawer in (getattr(self, "_tray", None), getattr(self, "_settings_drawer", None)):
+            if drawer is not None:
+                drawer.hide()
 
     def _bounds(self):
         if self._native:
@@ -524,8 +586,12 @@ class ChatOverlay:
         self.window.attributes("-topmost", True)
         if self._native:
             self._native.style(self.settings["locked"], self.settings["opacity"])
-        if self.settings["locked"] and getattr(self, "_tray", None) is not None:
-            self._tray.hide()
+        if self.settings["locked"]:
+            if getattr(self, "_pending_drawer", None) == "channels":
+                self._pending_drawer = None
+            if getattr(self, "_tray", None) is not None:
+                self._tray.hide()
+                self._drawer_closed()
         self._update_caption()
         self._render_all()
 
@@ -731,8 +797,7 @@ class ChatOverlay:
     def hide(self):
         if self._destroyed:
             return
-        if getattr(self, "_tray", None) is not None:
-            self._tray.hide()
+        self._hide_drawers()
         self._remember_geometry()
         self.settings["enabled"] = False
         self.window.withdraw()
@@ -803,27 +868,24 @@ class ChatOverlay:
             variable.set(key in self.settings["channels"])
         if getattr(self, "_tray", None) is not None:
             self._tray.sync(self.settings["channels"], self.settings["opacity"])
+        if getattr(self, "_settings_drawer", None) is not None:
+            self._settings_drawer.set_opacity(self.settings["opacity"])
 
     def _channels_changed(self):
         self._change("channels", [key for key, variable in self._channel_vars.items() if variable.get()])
 
     def open_settings(self):
-        if self._settings_window and self._settings_window.winfo_exists():
-            self._settings_window.deiconify()
-            self._settings_window.lift()
-            return
-        panel = tk.Toplevel(self.root)
-        self._settings_window = panel
-        panel.title(tr("Chat overlay settings"))
-        self._settings_text_start = len(getattr(self, "_localized_widgets", []))
-        panel.configure(bg=HEADER)
-        panel.resizable(False, False)
-        panel.transient(self.root)
-        panel.attributes("-topmost", True)
-        content = tk.Frame(panel, bg=HEADER, padx=18, pady=16)
-        content.pack(fill="both", expand=True)
-        self._label(content, text="CHAT OVERLAY", bg=HEADER, fg=GOLD,
-                 font=("Tahoma", 12, "bold")).pack(anchor="w", pady=(0, 10))
+        # Launcher access must also work with a hidden or click-through overlay.
+        self._request_drawer("settings")
+
+    def _build_settings_content(self, content):
+        self._settings_content = content
+        heading = tk.Frame(content, bg=HEADER)
+        heading.pack(fill="x", pady=(0, 10))
+        self._button(heading, text="×", command=self._close_settings, bg=HEADER, fg=GOLD,
+                     relief="flat", bd=0, cursor="hand2").pack(side="right")
+        self._label(heading, text="Settings", bg=HEADER, fg=GOLD,
+                 font=("Tahoma", 10, "bold")).pack(side="left")
         self._label(content, text="Drag the header to move. Drag the top-right corner to resize.",
                  bg=HEADER, fg="#dedbcf", font=("Tahoma", 9), wraplength=550, justify="left").pack(anchor="w", pady=(0, 12))
         self._vars = {}
@@ -834,7 +896,7 @@ class ChatOverlay:
                 fg="#dedbcf", activebackground=HEADER, activeforeground=GOLD,
                 selectcolor=BACKGROUND, anchor="w", font=("Tahoma", 10),
                 command=command or (lambda: self._change(key, variable.get())))
-            widget.pack(anchor="w", pady=3)
+            widget.pack(anchor="w", fill="x", pady=3)
             return widget
         checkbox("enabled", "Show overlay", lambda: self.show() if self._vars["enabled"].get() else self.hide())
         lock = checkbox("locked", "Lock placement and pass mouse clicks through")
@@ -846,51 +908,80 @@ class ChatOverlay:
                                         ("font_size", "Text size", *FONT_SIZE_RANGE)):
             row = tk.Frame(content, bg=HEADER)
             row.pack(fill="x", pady=4)
-            self._label(row, text=label, anchor="w", bg=HEADER, fg="#dedbcf", font=("Tahoma", 10)).pack(side="left", padx=(0, 12))
+            self._label(row, text=label, anchor="w", bg=HEADER, fg="#dedbcf", font=("Tahoma", 10)).pack(anchor="w")
             variable = tk.IntVar(value=round(self.settings[key] * 100) if key == "opacity" else self.settings[key])
             self._vars[key] = variable
             scale = tk.Scale(row, from_=lower, to=upper, orient="horizontal", variable=variable,
                              bg=HEADER, fg=GOLD, troughcolor=BACKGROUND, highlightthickness=0,
-                             activebackground=BORDER, length=260, sliderlength=18,
+                             activebackground=BORDER, length=120, sliderlength=18,
                              command=lambda value, option=key: self._change(option, float(value)/100 if option == "opacity" else int(value)))
-            scale.pack(side="left", fill="x", expand=True)
+            scale.pack(fill="x")
         checkbox("show_original", "Show original text below translations")
         channels = tk.Frame(content, bg=HEADER)
         channels.pack(fill="x", pady=(12, 0))
         heading = tk.Frame(channels, bg=HEADER)
         heading.pack(fill="x", pady=(0, 4))
-        self._label(heading, text="Channels shown in overlay", bg=HEADER, fg=GOLD,
-                 font=("Tahoma", 10, "bold")).pack(side="left")
+        self._settings_channel_actions = []
         for label, selection in (("None", []), ("All", list(ALL_CHANNEL_FILTERS))):
-            self._button(heading, text=label, command=lambda chosen=selection: self._change("channels", chosen),
-                      bg=BORDER, fg="#fff8e5", relief="flat", padx=8, pady=2).pack(side="right", padx=(5, 0))
+            button = self._button(heading, text=label, command=lambda chosen=selection: self._change("channels", chosen),
+                                  bg=BORDER, fg="#fff8e5", relief="flat", padx=8, pady=2)
+            button.pack(side="right", padx=(5, 0))
+            self._settings_channel_actions.append(button)
+        self._settings_channel_heading = self._label(heading, text="Channels shown in overlay", bg=HEADER, fg=GOLD,
+                                                    font=("Tahoma", 10, "bold"))
+        self._settings_channel_heading.pack(side="left", fill="x", expand=True)
         choices = tk.Frame(channels, bg=HEADER)
         choices.pack(fill="x")
         self._channel_vars = {}
-        for index, (key, label, _ids) in enumerate(CHANNEL_FILTERS):
+        self._settings_choices = []
+        for key, label, _ids in CHANNEL_FILTERS:
             variable = tk.BooleanVar(value=key in self.settings["channels"])
             self._channel_vars[key] = variable
             color = CHANNEL_FILTER_COLORS[key]
-            self._checkbutton(choices, text=label, variable=variable, command=self._channels_changed,
+            widget = self._checkbutton(choices, text=label, variable=variable, command=self._channels_changed,
                            bg=HEADER, fg=color, activebackground=HEADER, activeforeground=color,
-                           selectcolor=BACKGROUND, anchor="w", font=("Tahoma", 9)).grid(
-                               row=index // CHANNEL_FILTER_COLUMNS, column=index % CHANNEL_FILTER_COLUMNS,
-                               sticky="w", padx=(0, 10), pady=2)
+                           selectcolor=BACKGROUND, anchor="w", font=("Tahoma", 9))
+            self._settings_choices.append(widget)
         self._label(channels, text="Changes apply immediately and are saved.\nSystem notices also need Include notices in launcher Settings.",
                  bg=HEADER, fg=MUTED, justify="left", font=("Tahoma", 9), wraplength=550).pack(anchor="w", pady=(5, 0))
         actions = tk.Frame(content, bg=HEADER)
         actions.pack(fill="x", pady=(14, 0))
-        self._button(actions, text="Reset placement & unlock", command=self._reset_placement,
-                  bg=BORDER, fg="#fff8e5", relief="flat", padx=10, pady=7).pack(side="left")
-        self._button(actions, text="Done", command=self._close_settings, bg=BORDER, fg="#fff8e5",
-                  relief="flat", padx=18, pady=7).pack(side="right")
-        panel.protocol("WM_DELETE_WINDOW", self._close_settings)
+        self._settings_actions = [
+            self._button(actions, text="Reset placement & unlock", command=self._reset_placement,
+                         bg=BORDER, fg="#fff8e5", relief="flat", padx=10, pady=7),
+            self._button(actions, text="Done", command=self._close_settings, bg=BORDER, fg="#fff8e5",
+                         relief="flat", padx=18, pady=7)]
+
+    def _layout_settings_content(self, width):
+        # Every control stays reachable at the overlay's minimum width, including
+        # longer translated labels. The drawer scrolls when the monitor is short.
+        for widget, _source in self._localized_widgets[self._settings_text_start:]:
+            widget.configure(wraplength=max(1, width - 28), justify="left")
+        self._settings_content.update_idletasks()
+        action_width = sum(widget.winfo_reqwidth() + 5 for widget in self._settings_channel_actions)
+        self._settings_channel_heading.configure(wraplength=max(1, width - action_width))
+        choice_width = max((widget.winfo_reqwidth() for widget in self._settings_choices), default=1)
+        columns = choice_columns(width, choice_width)
+        for index, widget in enumerate(self._settings_choices):
+            widget.grid(row=index // columns, column=index % columns,
+                        sticky="w", padx=(0, 6), pady=2)
+        stacked = sum(widget.winfo_reqwidth() for widget in self._settings_actions) + 8 > width
+        for index, widget in enumerate(self._settings_actions):
+            widget.pack_forget()
+            widget.pack(side="top" if stacked else ("left" if index == 0 else "right"),
+                        fill="x" if stacked else "none", pady=2)
 
     def _close_settings(self):
-        if self._settings_window:
-            self._settings_window.destroy()
+        self._pending_drawer = None
+        if self._settings_drawer is not None:
+            self._settings_drawer.close()
+
+    def _destroy_settings(self):
+        if getattr(self, "_settings_drawer", None) is not None:
+            self._settings_drawer.destroy()
             if hasattr(self, "_settings_text_start"):
                 del self._localized_widgets[self._settings_text_start:]
+        self._settings_drawer = None
         self._settings_window = None
         self._vars = {}
         self._channel_vars = {}
@@ -899,6 +990,7 @@ class ChatOverlay:
         if self._destroyed:
             return
         self._remember_geometry()
+        self._pending_drawer = None
         self._destroyed = True
         if self._geometry_timer:
             self.root.after_cancel(self._geometry_timer)
@@ -906,7 +998,7 @@ class ChatOverlay:
         if self._layout_timer:
             self.root.after_cancel(self._layout_timer)
             self._layout_timer = None
-        self._close_settings()
+        self._destroy_settings()
         if getattr(self, "_tray", None) is not None:
             self._tray.destroy()
         self._reply_records.clear()

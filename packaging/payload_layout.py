@@ -132,3 +132,24 @@ def write_installer_file_list(path: Path, records: list[dict]) -> None:
         destination = "{app}" + ("\\" + parent if parent else "")
         lines.append(f'Source: "{{#AppSource}}\\{relative}"; DestDir: "{destination}"; Flags: ignoreversion')
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def write_installer_verification(path: Path, records: list[dict]) -> None:
+    """Embed the exact target hashes in Inno before permitting backup retirement."""
+    lines = ["{ Generated from the same verified payload as the installer file list. }",
+             "function VerifyOneProgramFile(RelativeName, ExpectedSHA: String): Boolean;",
+             "var", "  FileName: String;", "begin",
+             "  FileName := ExpandConstant('{app}') + '\\' + RelativeName;",
+             "  try",
+             "    Result := FileExists(FileName) and (CompareText(GetSHA256OfFile(FileName), ExpectedSHA) = 0);",
+             "  except", "    Result := False;", "  end;",
+             "  if not Result then Log('Installed program checksum failed: ' + RelativeName);", "end;", "",
+             "function VerifyCurrentProgramFiles: Boolean;", "begin", "  Result := False;"]
+    for row in records:
+        relative = safe_relative_path(row['path']).replace('/', '\\').replace("'", "''")
+        checksum = row['sha256']
+        if not isinstance(checksum, str) or not re.fullmatch(r'[a-f0-9]{64}', checksum):
+            raise ValueError('Invalid installer verification checksum.')
+        lines.append(f"  if not VerifyOneProgramFile('{relative}', '{checksum}') then Exit;")
+    lines.extend(['  Result := True;', 'end;'])
+    path.write_text('\n'.join(lines) + '\n', encoding='utf-8')

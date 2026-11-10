@@ -1,4 +1,4 @@
-"""An attached, animated channel drawer owned only by the translator overlay."""
+"""Attached, animated drawers owned only by the translator overlay."""
 from __future__ import annotations
 
 import math
@@ -37,18 +37,17 @@ def choice_columns(width, choice_width):
     return max(1, min(MAX_COLUMNS, usable // max(1, choice_width + CHOICE_GAP)))
 
 
-class ChannelTray:
+class AnimatedDrawer:
     """A separate clipped popup; its transient animation is never persisted."""
 
-    def __init__(self, owner, *, options, selected, on_change, get_anchor,
-                 get_bounds, native_factory, palette, opacity, on_open_change, channel_colors=None):
-        self.options = tuple(options)
-        self.on_change = on_change
+    def __init__(self, owner, *, title, get_anchor, get_bounds, native_factory,
+                 palette, opacity, on_open_change, on_closed=None):
+        self.title = title
         self.get_anchor = get_anchor
         self.get_bounds = get_bounds
         self.on_open_change = on_open_change
+        self.on_closed = on_closed
         self.palette = palette
-        self.channel_colors = dict(channel_colors or {})
         self._opacity = opacity
         self._open = False
         self._shown = False
@@ -68,7 +67,7 @@ class ChannelTray:
 
         self.window = tk.Toplevel(owner)
         self.window.withdraw()
-        self.window.title(tr("Overlay channels"))
+        self.window.title(tr(self.title))
         self.window.overrideredirect(True)
         self.window.configure(bg=palette["border"])
         self.window.attributes("-topmost", True)
@@ -76,45 +75,19 @@ class ChannelTray:
         # No transient(root): this tray must stay with an overlay whose main
         # launcher may be minimized. It owns no game handle or input hook.
         self._native = native_factory(self.window) if native_factory else None
-        self._variables = {}
-        self._choices = []
         self._build()
         self.window.bind("<Escape>", self._escape)
-        self.window.protocol("WM_DELETE_WINDOW", self.hide)
-        self.sync(selected, opacity)
+        self.window.protocol("WM_DELETE_WINDOW", self.close)
 
     @property
     def is_open(self):
         """The requested state, including while opening or closing animates."""
         return self._open
 
-    def _build(self):
-        colors = self.palette
-        self.content = tk.Frame(self.window, bg=colors["header"],
-                                padx=CONTENT_PADDING, pady=CONTENT_PADDING)
-        self.heading = tk.Frame(self.content, bg=colors["header"])
-        self.heading.pack(fill="x", pady=(0, 4))
-        self._localized_widget(tk.Label, self.heading, text="Channels", bg=colors["header"], fg=colors["foreground"],
-                 font=("Tahoma", 9, "bold")).pack(side="left")
-        for text, command in (("×", lambda: self._animate_to(False)),
-                              ("None", lambda: self._choose([])),
-                              ("All", lambda: self._choose([key for key, _label in self.options]))):
-            self._localized_widget(tk.Button, self.heading, text=text, command=command, bg=colors["header"],
-                      fg=colors["foreground"], activebackground=colors["border"],
-                      activeforeground=colors["foreground"], relief="flat", borderwidth=0,
-                      padx=6, pady=1, font=("Tahoma", 9), cursor="hand2").pack(side="right")
-        self.choices = tk.Frame(self.content, bg=colors["header"])
-        self.choices.pack(fill="x")
-        for key, label in self.options:
-            variable = tk.BooleanVar(master=self.window, value=False)
-            self._variables[key] = variable
-            color = self.channel_colors.get(key, colors["foreground"])
-            self._choices.append(self._localized_widget(tk.Checkbutton,
-                self.choices, text=label, variable=variable, command=self._selected,
-                bg=colors["header"], fg=color,
-                activebackground=colors["header"], activeforeground=color,
-                selectcolor=colors["background"], anchor="w", font=("Tahoma", 9),
-                highlightcolor=colors["foreground"], cursor="hand2"))
+    @property
+    def is_shown(self):
+        """Remain shown until the closing animation has actually withdrawn."""
+        return self._shown
 
     def _localized_widget(self, factory, parent, **options):
         source = options.get("text", "")
@@ -127,49 +100,19 @@ class ChannelTray:
         """Retranslate and remeasure labels without changing selections or animation."""
         if self._destroyed:
             return
-        self.window.title(tr("Overlay channels"))
+        self.window.title(tr(self.title))
         for widget, source in self._localized_widgets:
             widget.configure(text=tr(source))
         self._layout_width = None
         self.reposition()
 
-    def _choose(self, selected):
+    def set_opacity(self, opacity):
         if self._destroyed:
             return
-        for key, variable in self._variables.items():
-            variable.set(key in selected)
-        self._selected()
-
-    def _selected(self):
-        if not self._destroyed:
-            self.on_change([key for key, variable in self._variables.items() if variable.get()])
-
-    def sync(self, selected, opacity):
-        """Reflect changes from overlay settings without firing user callbacks."""
-        if self._destroyed:
-            return
-        for key, variable in self._variables.items():
-            variable.set(key in selected)
         self._opacity = opacity
         self.window.attributes("-alpha", opacity)
         if self._shown and self._native:
             self._native.style(False, opacity)
-
-    def _layout(self, width):
-        if width == self._layout_width:
-            return False
-        self.window.update_idletasks()
-        choice_width = max((widget.winfo_reqwidth() for widget in self._choices), default=1)
-        choice_height = max((widget.winfo_reqheight() for widget in self._choices), default=1)
-        columns = choice_columns(width, choice_width)
-        for index, widget in enumerate(self._choices):
-            widget.grid(row=index // columns, column=index % columns,
-                        sticky="w", padx=(0, CHOICE_GAP), pady=1)
-        rows = math.ceil(len(self._choices) / columns)
-        self._wanted_height = (2 * (CONTENT_PADDING + BORDER_WIDTH) +
-                               self.heading.winfo_reqheight() + 4 + rows * (choice_height + 2))
-        self._layout_width = width
-        return True
 
     def _place(self, *, refresh=False):
         if refresh or self._anchor is None:
@@ -206,6 +149,14 @@ class ChannelTray:
     def toggle(self):
         if not self._destroyed:
             self._animate_to(not self._open)
+
+    def open(self):
+        if not self._open:
+            self._animate_to(True)
+
+    def close(self):
+        if self._open:
+            self._animate_to(False)
 
     def _cancel_animation(self):
         self._generation += 1
@@ -267,6 +218,8 @@ class ChannelTray:
             if not self._open:
                 self.window.withdraw()
                 self._shown = False
+                if self.on_closed:
+                    self.on_closed()
             return
         # Rendering time belongs inside the frame budget. Skip missed deadlines
         # after a busy event loop instead of adding another full frame or trying
@@ -280,7 +233,7 @@ class ChannelTray:
         self._timer = self.window.after(delay, lambda: self._tick(generation))
 
     def _escape(self, _event=None):
-        self._animate_to(False)
+        self.close()
         return "break"
 
     def hide(self):
@@ -301,3 +254,127 @@ class ChannelTray:
             self.hide()
             self._destroyed = True
             self.window.destroy()
+
+
+class ChannelTray(AnimatedDrawer):
+    def __init__(self, owner, *, options, selected, on_change, channel_colors=None, **kwargs):
+        self.options = tuple(options)
+        self.on_change = on_change
+        self.channel_colors = dict(channel_colors or {})
+        self._variables = {}
+        self._choices = []
+        super().__init__(owner, title="Overlay channels", **kwargs)
+        self.sync(selected, self._opacity)
+
+    def _build(self):
+        colors = self.palette
+        self.content = tk.Frame(self.window, bg=colors["header"],
+                                padx=CONTENT_PADDING, pady=CONTENT_PADDING)
+        self.heading = tk.Frame(self.content, bg=colors["header"])
+        self.heading.pack(fill="x", pady=(0, 4))
+        self._localized_widget(tk.Label, self.heading, text="Channels", bg=colors["header"], fg=colors["foreground"],
+                 font=("Tahoma", 9, "bold")).pack(side="left")
+        for text, command in (("×", self.close),
+                              ("None", lambda: self._choose([])),
+                              ("All", lambda: self._choose([key for key, _label in self.options]))):
+            self._localized_widget(tk.Button, self.heading, text=text, command=command, bg=colors["header"],
+                      fg=colors["foreground"], activebackground=colors["border"],
+                      activeforeground=colors["foreground"], relief="flat", borderwidth=0,
+                      padx=6, pady=1, font=("Tahoma", 9), cursor="hand2").pack(side="right")
+        self.choices = tk.Frame(self.content, bg=colors["header"])
+        self.choices.pack(fill="x")
+        for key, label in self.options:
+            variable = tk.BooleanVar(master=self.window, value=False)
+            self._variables[key] = variable
+            color = self.channel_colors.get(key, colors["foreground"])
+            self._choices.append(self._localized_widget(tk.Checkbutton,
+                self.choices, text=label, variable=variable, command=self._selected,
+                bg=colors["header"], fg=color,
+                activebackground=colors["header"], activeforeground=color,
+                selectcolor=colors["background"], anchor="w", font=("Tahoma", 9),
+                highlightcolor=colors["foreground"], cursor="hand2"))
+
+    def _choose(self, selected):
+        if self._destroyed:
+            return
+        for key, variable in self._variables.items():
+            variable.set(key in selected)
+        self._selected()
+
+    def _selected(self):
+        if not self._destroyed:
+            self.on_change([key for key, variable in self._variables.items() if variable.get()])
+
+    def sync(self, selected, opacity):
+        """Reflect changes from overlay settings without firing user callbacks."""
+        if self._destroyed:
+            return
+        for key, variable in self._variables.items():
+            variable.set(key in selected)
+        self.set_opacity(opacity)
+
+    def _layout(self, width):
+        if width == self._layout_width:
+            return False
+        self.window.update_idletasks()
+        choice_width = max((widget.winfo_reqwidth() for widget in self._choices), default=1)
+        choice_height = max((widget.winfo_reqheight() for widget in self._choices), default=1)
+        columns = choice_columns(width, choice_width)
+        for index, widget in enumerate(self._choices):
+            widget.grid(row=index // columns, column=index % columns,
+                        sticky="w", padx=(0, CHOICE_GAP), pady=1)
+        rows = math.ceil(len(self._choices) / columns)
+        self._wanted_height = (2 * (CONTENT_PADDING + BORDER_WIDTH) +
+                               self.heading.winfo_reqheight() + 4 + rows * (choice_height + 2))
+        self._layout_width = width
+        return True
+
+
+class SettingsDrawer(AnimatedDrawer):
+    """The overlay's settings, width-fitted and scrollable on short monitors."""
+
+    def __init__(self, owner, *, build_content, layout_content, **kwargs):
+        self.build_content = build_content
+        self.layout_content = layout_content
+        self._layout_height = None
+        super().__init__(owner, title="Chat overlay settings", **kwargs)
+
+    def _build(self):
+        colors = self.palette
+        self.content = tk.Frame(self.window, bg=colors["header"])
+        self.scrollbar = tk.Scrollbar(self.content, orient="vertical", width=12,
+            bg=colors["header"], troughcolor=colors["background"], bd=0)
+        self.scrollbar.pack(side="right", fill="y")
+        self.canvas = tk.Canvas(self.content, bg=colors["header"], bd=0,
+            highlightthickness=0, yscrollcommand=self.scrollbar.set)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.configure(command=self.canvas.yview)
+        self.body = tk.Frame(self.canvas, bg=colors["header"],
+                             padx=CONTENT_PADDING, pady=CONTENT_PADDING)
+        self._body_id = self.canvas.create_window(0, 0, anchor="nw", window=self.body)
+        self.build_content(self.body)
+        # Bind only this owned popup, so scrolling never hooks other windows.
+        self.window.bind("<MouseWheel>", self._wheel)
+        self.window.bind("<Button-4>", lambda event: self._wheel(event, -1))
+        self.window.bind("<Button-5>", lambda event: self._wheel(event, 1))
+
+    def _wheel(self, event, units=None):
+        if units is None:
+            units = -int(event.delta / 120) if abs(event.delta) >= 120 else (-1 if event.delta > 0 else 1)
+        self.canvas.yview_scroll(units, "units")
+        return "break"
+
+    def _layout(self, width):
+        available_height = max(1, self._bounds[3])
+        if width == self._layout_width and available_height == self._layout_height:
+            return False
+        body_width = max(1, width - 2 * BORDER_WIDTH - 12)
+        self.canvas.itemconfigure(self._body_id, width=body_width)
+        self.layout_content(max(1, body_width - 2 * CONTENT_PADDING))
+        self.window.update_idletasks()
+        body_height = self.body.winfo_reqheight()
+        self.canvas.configure(scrollregion=(0, 0, body_width, body_height))
+        self._wanted_height = min(body_height + 2 * BORDER_WIDTH, available_height)
+        self._layout_width = width
+        self._layout_height = available_height
+        return True

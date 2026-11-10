@@ -104,6 +104,47 @@ class ReleaseSiteTests(unittest.TestCase):
     def prepare(self, **kwargs):
         return release_site.prepare_site(self.root, self.site, self.SOURCES, self.ASSETS, **kwargs)
 
+    def add_incremental(self, manifest):
+        version = manifest["version"]
+        app = self.root / ("payload-" + version)
+        app.mkdir()
+        contents = b"MZ synthetic executable " + version.encode()
+        (app / "Lineage2ChatTranslator.exe").write_bytes(contents)
+        manifest["payload"] = [{"path": "Lineage2ChatTranslator.exe", "bytes": len(contents),
+                                "sha256": hashlib.sha256(contents).hexdigest()}]
+        cleanup = {"schema_version": 1, "product": "Lineage 2 Chat Translator", "version": version,
+                   "current_paths": ["Lineage2ChatTranslator.exe"], "obsolete_files": []}
+        manifest["incremental"] = release_site.update_tools().create_package(
+            app, self.root / "release" / version, version, manifest["payload"], cleanup)
+        self.write_manifest(manifest, version)
+        return manifest
+
+    def test_file_update_metadata_and_objects_are_published_and_retained(self):
+        old = self.add_incremental(self.read_manifest())
+        self.prepare()
+        before = {name: data for name, data in self.public_snapshot().items() if name.startswith("updates/")}
+        current = self.add_incremental(self.make_release("1.2.4", b"new synthetic installer"))
+        self.prepare()
+        after = self.public_snapshot()
+        self.assertEqual(before, {name: after[name] for name in before})
+        public = json.loads(after["downloads/release.json"])
+        self.assertEqual(public["incremental"], current["incremental"])
+        self.assertIn(old["incremental"]["manifest"]["file"], after)
+        self.assertTrue(self.prepare(check=True)["checked_only"])
+
+    def test_modified_retained_update_object_is_rejected_before_replacement(self):
+        self.add_incremental(self.read_manifest())
+        self.prepare()
+        blob = next((self.site / "dist/updates/blobs").glob("*.gz"))
+        blob.write_bytes(b"modified")
+        self.assert_rejected_without_changes()
+
+    def test_update_manifest_cannot_disagree_with_verified_installer_payload(self):
+        manifest = self.add_incremental(self.read_manifest())
+        manifest["payload"][0]["sha256"] = "0" * 64
+        self.write_manifest(manifest)
+        self.assert_rejected_without_changes()
+
     def public_snapshot(self):
         return {path.relative_to(self.site / "dist").as_posix(): path.read_bytes()
                 for path in (self.site / "dist").rglob("*") if path.is_file()}

@@ -137,6 +137,8 @@ class UpdateEntrypointTests(unittest.TestCase):
         stack.enter_context(patch.object(setup, 'uninstall_in_progress', return_value=uninstall))
         self.consume = stack.enter_context(patch.object(setup, 'consume_update_result', return_value=result))
         self.cleanup = stack.enter_context(patch.object(setup, 'cleanup_update_cache'))
+        stack.enter_context(patch.object(setup, 'ensure_no_interrupted_update'))
+        stack.enter_context(patch.object(setup, 'prepare_incremental_uninstall'))
         self.root = stack.enter_context(patch.object(setup.tk, 'Tk'))
         stack.enter_context(patch.object(setup, 'apply_window_icon'))
         self.window = stack.enter_context(patch.object(setup, 'SetupWindow'))

@@ -44,6 +44,13 @@ installer identity still match that tag. Never force-push or change a published
 version's application bytes. A failed later website deployment can be retried
 without creating a duplicate source update.
 
+From v1.8.7 the generated source manifest also records the signed incremental
+update descriptor. New version tags pin that descriptor alongside application
+inputs and the full installer. Legacy tags remain unchanged. Compressed update
+objects are generated build outputs, excluded from GitHub source, and published
+only in the verified static release. The public build helper and tests document
+their exact generation and verification protocol.
+
 ## Verification limits
 
 Source input hashes identify the files used in the recorded release. They do not

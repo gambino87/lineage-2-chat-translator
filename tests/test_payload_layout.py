@@ -172,6 +172,20 @@ class PayloadLayoutTests(unittest.TestCase):
                     layout.write_installer_file_list(destination, [record(name)])
                 self.assertFalse(destination.exists())
 
+    def test_installer_verification_embeds_exact_hashes_and_escapes_pascal_paths(self):
+        destination = self.root / 'verify.iss'
+        rows = [record('Lineage2ChatTranslator.exe'), record("_internal/library's.txt")]
+        layout.write_installer_verification(destination, rows)
+        script = destination.read_text()
+        self.assertIn('GetSHA256OfFile(FileName)', script)
+        self.assertIn("_internal\\library''s.txt", script)
+        for row in rows:
+            self.assertIn(row['sha256'], script)
+        destination.unlink()
+        with self.assertRaises(ValueError):
+            layout.write_installer_verification(destination, [{**rows[0], 'sha256': "'); malicious; ('"}])
+        self.assertFalse(destination.exists())
+
     def test_retirement_plan_spans_skipped_releases_and_preserves_all_known_hashes(self):
         old_a = record("_internal/retired.dll", b"old payload A")
         old_b = record("_internal/RETIRED.dll", b"old payload B")

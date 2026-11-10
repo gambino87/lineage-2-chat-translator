@@ -229,6 +229,8 @@ def snapshot(root: Path) -> tuple[dict[str, bytes], dict]:
         "validation": {"release_packaged_self_test_passed": True},
         "files": [{"path": name, "sha256": sha256(content)} for name, content in sorted(files.items())],
     }
+    if "incremental" in release:
+        document["published_incremental_update"] = release["incremental"]
     files[MANIFEST] = (json.dumps(document, indent=2) + "\n").encode()
     scan_content(MANIFEST, files[MANIFEST])
     return files, document
@@ -256,8 +258,11 @@ def _git(repo: Path, *args: str, allow_failure: bool = False) -> str | None:
 def release_identity(document: dict) -> dict:
     """Tags pin app/asset/installer identity while main may receive tooling-only changes."""
     try:
-        return {"version": document["version"], "sources": document["application_sources"],
-                "assets": document["application_assets"], "installer": document["published_installer"]}
+        identity = {"version": document["version"], "sources": document["application_sources"],
+                    "assets": document["application_assets"], "installer": document["published_installer"]}
+        if "published_incremental_update" in document:
+            identity["incremental"] = document["published_incremental_update"]
+        return identity
     except KeyError as exc:
         raise ValueError("Existing source tag lacks release identity.") from exc
 

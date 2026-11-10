@@ -122,7 +122,9 @@ class OverlayLanguageTests(unittest.TestCase):
         factories.update(BooleanVar=lambda value: Value(value=value), IntVar=lambda value: Value(value=value))
         set_language("ru")
         with patch.multiple(chat_overlay.tk, **factories):
-            overlay.open_settings()
+            overlay._settings_text_start = 0
+            overlay._build_settings_content(Mock())
+        overlay._settings_drawer = Mock(is_open=True)
         by_caption = {widget.options.get("text"): widget for widget in widgets}
         self.assertIn(tr("Show overlay"), by_caption)
         self.assertIn(tr("Command channel"), by_caption)
@@ -135,6 +137,9 @@ class OverlayLanguageTests(unittest.TestCase):
         registered = len(overlay._localized_widgets)
         self.assertGreater(registered, 20)
         overlay._close_settings()
+        overlay._settings_drawer.close.assert_called_once()
+        self.assertEqual(len(overlay._localized_widgets), registered)
+        overlay._destroy_settings()
         self.assertEqual(overlay._localized_widgets, [])
 
 

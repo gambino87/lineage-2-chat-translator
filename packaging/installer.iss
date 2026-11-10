@@ -13,6 +13,9 @@
 #ifndef AppFileList
   #error AppFileList must point to the verified current payload file list
 #endif
+#ifndef AppVerifyList
+  #error AppVerifyList must point to the verified current payload checksum code
+#endif
 
 [Setup]
 AppId={{1D8CE3C7-53A6-4C67-AC9F-1C6F0D6B1920}
@@ -101,6 +104,8 @@ var
   ProgramSecurityComplete: Boolean;
   ProgramCleanupComplete: Boolean;
 
+#include AppVerifyList
+
 function ProtectInstallationDirectory(VerifyOnly: Boolean): Boolean;
 var
   ExitCode, I: Integer;
@@ -168,6 +173,33 @@ begin
   finally
     DeleteFile(ResultPath);
     DeleteFile(HelperPath);
+  end;
+end;
+
+function FinishInterruptedUpdateRepair: Boolean;
+var
+  ExitCode, I: Integer;
+  ResultPath, Details: String;
+  Lines: TArrayOfString;
+begin
+  { The permission and cleanup helpers have verified every installed file.
+    Only now may the app retire recovery backups from an interrupted update. }
+  ResultPath := ExpandConstant('{tmp}\l2-update-repair-result.json');
+  try
+    ExitCode := -1;
+    Result := Exec(ExpandConstant('{app}\Lineage2ChatTranslator.exe'),
+      '--finish-update-repair --output "' + ResultPath + '"',
+      ExpandConstant('{tmp}'), SW_HIDE, ewWaitUntilTerminated, ExitCode) and (ExitCode = 0);
+    if not Result then begin
+      Details := '';
+      if LoadStringsFromFile(ResultPath, Lines) then
+        for I := 0 to GetArrayLength(Lines) - 1 do
+          Details := Details + Lines[I] + #13#10;
+      SuppressibleMsgBox(CustomMessage('CleanupFailed') + #13#10#13#10 + Details,
+        mbError, MB_OK, IDOK);
+    end;
+  finally
+    DeleteFile(ResultPath);
   end;
 end;
 
@@ -243,6 +275,13 @@ begin
     end;
     ProgramCleanupComplete := CleanRetiredProgramFiles;
     if not ProgramCleanupComplete then Exit;
+    ProgramCleanupComplete := VerifyCurrentProgramFiles;
+    if not ProgramCleanupComplete then begin
+      SuppressibleMsgBox(CustomMessage('CleanupFailed'), mbError, MB_OK, IDOK);
+      Exit;
+    end;
+    ProgramCleanupComplete := FinishInterruptedUpdateRepair;
+    if not ProgramCleanupComplete then Exit;
   end;
   if (CurStep = ssPostInstall) and not WizardSilent then begin
     ModelSetupAttempted := True;
@@ -280,7 +319,7 @@ end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   ExitCode, I: Integer;
-  ResultPath, Details: String;
+  ResultPath, Details, IncrementalPlan, IncrementalHelper, IncrementalResult, PowerShellPath: String;
   Lines: TArrayOfString;
   Started: Boolean;
 begin
@@ -310,8 +349,34 @@ begin
           Details := Details + Lines[I] + #13#10;
       if ExitCode = 2 then
         SuppressibleMsgBox(Details, mbInformation, MB_OK, IDOK);
+      { File updates can add paths absent from the original Inno uninstall
+        log. The trusted app exported only authenticated current file hashes
+        before removing preferences, then exited so its DLLs are no longer mapped. }
+      IncrementalPlan := ExpandConstant('{tmp}\l2-incremental-uninstall.json');
+      IncrementalHelper := ExpandConstant('{tmp}\l2-incremental-uninstall.ps1');
+      IncrementalResult := ExpandConstant('{tmp}\l2-incremental-uninstall-result.json');
+      if FileExists(IncrementalPlan) then begin
+        PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+        ExitCode := -1;
+        Started := Exec(PowerShellPath,
+          '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + IncrementalHelper +
+          '" -InstallRoot "' + ExpandConstant('{app}') + '" -UninstallPlan "' + IncrementalPlan +
+          '" -ResultPath "' + IncrementalResult + '"',
+          ExpandConstant('{tmp}'), SW_HIDE, ewWaitUntilTerminated, ExitCode);
+        if not Started or (ExitCode <> 0) then begin
+          Details := '';
+          if LoadStringsFromFile(IncrementalResult, Lines) then
+            for I := 0 to GetArrayLength(Lines) - 1 do
+              Details := Details + Lines[I] + #13#10;
+          MsgBox(CustomMessage('UninstallCleanupFailed') + #13#10#13#10 + Details, mbError, MB_OK);
+          Abort;
+        end;
+      end;
     finally
       DeleteFile(ResultPath);
+      DeleteFile(ExpandConstant('{tmp}\l2-incremental-uninstall.json'));
+      DeleteFile(ExpandConstant('{tmp}\l2-incremental-uninstall.ps1'));
+      DeleteFile(ExpandConstant('{tmp}\l2-incremental-uninstall-result.json'));
     end;
   end;
 end;

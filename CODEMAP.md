@@ -190,8 +190,11 @@ markers. The worker cache includes source spans so identical plain and linked
 text do not share display provenance.
 
 [overlay_tray.py](overlay_tray.py): tray_geometry and choice_columns calculate
-layout; ChannelTray manages the attached filter window, animation and selection
-callback. Neither module hooks the game or reads its memory/screen.
+layout; AnimatedDrawer owns shared animation and cancellation. ChannelTray manages
+filter choices; SettingsDrawer fits and scrolls the settings controls. ChatOverlay
+queues drawer switches until the old window withdraws, and clears pending opens
+on owner hide/shutdown. Launcher settings access remains available when the
+overlay is hidden or locked. Neither module hooks the game or reads its memory/screen.
 
 TranslatorApp.save_settings saves known preferences rather than transcripts.
 _open_discord opens a fixed invite on a click without appending diagnostics.
@@ -202,9 +205,12 @@ handoff.
 ### Optional system tray
 
 [tray_controls.py](tray_controls.py): TrayControls listens only to the
-launcher's own minimize/map/configure/destroy events. The saved
-minimize_to_tray flag defaults to false. A deferred iconic-state check starts
-the native icon; only a successful ready event permits withdrawing the root.
+launcher's own minimize/map/configure/destroy events and explicit window-close
+requests. The independent saved minimize_to_tray and close_to_tray flags default
+to false. A deferred iconic-state check or close-hide request starts the native
+icon; only a successful ready event permits withdrawing the root. The active
+hide reason controls preference cancellation, so one option cannot enable or
+cancel the other option's behavior.
 Callbacks carry instance generations through a queue, so a late event cannot
 hide a restored/closing window. Overlay replies reuse restore. Hiding never
 stops the log reader, model session or overlay.
@@ -216,7 +222,9 @@ message. No game window, global hook, network or model data is involved.
 Construction/import creates no UI. Native callbacks enqueue plain events;
 Tk consumes them. Failure returns the launcher to ordinary window/taskbar access.
 Closing requests native teardown, then the shutdown worker waits for cleanup
-before update handoff. The X and tray Exit use the real close path.
+before update handoff. The X uses close-to-tray when enabled; tray Exit and update
+handoff always use the real close path. Shutdown restores and lifts the main
+window to show closing progress until service/native cleanup finishes.
 
 Headless tests mock Windows APIs; they do not demonstrate actual tray appearance,
 click behavior or Explorer recovery on every supported desktop configuration.
@@ -241,18 +249,31 @@ Read these in order:
    sockets. This updater's numeric host avoids a DNS stage. Read caps supplement
    size headers; requests refuse proxies and redirects.
 5. app_updater.prepare_update validates the registered installation and creates
-   an owned private stage. It downloads/verifies installer size and hash without
-   executing it. It copies the installed helper rather than fetching a script.
+   an owned private stage. [incremental_update.py](incremental_update.py) validates
+   the signed manifest descriptor, complete target paths and bounded gzip objects;
+   it hashes installed files and downloads only changed/missing payloads. Failed
+   preparation falls back to the signed installer. Cancellation does not. The
+   installed helper is copied rather than fetched from the host.
 6. After preference saving and clean backend shutdown, launch_update locks
    helper/path identities and negotiates readiness and commit. Failure before
    commit cancels the handoff.
 7. [assets/apply-update.ps1](assets/apply-update.ps1) waits for the retained
    original process to exit, verifies the version and signed metadata again,
-   and holds the checked installer against write/delete through execution.
+   snapshots touched files and journals atomic replacements. It verifies every
+   target and self-tests before commit; errors restore originals before a
+   verified installer fallback. Failed rollback retains backups and blocks restart.
+   Installer transfers hold the checked installer against write/delete through execution.
 8. Inno installs the files under its permission/cleanup gates. A successful
    headless self-test precedes cleanup of owned temporary files and one launcher
    restart. Installation failure or a required reboot does not blindly reopen
    installed code.
+
+Startup preserves and blocks unfinished file transactions. A full install calls
+`--finish-update-repair` only after independently checking its complete payload;
+this retires recovery backups and preserves unknown sidecars. Successful file
+updates retain signed installed-file receipts so uninstall can remove newly added
+paths through the external system helper after the app exits. Receipts remain
+until that program cleanup succeeds, allowing uninstall retries.
 
 The helper is separate so the translator can release the files being replaced.
 Read [UPDATE-SIGNING.md](packaging/UPDATE-SIGNING.md) for bootstrap, key custody,

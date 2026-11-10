@@ -23,14 +23,15 @@ PACKAGING = ROOT / "packaging"
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(PACKAGING))
 from installation_cleanup import CLEANUP_PLAN_NAME
-from payload_layout import LICENSE_FILES, copy_licenses, payload_records, retirement_plan, write_installer_file_list
+from payload_layout import (LICENSE_FILES, copy_licenses, payload_records, retirement_plan,
+                            write_installer_file_list, write_installer_verification)
 from build_environment import clean_environment, windows_directories, write_spec, verify_bundled_binaries
 
 SOURCES = (
     "installer_main.py", "installer_runtime.py", "app_paths.py", "app_version.py", "app_icon.py",
     "translator_app.py", "translator_core.py", "game_slang.py", "item_catalog.py", "chat_links.py",
     "game_log_setup.py", "chat_overlay.py", "overlay_tray.py", "reply_composer.py", "uninstall_data.py",
-    "app_updater.py", "update_trust.py", "update_controls.py", "installation_cleanup.py",
+    "app_updater.py", "incremental_update.py", "update_trust.py", "update_controls.py", "installation_cleanup.py",
     "local_service.py", "runtime_integrity.py", "secure_storage.py", "update_network.py",
     "windows_tray.py", "tray_controls.py",
     "ui_i18n.py", "ui_strings_installer.py", "ui_strings_client.py", "ui_strings_overlay.py",
@@ -147,6 +148,8 @@ def main() -> None:
     frozen_files = payload_records(app, ASSETS)
     file_list = build / "installer-files.iss"
     write_installer_file_list(file_list, frozen_files)
+    verify_list = build / 'installer-verification.iss'
+    write_installer_verification(verify_list, frozen_files)
     # Frozen windowed builds have no stdout. The app writes this explicit report.
     selftest = build / "self-test.json"
     neutral = build / "empty-working-directory"
@@ -186,12 +189,16 @@ def main() -> None:
                                   "hash_verified_only": True},
         "packaged_self_test": public_report,
     }
+    # Derive every update object from the same verified frozen files that the
+    # installer consumes. Nothing is copied from a user installation or model.
+    if not options.skip_installer:
+        from incremental_package import create_package
     if not options.skip_installer:
         compiler = options.iscc.resolve()
         if not compiler.is_file():
             raise SystemExit(f"Inno compiler missing: {compiler}. Run bootstrap-tools.ps1.")
         run([str(compiler), "/Qp", f"/DAppVersion={version}", f"/DAppSource={app}",
-             f"/DAppIcon={source / 'assets/L2CT.ico'}", f"/DAppFileList={file_list}",
+             f"/DAppIcon={source / 'assets/L2CT.ico'}", f"/DAppFileList={file_list}", f"/DAppVerifyList={verify_list}",
              f"/DReleaseDir={release}", str(PACKAGING / "installer.iss")], cwd=PACKAGING)
         installer = release / f"Lineage-2-Chat-Translator-{version}-Setup.exe"
         if not installer.is_file():
@@ -206,6 +213,8 @@ def main() -> None:
         for key, value in {"VERSION": version, "INSTALLER": installer.name, "SIZE": f"{installer.stat().st_size / 1_000_000:.1f}", "SHA256": digest(installer)}.items():
             template = template.replace("{{" + key + "}}", html.escape(value))
         (release / "index.html").write_text(template, encoding="utf-8")
+    # Do not reserve immutable file-update bytes for a failed installer compile.
+    manifest["incremental"] = create_package(app, release, version, frozen_files, cleanup_plan)
     (release / "release-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     (release / "packaged-self-test.json").write_text(json.dumps(public_report, indent=2) + "\n", encoding="utf-8")
     shutil.copy2(PACKAGING / "HOSTING.md", release / "HOSTING.md")

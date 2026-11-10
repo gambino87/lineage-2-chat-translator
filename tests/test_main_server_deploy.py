@@ -1,5 +1,6 @@
 """Static deployment validation in temporary folders; no server or service access."""
 import hashlib
+import gzip
 import importlib.util
 import json
 import os
@@ -62,6 +63,46 @@ class MainServerDeployTests(unittest.TestCase):
             for path, data in sorted(files.items()) if path.endswith(".exe")
         ).encode()
         return files, artifact
+
+    @staticmethod
+    def add_updates(files, *, corrupt_raw_hash=False, orphan=False):
+        public = json.loads(files["downloads/release.json"])
+        version = public["version"]
+        raw = b"MZ synthetic updated application"
+        compressed = gzip.compress(raw, mtime=0)
+        blob = {"bytes": len(compressed), "sha256": hashlib.sha256(compressed).hexdigest()}
+        row = {"path": "Lineage2ChatTranslator.exe", "bytes": len(raw),
+               "sha256": "0" * 64 if corrupt_raw_hash else hashlib.sha256(raw).hexdigest(), "blob": blob}
+        cleanup = {"schema_version": 1, "product": "Lineage 2 Chat Translator", "version": version,
+                   "current_paths": [row["path"]], "obsolete_files": []}
+        document = {"schema_version": 1, "product": "Lineage 2 Chat Translator", "platform": "windows-x64",
+                    "version": version, "files": [row], "cleanup": cleanup}
+        data = json.dumps(document).encode()
+        name = "updates/" + version + "/files.json"
+        public["incremental"] = {"schema_version": 1, "manifest": {"file": name, "bytes": len(data),
+                                   "sha256": hashlib.sha256(data).hexdigest()}}
+        files["downloads/release.json"] = json.dumps(public).encode()
+        files[name] = data
+        files["updates/blobs/" + blob["sha256"] + ".gz"] = compressed
+        if orphan:
+            files["updates/blobs/" + "0" * 64 + ".gz"] = b"unreferenced"
+
+    def test_incremental_bundle_audits_both_compressed_and_installed_bytes(self):
+        archive, manifest, _ = self.bundle(mutate=self.add_updates)
+        self.assertEqual(deploy.verify_bundle(archive, manifest), manifest["files"])
+        archive, manifest, _ = self.bundle(mutate=lambda files: self.add_updates(files, corrupt_raw_hash=True))
+        self.assert_rejected_before_activation(archive, manifest, "Expanded update hash/size mismatch")
+
+    def test_incremental_orphans_missing_objects_and_changed_manifest_are_rejected(self):
+        archive, manifest, _ = self.bundle(mutate=lambda files: self.add_updates(files, orphan=True))
+        self.assert_rejected_before_activation(archive, manifest, "Unreferenced")
+        for mutation, error in ((lambda files: files.pop(next(name for name in files if name.startswith("updates/blobs/"))), "Missing or incorrect"),
+                                (lambda files: files.update({"updates/1.2.3/files.json": b"changed"}), "differs from signed")):
+            def mutate(files):
+                self.add_updates(files)
+                mutation(files)
+            archive, manifest, _ = self.bundle(mutate=mutate)
+            self.assert_rejected_before_activation(archive, manifest, error)
 
     def bundle(self, version="1.2.3", content=b"synthetic installer", old=None,
                mutate=None, file_mode=None):

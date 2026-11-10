@@ -541,7 +541,7 @@ def locked_directory(path: str | Path):
             yield root
 
 
-def safe_remove_tree(path: str | Path, *, missing_ok=True) -> bool:
+def safe_remove_tree(path: str | Path, *, missing_ok=True, expected_identity=None) -> bool:
     """Remove one caller-scoped owned file/tree without following redirections.
 
     All objects are opened before deletion. Windows deletes the checked objects
@@ -561,6 +561,8 @@ def safe_remove_tree(path: str | Path, *, missing_ok=True) -> bool:
             raise
         if stat.S_ISLNK(info.st_mode) or (not stat.S_ISDIR(info.st_mode) and info.st_nlink != 1):
             raise StorageError("Cleanup will not follow linked files or folders.")
+        if expected_identity is not None and list(expected_identity) != [info.st_dev, info.st_ino]:
+            raise StorageError("Cleanup target changed identity; the original path was kept.")
         if stat.S_ISDIR(info.st_mode):
             shutil.rmtree(root)
         else:
@@ -574,6 +576,10 @@ def safe_remove_tree(path: str | Path, *, missing_ok=True) -> bool:
             # deleting the parent, while every still-live path remains locked.
             with ExitStack() as tree:
                 entries = _collect(api, tree, root, delete=True)
+                if expected_identity is not None:
+                    root_info = api.inspect(entries[0][1], root)
+                    if list(expected_identity) != [root_info.volume, root_info.index_high, root_info.index_low]:
+                        raise StorageError("Cleanup target changed identity; the original path was kept.")
                 # Pop ownership of callbacks; close each exactly once below.
                 handles = tree.pop_all()
                 try:

@@ -14,6 +14,7 @@ import stat
 import tempfile
 import uuid
 import zipfile
+import zlib
 
 ROOT = Path('/srv/l2-chat-translator')
 BASE_URL = 'https://40.160.140.227'
@@ -23,6 +24,11 @@ STATIC_FILES = {'index.html', '_headers', 'robots.txt', 'assets/L2CT.png',
 SIGNATURE_BYTES = 384  # RSA-3072; clients verify with their independently pinned public key.
 MAX_METADATA_BYTES = 64 * 1024
 INSTALLER = re.compile(r'downloads/Lineage-2-Chat-Translator-[0-9]+\.[0-9]+\.[0-9]+-Setup\.exe')
+UPDATE_MANIFEST = re.compile(r'updates/([0-9]+\.[0-9]+\.[0-9]+)/files\.json')
+UPDATE_BLOB = re.compile(r'updates/blobs/[a-f0-9]{64}\.gz')
+MAX_UPDATE_MANIFEST_BYTES = 2 * 1024 * 1024
+MAX_UPDATE_FILE_BYTES = 128 * 1024 * 1024
+MAX_UPDATE_TOTAL_BYTES = 512 * 1024 * 1024
 
 
 def require(condition, message):
@@ -33,6 +39,88 @@ def require(condition, message):
 def digest(path):
     with path.open('rb') as stream:
         return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def verify_updates(bundle, public, names):
+    """Independently audit every compressed/raw object before public activation.
+
+    The publisher verifies the pinned signature before export; this standalone
+    server helper receives no signing key or application modules.
+    """
+    update_names = {name for name in names if name.startswith('updates/')}
+    descriptor = public.get('incremental')
+    if descriptor is None:
+        require(not update_names, 'Update artifacts need signed current metadata')
+        return
+    require(isinstance(descriptor, dict) and set(descriptor) == {'schema_version', 'manifest'}
+            and type(descriptor['schema_version']) is int and descriptor['schema_version'] == 1,
+            'Invalid update descriptor')
+    identity = descriptor['manifest']
+    require(isinstance(identity, dict) and set(identity) == {'file', 'bytes', 'sha256'}
+            and identity['file'] == 'updates/' + public['version'] + '/files.json'
+            and type(identity['bytes']) is int and 0 < identity['bytes'] <= MAX_UPDATE_MANIFEST_BYTES
+            and re.fullmatch('[a-f0-9]{64}', identity['sha256']), 'Invalid update manifest identity')
+    require(identity['file'] in update_names, 'Missing current update manifest')
+    used, verified = set(), set()
+    for name in sorted(update_names):
+        match = UPDATE_MANIFEST.fullmatch(name)
+        if not match:
+            continue
+        require(bundle.getinfo(name).file_size <= MAX_UPDATE_MANIFEST_BYTES, 'Oversized update manifest')
+        data = bundle.read(name)
+        if name == identity['file']:
+            require(len(data) == identity['bytes'] and hashlib.sha256(data).hexdigest() == identity['sha256'],
+                    'Current update manifest differs from signed metadata')
+        document = json.loads(data)
+        require(isinstance(document, dict) and set(document) == {'schema_version', 'product', 'platform', 'version', 'files', 'cleanup'}
+                and type(document['schema_version']) is int and document['schema_version'] == 1
+                and document['product'] == 'Lineage 2 Chat Translator' and document['platform'] == 'windows-x64'
+                and document['version'] == match[1], 'Invalid update manifest product/version')
+        rows = document['files']
+        require(isinstance(rows, list) and 0 < len(rows) <= 4096, 'Invalid update file count')
+        used.add(name)
+        paths, raw_total, wire_total = set(), 0, 0
+        for row in rows:
+            require(isinstance(row, dict) and set(row) == {'path', 'bytes', 'sha256', 'blob'}, 'Invalid update file entry')
+            path, blob = row['path'], row['blob']
+            require(isinstance(path, str) and (path in {'Lineage2ChatTranslator.exe', 'USER-README.txt', 'THIRD-PARTY-NOTICES.txt'}
+                    or path.startswith(('_internal/', 'licenses/')))
+                    and not any(part in {'', '.', '..'} for part in path.split('/'))
+                    and not re.search(r'[\\:\x00-\x1f*?"<>|]', path) and path.casefold() not in paths,
+                    'Invalid or duplicate update program path')
+            paths.add(path.casefold())
+            require(type(row['bytes']) is int and 0 <= row['bytes'] <= MAX_UPDATE_FILE_BYTES
+                    and isinstance(row['sha256'], str) and re.fullmatch('[a-f0-9]{64}', row['sha256'])
+                    and isinstance(blob, dict) and set(blob) == {'bytes', 'sha256'}
+                    and type(blob['bytes']) is int and 0 < blob['bytes'] <= MAX_UPDATE_FILE_BYTES
+                    and isinstance(blob['sha256'], str) and re.fullmatch('[a-f0-9]{64}', blob['sha256']),
+                    'Invalid update file size/checksum')
+            raw_total += row['bytes']
+            wire_total += blob['bytes']
+            require(raw_total <= MAX_UPDATE_TOTAL_BYTES and wire_total <= MAX_UPDATE_TOTAL_BYTES,
+                    'Update inventory exceeds size limits')
+            target = 'updates/blobs/' + blob['sha256'] + '.gz'
+            used.add(target)
+            require(target in update_names and bundle.getinfo(target).file_size == blob['bytes'], 'Missing or incorrect update object')
+            check = (target, row['bytes'], row['sha256'])
+            if check in verified:
+                continue
+            compressed = bundle.read(target)
+            require(hashlib.sha256(compressed).hexdigest() == blob['sha256'], 'Compressed update hash mismatch')
+            decoder = zlib.decompressobj(16 + zlib.MAX_WBITS)
+            try:
+                raw = decoder.decompress(compressed, row['bytes'] + 1)
+            except zlib.error as exc:
+                raise ValueError('Invalid compressed update object') from exc
+            require(decoder.eof and not decoder.unconsumed_tail and not decoder.unused_data
+                    and len(raw) == row['bytes'] and hashlib.sha256(raw).hexdigest() == row['sha256'],
+                    'Expanded update hash/size mismatch')
+            verified.add(check)
+        require('lineage2chattranslator.exe' in paths and isinstance(document['cleanup'], dict)
+                and document['cleanup'].get('version') == document['version']
+                and set(document['cleanup'].get('current_paths', [])) == {row['path'] for row in rows},
+                'Update inventory or cleanup contract mismatch')
+    require(used == update_names, 'Unreferenced or missing public update artifacts')
 
 
 def verify_bundle(archive, manifest):
@@ -51,7 +139,8 @@ def verify_bundle(archive, manifest):
     records = manifest['files']
     names = [row['path'] for row in records]
     require(len(names) == len(set(names)) and STATIC_FILES.issubset(names), 'Missing or duplicate public files')
-    require(all(name in STATIC_FILES or INSTALLER.fullmatch(name) for name in names),
+    require(all(name in STATIC_FILES or INSTALLER.fullmatch(name) or UPDATE_MANIFEST.fullmatch(name)
+                or UPDATE_BLOB.fullmatch(name) for name in names),
             'Non-public file in release')
     installer = manifest['installer']
     require(installer['file'] == f'Lineage-2-Chat-Translator-{version}-Setup.exe', 'Wrong current installer')
@@ -74,6 +163,7 @@ def verify_bundle(archive, manifest):
         public = json.loads(bundle.read('downloads/release.json'))
         require(public.get('version') == version and public.get('installer') == installer,
                 'Public release metadata differs from manifest')
+        verify_updates(bundle, public, names)
         checksums = {}
         for line in bundle.read('downloads/SHA256SUMS.txt').decode('utf-8').splitlines():
             match = re.fullmatch(r'([0-9a-f]{64})  (Lineage-2-Chat-Translator-[0-9]+\.[0-9]+\.[0-9]+-Setup\.exe)', line)
@@ -117,6 +207,13 @@ def publish(archive, manifest, root=ROOT):
             name = 'downloads/' + old.name
             require(not old.is_symlink() and name in by_name and digest(old) == by_name[name]['sha256'],
                     'Existing installer would change or disappear: ' + old.name)
+        for old in (previous / 'updates').rglob('*'):
+            require(not old.is_symlink(), 'Linked previous update artifact')
+            if not old.is_file():
+                continue
+            name = old.relative_to(previous).as_posix()
+            require(not old.is_symlink() and name in by_name and digest(old) == by_name[name]['sha256'],
+                    'Existing update artifact would change or disappear: ' + name)
     release = releases / manifest['release_id']
     require(not release.is_symlink(), 'Linked release destination')
     if release.exists():

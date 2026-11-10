@@ -1,10 +1,10 @@
-"""Headless channel tray checks: no Tk root, desktop window or native call."""
+"""Headless drawer checks: no Tk root, desktop window or native call."""
 from contextlib import ExitStack
 import unittest
 from unittest.mock import Mock, call, patch
 
 import overlay_tray
-from overlay_tray import ChannelTray, choice_columns, tray_geometry
+from overlay_tray import ChannelTray, SettingsDrawer, choice_columns, tray_geometry
 
 
 OPTIONS = (("say", "Say"), ("party", "Party"), ("trade", "Trade"),
@@ -143,6 +143,82 @@ class TrayBehaviorTests(unittest.TestCase):
         self.assertFalse(self.tray._shown)
         self.assertFalse(self.pending)
         self.assertEqual(self.open_change.call_args_list, [call(True), call(False)])
+
+    def test_close_completion_runs_after_withdraw_and_shown_stays_true_while_closing(self):
+        observed = []
+        self.tray.on_closed = Mock(side_effect=lambda: observed.append(
+            (self.tray.is_open, self.tray.is_shown, self.window.withdraw.call_count,
+             self.tray._progress, len(self.pending))))
+        self.tray.open()
+        self.finish_animation()
+        self.window.withdraw.reset_mock()
+        self.tray.close()
+        self.assertFalse(self.tray.is_open)
+        self.assertTrue(self.tray.is_shown)
+        self.tray.on_closed.assert_not_called()
+        self.window.withdraw.assert_not_called()
+        self.next_frame()
+        self.assertTrue(self.tray.is_shown)
+        self.tray.on_closed.assert_not_called()
+        self.finish_animation()
+        self.tray.on_closed.assert_called_once_with()
+        self.assertEqual(observed, [(False, False, 1, 0, 0)])
+
+    def test_repeated_open_and_close_preserve_timer_and_never_complete_early(self):
+        self.tray.on_closed = Mock()
+        self.tray.close()
+        self.assertFalse(self.pending)
+        self.tray.on_closed.assert_not_called()
+        self.tray.open()
+        opening_timer = self.tray._timer
+        self.tray.open()
+        self.assertEqual(self.tray._timer, opening_timer)
+        self.finish_animation()
+        self.tray.close()
+        closing_timer, closing_start = self.tray._timer, self.tray._started_at
+        self.now += .05
+        self.tray.close()
+        self.assertEqual((self.tray._timer, self.tray._started_at),
+                         (closing_timer, closing_start))
+        self.tray.on_closed.assert_not_called()
+        self.finish_animation()
+        self.tray.close()
+        self.assertFalse(self.pending)
+        self.tray.on_closed.assert_called_once_with()
+
+    def test_reopening_cancels_close_completion_and_invalidates_its_frames(self):
+        self.tray.on_closed = Mock()
+        self.tray.open()
+        self.finish_animation()
+        self.tray.close()
+        stale_close = next(iter(self.pending.values()))[1]
+        self.now += .05
+        self.tray.open()
+        self.native.place.reset_mock()
+        stale_close()
+        self.native.place.assert_not_called()
+        self.finish_animation()
+        self.assertTrue(self.tray.is_open)
+        self.assertTrue(self.tray.is_shown)
+        self.tray.on_closed.assert_not_called()
+        self.tray.close()
+        self.finish_animation()
+        self.tray.on_closed.assert_called_once_with()
+
+    def test_immediate_hide_and_destroy_suppress_pending_close_completion(self):
+        self.tray.on_closed = Mock()
+        for action in (self.tray.hide, self.tray.destroy):
+            with self.subTest(action=action.__name__):
+                self.tray.open()
+                self.finish_animation()
+                self.tray.close()
+                stale_close = next(iter(self.pending.values()))[1]
+                action()
+                self.now += 1
+                stale_close()
+                self.assertFalse(self.pending)
+                self.assertFalse(self.tray.is_shown)
+                self.tray.on_closed.assert_not_called()
 
     def test_rapid_toggle_reverses_current_progress_and_stale_tick_cannot_run(self):
         self.tray.toggle()
@@ -289,6 +365,133 @@ class TrayBehaviorTests(unittest.TestCase):
         self.assertEqual(self.tray._choices[2].grid.call_args.kwargs["column"], 0)
         self.assertTrue(self.tray._variables["say"].get())
         self.change.assert_not_called()
+
+
+class SettingsDrawerTests(unittest.TestCase):
+    after = TrayBehaviorTests.after
+    next_frame = TrayBehaviorTests.next_frame
+    finish_animation = TrayBehaviorTests.finish_animation
+
+    def setUp(self):
+        self.stack = ExitStack()
+        self.addCleanup(self.stack.close)
+        self.now = 10.0
+        self.pending = {}
+        self.timer_number = 0
+        self.anchor = (-700, 300, 540, 230)
+        self.bounds = (-1920, 0, 3840, 1080)
+
+        def widget(parent=None, **options):
+            result = Mock()
+            result.parent, result.options = parent, options
+            result.winfo_reqwidth.return_value = 100
+            result.winfo_reqheight.return_value = 24
+            return result
+
+        self.window = widget()
+        self.window.after.side_effect = self.after
+        self.window.after_cancel.side_effect = lambda timer: self.pending.pop(timer, None)
+        self.native = Mock()
+        self.owner = Mock()
+        self.build_content = Mock()
+        self.layout_content = Mock()
+        self.open_change = Mock()
+        self.closed = Mock()
+        self.stack.enter_context(patch.object(overlay_tray.time, "monotonic", side_effect=lambda: self.now))
+        self.stack.enter_context(patch.multiple(overlay_tray.tk,
+            Toplevel=Mock(return_value=self.window), Frame=Mock(side_effect=widget),
+            Canvas=Mock(side_effect=widget), Scrollbar=Mock(side_effect=widget)))
+        self.drawer = SettingsDrawer(self.owner, build_content=self.build_content,
+            layout_content=self.layout_content, get_anchor=lambda: self.anchor,
+            get_bounds=lambda: self.bounds, native_factory=lambda _: self.native,
+            palette=PALETTE, opacity=.8, on_open_change=self.open_change, on_closed=self.closed)
+        self.drawer.body.winfo_reqheight.return_value = 620
+
+    def test_content_is_built_once_and_short_monitor_scrolls_the_complete_body(self):
+        self.build_content.assert_called_once_with(self.drawer.body)
+        self.assertFalse(self.drawer.is_shown)
+        self.window.deiconify.assert_not_called()
+        self.bounds = (-1920, 0, 3840, 300)
+        self.drawer.open()
+        self.finish_animation()
+        self.layout_content.assert_called_once_with(510)
+        self.drawer.canvas.itemconfigure.assert_called_with(self.drawer._body_id, width=526)
+        self.drawer.canvas.configure.assert_called_with(scrollregion=(0, 0, 526, 620))
+        self.assertEqual(self.drawer._wanted_height, 300)
+        self.native.place.assert_called_with(-700, 0, 540, 300)
+        self.drawer.scrollbar.configure.assert_called_with(command=self.drawer.canvas.yview)
+        self.drawer.canvas.options["yscrollcommand"](.1, .5)
+        self.drawer.scrollbar.set.assert_called_once_with(.1, .5)
+        self.drawer.close()
+        self.finish_animation()
+        self.drawer.open()
+        self.finish_animation()
+        self.build_content.assert_called_once_with(self.drawer.body)
+
+    def test_resize_monitor_height_and_language_reflow_without_rebuilding_controls(self):
+        self.drawer.open()
+        self.finish_animation()
+        self.assertEqual(self.drawer._wanted_height, 622)
+        self.layout_content.reset_mock()
+        self.drawer.reposition()
+        self.layout_content.assert_not_called()
+        self.anchor = (-1000, 30, 300, 230)
+        self.bounds = (-1920, 0, 3840, 480)
+        self.drawer.reposition()
+        self.layout_content.assert_called_once_with(270)
+        self.drawer.canvas.configure.assert_called_with(scrollregion=(0, 0, 286, 620))
+        self.native.place.assert_called_with(-1000, 0, 300, 480)
+        self.layout_content.reset_mock()
+        self.bounds = (-1920, 0, 3840, 720)
+        self.drawer.reposition()
+        self.layout_content.assert_called_once_with(270)
+        self.assertEqual(self.drawer._wanted_height, 622)
+        self.drawer.body.winfo_reqheight.return_value = 680
+        self.drawer.refresh_language()
+        self.assertEqual(self.layout_content.call_count, 2)
+        self.assertEqual(self.drawer._wanted_height, 682)
+        self.assertTrue(self.drawer.is_open)
+        self.assertEqual(self.drawer._progress, 1)
+        self.build_content.assert_called_once_with(self.drawer.body)
+
+    def test_settings_reuses_cached_animation_and_notifies_only_after_close(self):
+        self.drawer.open()
+        self.window.update_idletasks.reset_mock()
+        self.layout_content.reset_mock()
+        self.drawer.body.winfo_reqheight.reset_mock()
+        self.native.place.reset_mock()
+        self.finish_animation()
+        frames = [item.args for item in self.native.place.call_args_list]
+        self.assertGreater(len(frames), 8)
+        self.assertEqual([height for _, _, _, height in frames],
+                         sorted(height for _, _, _, height in frames))
+        self.window.update_idletasks.assert_not_called()
+        self.layout_content.assert_not_called()
+        self.drawer.body.winfo_reqheight.assert_not_called()
+        self.owner.geometry.assert_not_called()
+        self.window.focus_set.assert_not_called()
+        self.window.focus_force.assert_not_called()
+        self.closed.assert_not_called()
+        self.assertEqual(self.drawer._escape(), "break")
+        self.assertTrue(self.drawer.is_shown)
+        self.closed.assert_not_called()
+        self.finish_animation()
+        self.closed.assert_called_once_with()
+        self.assertFalse(self.drawer.is_shown)
+        self.window.destroy.assert_not_called()
+
+    def test_mouse_wheel_is_bound_only_to_owned_popup_and_scrolls_in_both_directions(self):
+        bindings = {item.args[0]: item.args[1] for item in self.window.bind.call_args_list}
+        self.assertEqual(bindings["<MouseWheel>"](Mock(delta=120)), "break")
+        self.assertEqual(bindings["<MouseWheel>"](Mock(delta=-240)), "break")
+        self.assertEqual(bindings["<MouseWheel>"](Mock(delta=30)), "break")
+        self.assertEqual(bindings["<Button-4>"](Mock()), "break")
+        self.assertEqual(bindings["<Button-5>"](Mock()), "break")
+        self.assertEqual(self.drawer.canvas.yview_scroll.call_args_list,
+                         [call(-1, "units"), call(2, "units"), call(-1, "units"),
+                          call(-1, "units"), call(1, "units")])
+        self.window.bind_all.assert_not_called()
+        self.owner.bind.assert_not_called()
 
 
 if __name__ == "__main__":

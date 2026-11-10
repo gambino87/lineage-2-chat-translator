@@ -19,8 +19,9 @@ order and maps each module to its side effects and tests.
 - Preserves item names, prices and common game abbreviations; offers channel filters.
 - Translates replies into the selected language and copies them to the clipboard.
 - Localizes the installer, launcher and overlay in 11 languages. Setup asks for language first; a persistent selector at the top of the launcher changes the interface independently of chat translation.
-- Optionally minimizes the launcher to its app icon in the Windows system tray while translation and the overlay continue. Click to reopen; right-click for Open translator or Exit. Enable it in Settings; the window's X still exits.
+- Offers separate Minimize to system tray and Close to system tray options in Settings. With Close to system tray enabled, the window's X hides the launcher while translation and the overlay continue. Click its tray icon to reopen, or right-click and choose Exit to quit; the window reopens with closing progress until shutdown finishes.
 - Includes a protected Ollama frontend, downloads native libraries/the selected model during setup, and manages its local service.
+- Downloads only changed or missing program files for future app updates, verifies signed metadata and file hashes, and keeps rollback plus a full installer fallback.
 
 The translator reads the log file; it does not read game process memory, inject
 into the client or send chat to the game. Supported log formats depend on the
@@ -33,9 +34,9 @@ client/server. Translation quality depends on the selected model and message.
 | `translator_core.py`, `game_slang.py`, `item_catalog.py`, `chat_links.py` | Parsing, local-model requests, glossary, protected text and exact link colors |
 | `translator_app.py`, `chat_overlay.py`, `overlay_tray.py`, `reply_composer.py` | Launcher, overlay, filters and replies |
 | `ui_i18n.py`, `ui_strings_*.py`, `packaging/languages/` | Offline interface catalogs, native language names, live UI switching and installer messages |
-| `tray_controls.py`, `windows_tray.py` | Optional minimize/restore state and the owned Windows notification icon/menu |
+| `tray_controls.py`, `windows_tray.py` | Independent minimize/close-to-tray preferences, restore state and the owned Windows notification icon/menu |
 | `installer_main.py`, `installer_runtime.py`, `app_paths.py` | Setup, model downloads and owned service lifecycle |
-| `app_updater.py`, `update_controls.py`, `installation_cleanup.py`, `uninstall_data.py` | Updates, cleanup and uninstall |
+| `app_updater.py`, `incremental_update.py`, `update_controls.py`, `installation_cleanup.py`, `uninstall_data.py` | Verified file updates, rollback, cleanup and uninstall |
 | `local_service.py`, `runtime_integrity.py`, `secure_storage.py`, `update_network.py` | Authenticated local connections, trusted runtime files, private storage and bounded downloads |
 | `packaging/secure-ollama/` | Maintained Ollama security patch, pinned source/toolchain build and dependency notices |
 | `assets/` | Icons, item catalog and trusted update/cleanup helpers |
@@ -74,6 +75,13 @@ native runtime archive to establish its file inventory. Its compiled frontend is
 included in the installer, while GPU libraries and model weights download at setup.
 Generated files go into `.build/`, `release/` and the site's `dist/`, all ignored
 by Git. See [the build documentation](packaging/README.md) for details.
+
+From v1.8.7, the updater authenticates a complete file inventory through the
+signed release feed and downloads compressed objects only for changed or
+missing files. It verifies the complete installed target, runs a headless
+self-test and retains rollback backups until success. A failed file update
+rolls back before trying the verified full installer. Interrupted or failed
+rollback recovery preserves its files and requires a complete installer repair.
 
 Official release completion verifies the public OVH server and GitHub before
 automatically pruning approved old build caches and redundant upload packages.

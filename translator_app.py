@@ -45,6 +45,7 @@ DEFAULTS = {
     "include_notices": False,
     "show_original": False,
     "minimize_to_tray": False,
+    "close_to_tray": False,
     "overlay": {},
 }
 BG, PANEL, FG, MUTED, ACCENT = "#111820", "#1b2632", "#edf3f8", "#a4b4c3", "#66dec3"
@@ -82,6 +83,7 @@ def load_settings(*, migrate_legacy_models: bool = True) -> dict:
     settings["include_notices"] = settings["include_notices"] is True
     settings["show_original"] = settings["show_original"] is True
     settings["minimize_to_tray"] = settings["minimize_to_tray"] is True
+    settings["close_to_tray"] = settings["close_to_tray"] is True
     settings["ui_language"] = normalize_language(settings.get("ui_language"))
     # An earlier open window may save its old model when it closes.
     # Migrate the removed 3B model and initial trials to the selected 9B model.
@@ -188,6 +190,7 @@ class TranslatorApp:
         self.notices = tk.BooleanVar(value=self.config["include_notices"])
         self.show_original = tk.BooleanVar(value=self.config["show_original"])
         self.minimize_to_tray = tk.BooleanVar(value=self.config["minimize_to_tray"])
+        self.close_to_tray = tk.BooleanVar(value=self.config["close_to_tray"])
         self.on_top = tk.BooleanVar(value=False)
         self.status = LocalizedStringVar(value="Connecting to local Ollama…")
         self.counter = LocalizedStringVar(value="No messages translated yet")
@@ -197,6 +200,7 @@ class TranslatorApp:
                                    on_reply=self.select_reply, model=self.config["model"])
         self.overlay_button.configure(text=tr("Hide overlay" if self.overlay.settings["enabled"] else "Show overlay"))
         self.tray = TrayControls(self.root, enabled=self.minimize_to_tray.get,
+                                 close_enabled=self.close_to_tray.get,
                                  on_exit=self.close, on_error=self.status.set)
         self.refresh_language()
         threading.Thread(target=self._worker, daemon=True, name="local-translator").start()
@@ -204,7 +208,7 @@ class TranslatorApp:
         self.root.after(UI_POLL_INTERVAL_MS, self._drain_events)
         self.root.after(LOG_POLL_INTERVAL_MS, self._poll_log)
         self.root.after(FIRST_RUN_SETUP_DELAY_MS, self._first_run_log_setup)
-        self.root.protocol("WM_DELETE_WINDOW", self.close)
+        self.root.protocol("WM_DELETE_WINDOW", self._window_close)
 
     def _build(self):
         self.root.title(tr("Lineage 2 Chat Translator v{version} — Local Ollama", version=VERSION))
@@ -287,6 +291,10 @@ class TranslatorApp:
                         command=lambda: self.root.attributes("-topmost", self.on_top.get())).grid(row=0, column=2, sticky="w", padx=12)
         ttk.Checkbutton(self.settings_panel, text="Minimize to system tray", variable=self.minimize_to_tray,
                         command=self._tray_setting_changed).pack(anchor="w", pady=(0, 6))
+        ttk.Checkbutton(self.settings_panel, text="Close to system tray", variable=self.close_to_tray,
+                        command=self._tray_setting_changed).pack(anchor="w")
+        ttk.Label(self.settings_panel, text="To quit, right-click the tray icon and choose Exit.",
+                  foreground=MUTED, wraplength=680, justify="left").pack(anchor="w", padx=(20, 0), pady=(0, 6))
         source = ttk.Frame(self.settings_panel)
         source.pack(fill="x", pady=(0, 6))
         ttk.Label(source, text="Chat log", foreground=MUTED).pack(side="left", padx=(0, 8))
@@ -407,6 +415,15 @@ class TranslatorApp:
         """Persist the opt-in immediately; disabling it restores a hidden root."""
         self.save_settings()
         self.tray.preference_changed()
+
+    def _window_close(self):
+        """Window close may hide; tray Exit and update handoff always shut down."""
+        if self._closing:
+            return
+        if self.close_to_tray.get():
+            self.tray.hide_on_close()
+        else:
+            self.close()
 
     def select_reply(self, record, *, whisper=False):
         if self.stop.is_set() or getattr(self, "_closing", False):
@@ -805,6 +822,8 @@ class TranslatorApp:
                            show_original=self.show_original.get())
         if hasattr(self, "minimize_to_tray"):
             self.config["minimize_to_tray"] = self.minimize_to_tray.get() is True
+        if hasattr(self, "close_to_tray"):
+            self.config["close_to_tray"] = self.close_to_tray.get() is True
         if hasattr(self, "overlay"):
             self.config["overlay"] = dict(self.overlay.settings)
         try:
@@ -846,10 +865,6 @@ class TranslatorApp:
         self._shutdown_results = queue.Queue(maxsize=1)
         self._shutdown_progress = None
         pending_update = getattr(self, "_pending_update", None)
-        if shutdown is None and pending_update is None and (tray is None or tray.wait_closed(0)):
-            self._shutdown_results.put(None)
-            self._finish_shutdown()
-            return
         # Keep the window visible while the launcher still holds its instance
         # lock. Network/process checks must not block Tk's event thread.
         try:
@@ -857,6 +872,12 @@ class TranslatorApp:
         except Exception as exc:
             # The service still needs to stop if a widget has disappeared.
             self._close_errors.append(f"Showing closing progress: {exc}")
+
+        if shutdown is None and pending_update is None and (tray is None or tray.wait_closed(0)):
+            self._shutdown_results.put(None)
+            # Give the restored closing screen a paint even without a backend.
+            self.root.after(UI_POLL_INTERVAL_MS, self._finish_shutdown)
+            return
 
         def work():
             failure = None
@@ -913,6 +934,7 @@ class TranslatorApp:
         self._shutdown_progress.start(20)
         localize_tree(frame)
         self.root.deiconify()
+        self.root.lift()
         self.root.focus_set()
 
     def _finish_shutdown(self):

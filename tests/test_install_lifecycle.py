@@ -19,6 +19,7 @@ class InstallLifecycleTests(unittest.TestCase):
         # older lifecycle suite isolated from the real profile and OS notices.
         for name, value in (("update_in_progress", False), ("uninstall_in_progress", False),
                             ("cleanup_update_cache", None), ("consume_update_result", None),
+                            ("ensure_no_interrupted_update", None), ("prepare_incremental_uninstall", None),
                             ("detached_launch_notice", None)):
             self.enterContext(patch.object(setup, name, return_value=value))
         self.temp = tempfile.TemporaryDirectory()
@@ -536,7 +537,7 @@ class InstallLifecycleTests(unittest.TestCase):
         self.assertIn("if not ProgramCleanupComplete then Exit", event)
         self.assertIn("#include AppFileList", script)
         self.assertNotIn("recursesubdirs", script)
-        cleanup = script.split("function CleanRetiredProgramFiles", 1)[1].split("function InitializeSetup", 1)[0]
+        cleanup = script.split("function CleanRetiredProgramFiles", 1)[1].split("function FinishInterruptedUpdateRepair", 1)[0]
         self.assertIn("ExtractTemporaryFile('l2-program-cleanup.ps1')", cleanup)
         self.assertIn("Exec(PowerShellPath", cleanup)
         self.assertIn("ArchitecturesInstallIn64BitMode=x64compatible", script)
@@ -545,6 +546,10 @@ class InstallLifecycleTests(unittest.TestCase):
         self.assertIn("DeleteFile(HelperPath)", cleanup)
         self.assertNotIn("Lineage2ChatTranslator.exe", cleanup)
         self.assertNotIn("--cleanup-program-files", cleanup)
+        self.assertLess(event.index("ProgramCleanupComplete := CleanRetiredProgramFiles"),
+                        event.index("ProgramCleanupComplete := FinishInterruptedUpdateRepair"))
+        self.assertLess(event.index("ProgramCleanupComplete := VerifyCurrentProgramFiles"),
+                        event.index("ProgramCleanupComplete := FinishInterruptedUpdateRepair"))
         initialize = script.split("function InitializeSetup", 1)[1].split("function InitializeUninstall", 1)[0]
         self.assertIn("if not SetDllDirectory('')", initialize)
         self.assertIn("SetDllDirectoryW@kernel32.dll", script)

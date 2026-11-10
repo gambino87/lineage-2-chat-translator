@@ -49,6 +49,10 @@ def overlay_with(channels=None, limit=250):
     overlay._destroyed = False
     overlay._layout_timer = None
     overlay._settings_window = None
+    overlay._settings_drawer = None
+    overlay._pending_drawer = None
+    overlay._tray = None
+    overlay._localized_widgets = []
     overlay._native = None
     overlay._vars = {}
     overlay._channel_vars = {}
@@ -267,7 +271,7 @@ class FilterSettingsTests(unittest.TestCase):
                    ("Toplevel", "Frame", "Label", "Checkbutton", "Scale", "Button")}
         patches.update(BooleanVar=lambda value: Value(value), IntVar=lambda value: Value(value))
         with patch.multiple(chat_overlay.tk, **patches):
-            overlay.open_settings()
+            overlay._build_settings_content(Mock())
         by_label = {item.options.get("text"): item for item in widgets}
         self.assertTrue(by_label["Say"].options["variable"].get())
         self.assertTrue(by_label["Party"].options["variable"].get())

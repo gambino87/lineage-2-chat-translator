@@ -68,3 +68,34 @@ can still display an unknown publisher or SmartScreen prompt. The homepage
 and release metadata must continue to report `authenticode_signed: false`.
 Signatures do not protect an already modified application or compromised
 Windows account, and do not attest third-party runtime or model downloads.
+
+## Incremental program files
+
+From v1.8.7 the existing signed `release.json` may also carry an `incremental`
+descriptor. It binds the exact size and SHA-256 of `updates/<version>/files.json`.
+That complete target inventory binds each program file's path, installed size
+and SHA-256, plus the compressed size and SHA-256 of its deterministic gzip
+object at `updates/blobs/<compressed-sha256>.gz`. Both transfer bytes and expanded
+bytes must verify. Object URLs and manifest paths are fixed relative routes on
+the same trusted HTTPS origin; metadata cannot select another origin.
+
+The client hashes the actual installed files and downloads only changed or
+missing contents, even when versions were skipped. No old-version binary patch
+is required. The full signed installer remains available for first installation
+and automatic fallback. Older installed updaters continue to consume the same
+installer fields; they need one full installer upgrade to obtain file updates.
+
+The trusted installed helper repeats signature, manifest and file verification
+after clean shutdown. It preserves originals in a private, owned transaction
+stage before replacement and performs a headless self-test before success.
+Ordinary file-update failures restore original files before an installer retry.
+Retired program files are subject to the same historical hash inventory as the
+full installer. Settings, models and uninstaller files are outside file-update
+targets.
+
+Rollback is not a guarantee of automatic power-loss recovery. An unfinished or
+failed rollback journal retains its original files; startup refuses normal
+operation until a verified full installer repairs the application. Startup and
+release cleanup must never erase unresolved transaction backups. Current and
+historical update manifests/objects are immutable and retained with installers,
+so a newer server publication cannot break an update already being downloaded.

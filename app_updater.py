@@ -28,7 +28,8 @@ from app_paths import preferences_directory
 from app_version import VERSION
 from update_trust import SignatureError, SIGNATURE_BYTES, verify_release_signature
 from update_network import ControlledHTTPSHandler, NetworkCancelled, NetworkDeadline, NetworkOperation
-from secure_storage import guard_private_tree, locked_file as _locked_helper
+from secure_storage import guard_private_tree, locked_file as _locked_helper, path_identity, safe_remove_tree
+import incremental_update as file_update
 
 BASE_URL = 'https://40.160.140.227'
 RELEASE_URL = BASE_URL + '/downloads/release.json'
@@ -43,6 +44,8 @@ MAX_METADATA_BYTES = 64 * 1024
 MAX_SMALL_RECORD_BYTES = 4 * 1024
 MAX_RESULT_BYTES = 16 * 1024
 MAX_RESULT_MESSAGE_CHARS = 8000
+MAX_JOURNAL_BYTES = 16 * 1024 * 1024
+INSTALLED_RECEIPTS = ('installed-files.json', 'installed-release.json', 'installed-release.sig')
 MIN_INSTALLER_BYTES = 1024
 MAX_INSTALLER_BYTES = 128 * 1024 * 1024
 MIN_RUNNER_BYTES = 1000
@@ -66,7 +69,8 @@ _STAGE = re.compile(r'update-[a-f0-9]{32}\Z')
 _FILES = frozenset({'owner.json', 'job.json', 'installer.part', 'installer.exe',
                     'release.json', 'release.sig',
                     'apply-update.ps1', 'ready.json', 'commit.json', 'commit.pending', 'cancel',
-                    'self-test.json', 'installer.log'})
+                    'self-test.json', 'installer.log', 'files.json', 'blob.part',
+                    'transaction.json', 'transaction.pending', 'receipt.pending'})
 
 
 class UpdateError(RuntimeError):
@@ -87,12 +91,14 @@ class UpdateRelease:
     # boundary re-verifies them; constructing this dataclass conveys no trust.
     metadata: bytes = b''
     signature: bytes = b''
+    incremental: dict | None = None
 
 
 @dataclass(frozen=True)
 class PreparedUpdate:
     release: UpdateRelease
     stage: Path
+    mode: str = 'installer'
 
 
 def _require(condition, message):
@@ -151,7 +157,8 @@ def _opener(operation=None):
 
 def _open(url, operation=None):
     _require(url in (RELEASE_URL, SIGNATURE_URL) or re.fullmatch(
-        re.escape(BASE_URL) + r'/downloads/Lineage-2-Chat-Translator-[0-9]+\.[0-9]+\.[0-9]+-Setup\.exe', url),
+        re.escape(BASE_URL) + r'/downloads/Lineage-2-Chat-Translator-[0-9]+\.[0-9]+\.[0-9]+-Setup\.exe', url)
+        or re.fullmatch(re.escape(BASE_URL) + r'/updates/(?:[0-9]+\.[0-9]+\.[0-9]+/files\.json|blobs/[a-f0-9]{64}\.gz)', url),
         'Only the official HTTPS release host is allowed.')
     try:
         response = _opener(operation).open(request.Request(url, headers={
@@ -213,7 +220,7 @@ def _signed_release(metadata, signature):
     artifact = document.get('installer')
     _require(isinstance(artifact, dict), 'The update installer information is missing.')
     release = UpdateRelease(version, artifact.get('file'), artifact.get('bytes'), artifact.get('sha256'),
-                            metadata, signature)
+                            metadata, signature, document.get('incremental'))
     # Validate even non-new metadata without accepting it as an install action.
     _require(release.file == f'Lineage-2-Chat-Translator-{version}-Setup.exe'
              and type(release.bytes) is int and MIN_INSTALLER_BYTES <= release.bytes <= MAX_INSTALLER_BYTES
@@ -318,9 +325,11 @@ def _stage_info(stage, preferences=None):
 
 def _remove_stage(stage, preferences=None):
     stage, _ = _stage_info(stage, preferences)
+    _require(not _incomplete_transaction(stage),
+             'An interrupted file update has recovery backups. Run the full website installer to repair it; backups were kept.')
     children = list(stage.iterdir())
     for child in children:
-        _require(child.name in _FILES and _plain_path(child).is_file(),
+        _require(_stage_filename(child.name) and _plain_path(child).is_file(),
                  'Unrecognized files in the update folder were left untouched.')
     # Only direct, explicitly owned files are removed. Never recursively delete.
     for child in children:
@@ -388,7 +397,7 @@ def _authorize_update_cache(root):
     """Only repair ACLs for a cache entirely described by our ownership records."""
     for child in root.iterdir():
         stage, _ = _stage_info(child, root.parent)
-        _require(all(entry.name in _FILES and _plain_path(entry).is_file() for entry in stage.iterdir()),
+        _require(all(_stage_filename(entry.name) and _plain_path(entry).is_file() for entry in stage.iterdir()),
                  'Unrecognized files in the update folder were left untouched.')
     return True
 
@@ -408,7 +417,241 @@ def _new_update_stage(preferences):
             yield stage, nonce
 
 
-def prepare_update(release, *, progress=None, cancelled=None):
+def _stage_filename(name):
+    return name in _FILES or re.fullmatch(r'(?:[a-f0-9]{64}\.payload|rollback-[0-9]{5}\.bak)', name) is not None
+
+
+def _incomplete_transaction(stage):
+    if (stage / 'transaction.pending').exists():
+        return True
+    if not (stage / 'transaction.json').exists():
+        return False
+    try:
+        return _read_json(stage / 'transaction.json', MAX_JOURNAL_BYTES).get('state') not in ('committed', 'rolled_back')
+    except (UpdateError, ValueError, OSError):
+        return True
+
+
+def ensure_no_interrupted_update(preferences=None):
+    """Never start services against a potentially mixed application after a crash."""
+    root = _plain_path(_preferences(preferences) / 'updates')
+    if root.is_dir():
+        for candidate in root.iterdir():
+            if _STAGE.fullmatch(candidate.name):
+                stage, _ = _stage_info(candidate, preferences)
+                _require(not _incomplete_transaction(stage),
+                         'A previous file update was interrupted. Recovery backups have been kept. '
+                         'Download and run the full installer from ' + BASE_URL + '/ before opening the translator.')
+
+
+def finish_installer_repair(preferences=None):
+    """Called by Inno only after its complete installed-payload verification.
+
+    A crash keeps backups until an independently verified full installation
+    succeeds. This maintenance mode never starts a window, model or service.
+    """
+    executable = _installed_executable()
+    preferences = _preferences(preferences)
+    root = _plain_path(preferences / 'updates')
+    repaired, preserved_temporary = 0, []
+    if root.is_dir():
+        for candidate in root.iterdir():
+            if not _STAGE.fullmatch(candidate.name):
+                continue
+            stage, owner = _stage_info(candidate, preferences)
+            if not _incomplete_transaction(stage):
+                continue
+            job = _read_json(stage / 'job.json')
+            release = _signed_release(_read_bytes(stage / 'release.json'), _read_bytes(stage / 'release.sig', SIGNATURE_BYTES))
+            _require(job.get('executable') == str(executable) and job.get('nonce') == owner['nonce']
+                     and job.get('version') == release.version and _version(release.version) <= _version(VERSION),
+                     'An interrupted update belongs to another installation. Recovery files were kept.')
+            manifest_id = file_update.validate_descriptor(release.incremental, release.version)['manifest']
+            data = _read_bytes(stage / 'files.json', file_update.MAX_MANIFEST_BYTES)
+            _require(len(data) == manifest_id['bytes'] and hashlib.sha256(data).hexdigest() == manifest_id['sha256'],
+                     'Interrupted update metadata changed. Recovery files were kept.')
+            manifest = file_update.validate_manifest(data, release.version)
+            paths = {row['path'] for row in manifest['files']} | {row['path'] for row in manifest['cleanup']['obsolete_files']}
+            # The first journal can itself be interrupted before its rename.
+            # Inno's independent full-payload verification also permits repair
+            # of that state. Unauthenticated adjacent files remain untouched.
+            journal = {}
+            for name in ('transaction.json', 'transaction.pending'):
+                if not (stage / name).exists():
+                    continue
+                try:
+                    candidate_journal = _read_json(stage / name, MAX_JOURNAL_BYTES)
+                    if (candidate_journal.get('app_id') == APP_ID and candidate_journal.get('nonce') == owner['nonce']
+                            and candidate_journal.get('version') == release.version
+                            and isinstance(candidate_journal.get('entries'), list)):
+                        journal = candidate_journal
+                        break
+                except (UpdateError, ValueError, OSError):
+                    pass
+            # Adjacent incomplete copies have unambiguous journal-derived names
+            # and native IDs. Unknown or raced files are never deleted.
+            identified = set()
+            for entry in journal.get('entries', []):
+                if not isinstance(entry, dict):
+                    continue
+                relative = entry.get('path')
+                try:
+                    file_update.program_path(relative)
+                except ValueError:
+                    continue
+                temporary = entry.get('temporary', '')
+                if not temporary:
+                    continue
+                if relative not in paths or temporary != relative + '.l2ct-' + owner['nonce']:
+                    continue
+                identified.add(relative)
+                path = _plain_path(executable.parent.joinpath(*temporary.split('/')))
+                if path.exists():
+                    expected = entry.get('temporary_id')
+                    actual = ':'.join(str(part) for part in path_identity(path))
+                    if expected and actual == expected and path.is_file() and path.stat().st_nlink == 1:
+                        safe_remove_tree(path, expected_identity=[int(part) for part in actual.split(':')])
+                    else:
+                        preserved_temporary.append(str(path))
+            for relative in paths - identified:
+                path = _plain_path(executable.parent.joinpath(*(relative + '.l2ct-' + owner['nonce']).split('/')))
+                if path.exists():
+                    preserved_temporary.append(str(path))
+            # Complete install verification is the authority for retiring these
+            # backups, including when the repair installer is a newer release.
+            pending = _plain_path(stage / 'transaction.pending')
+            if pending.exists():
+                pending.unlink()
+            journal.update(app_id=APP_ID, schema_version=1, nonce=owner['nonce'],
+                           version=release.version, state='committed')
+            journal['repaired_by_full_installer'] = VERSION
+            with pending.open('x', encoding='utf-8') as output:
+                json.dump(journal, output)
+                output.flush()
+                os.fsync(output.fileno())
+            pending.replace(stage / 'transaction.json')
+            _remove_stage(stage, preferences)
+            repaired += 1
+    # A full installation refreshes Inno's own uninstall table. Its prior
+    # incremental receipt is no longer needed and may describe an older version.
+    for name in INSTALLED_RECEIPTS:
+        path = _plain_path(preferences / name)
+        if path.exists():
+            _require(path.is_file() and path.stat().st_nlink == 1, 'An installed file receipt is not a regular private file.')
+            path.unlink()
+    if preserved_temporary:
+        receipt = _plain_path(preferences / 'update-result.json')
+        content = {'app_id': APP_ID, 'status': 'error', 'version': VERSION,
+                   'message': ('The full installer repaired the translator. Unidentified temporary files were preserved for manual review: '
+                               + '; '.join(preserved_temporary))[:MAX_RESULT_MESSAGE_CHARS]}
+        with receipt.open('w', encoding='utf-8') as output:
+            json.dump(content, output)
+    return {'ok': True, 'version': VERSION, 'repaired_updates': repaired,
+            'preserved_temporary_files': preserved_temporary}
+
+
+def prepare_incremental_uninstall(result_path, preferences=None):
+    """Export only authenticated program identities into Inno's private temp.
+
+    The external cleanup runs after this app process exits, so DLLs added by
+    later file updates can be removed without relying on the old Inno file log.
+    """
+    preferences = _preferences(preferences)
+    receipts = [_plain_path(preferences / name) for name in INSTALLED_RECEIPTS]
+    if not any(path.exists() for path in receipts):
+        return False
+    _require(result_path is not None, 'Incremental uninstall requires the installer temporary result path.')
+    release = _signed_release(_read_bytes(receipts[1]), _read_bytes(receipts[2], SIGNATURE_BYTES))
+    _require(release.version == VERSION, 'The installed file receipt differs from this application. Run the full installer to repair it.')
+    identity = file_update.validate_descriptor(release.incremental, release.version)['manifest']
+    data = _read_bytes(receipts[0], file_update.MAX_MANIFEST_BYTES)
+    _require(len(data) == identity['bytes'] and hashlib.sha256(data).hexdigest() == identity['sha256'],
+             'The installed file receipt checksum changed. Uninstall cleanup was not authorized.')
+    manifest = file_update.validate_manifest(data, release.version)
+    import tempfile
+    folder = _plain_path(Path(result_path).parent)
+    _require(folder.is_relative_to(_plain_path(tempfile.gettempdir()))
+             and re.fullmatch(r'is-[a-z0-9]+\.tmp', folder.name, re.I),
+             'Incremental uninstall requires the private Windows installer temporary folder.')
+    helper = Path(__file__).resolve().parent / 'assets' / 'cleanup-program-files.ps1'
+    with guard_private_tree(folder, authorize_existing=lambda _: True, allow_locked_ancestors=True):
+        plan = {'schema_version': 1, 'product': PRODUCT, 'version': VERSION,
+                'files': [{key: row[key] for key in ('path', 'bytes', 'sha256')} for row in manifest['files']],
+                'preferences': str(preferences),
+                'receipts': {path.name: {'bytes': path.stat().st_size, 'sha256': _digest(path)} for path in receipts}}
+        script_target = _plain_path(folder / 'l2-incremental-uninstall.ps1')
+        plan_target = _plain_path(folder / 'l2-incremental-uninstall.json')
+        with script_target.open('xb') as output:
+            output.write(helper.read_bytes())
+        try:
+            _write_new_json(plan_target, plan)
+        except BaseException:
+            script_target.unlink()
+            raise
+    return True
+
+
+def _download(url, destination, record, operation, progress=None, offset=0, total=None):
+    received, sha = 0, hashlib.sha256()
+    with _open(url, operation) as response, destination.open('xb') as output:
+        length = response.headers.get('Content-Length')
+        _require(length is None or (length.isdecimal() and int(length) == record['bytes']),
+                 'The update download has an unexpected size.')
+        while True:
+            operation.check()
+            block = getattr(response, 'read1', response.read)(DOWNLOAD_CHUNK_BYTES)
+            if not block:
+                break
+            received += len(block)
+            _require(received <= record['bytes'], 'The update download exceeded its expected size.')
+            output.write(block)
+            sha.update(block)
+            if progress:
+                progress(offset + received, record['bytes'] if total is None else total)
+    _require(received == record['bytes'] and sha.hexdigest() == record['sha256'],
+             'The update download did not match the published checksum. It was not run.')
+
+
+def _prepare_incremental(release, executable, stage, progress, cancelled):
+    descriptor = file_update.validate_descriptor(release.incremental, release.version)
+    identity = descriptor['manifest']
+    with _network_scope(MAX_DOWNLOAD_SECONDS, cancelled) as operation:
+        _download(BASE_URL + '/' + identity['file'], stage / 'files.json', identity, operation)
+        manifest = file_update.validate_manifest(_read_bytes(stage / 'files.json', file_update.MAX_MANIFEST_BYTES), release.version)
+        needed = file_update.changed_files(executable.parent, manifest, cancelled)
+        # One verified payload is reusable when the inventory has identical files.
+        unique = {row['sha256']: row for row in needed}
+        total, received = sum(row['blob']['bytes'] for row in unique.values()), 0
+        if progress:
+            progress(0, total)
+        for row in unique.values():
+            operation.check()
+            part = stage / 'blob.part'
+            blob = row['blob']
+            _download(BASE_URL + '/updates/blobs/' + blob['sha256'] + '.gz', part, blob,
+                      operation, progress, received, total)
+            raw = file_update.decode_blob(_read_bytes(part, file_update.MAX_FILE_BYTES), row)
+            operation.check()
+            with (stage / (row['sha256'] + '.payload')).open('xb') as output:
+                output.write(raw)
+            part.unlink()
+            received += blob['bytes']
+        if progress and total == 0:
+            progress(1, 1)
+
+
+def _verify_incremental_stage(release, stage, executable):
+    descriptor = file_update.validate_descriptor(release.incremental, release.version)['manifest']
+    data = _read_bytes(stage / 'files.json', file_update.MAX_MANIFEST_BYTES)
+    _require(len(data) == descriptor['bytes'] and hashlib.sha256(data).hexdigest() == descriptor['sha256'],
+             'The file-update manifest changed before installation.')
+    manifest = file_update.validate_manifest(data, release.version)
+    for row in file_update.changed_files(executable.parent, manifest):
+        payload = _plain_path(stage / (row['sha256'] + '.payload'))
+        _require(file_update.file_matches(payload, row), 'A required file-update payload is missing or changed. Retry the update.')
+
+
+def prepare_update(release, *, progress=None, cancelled=None, force_installer=False):
     """Download and verify an update, but leave all execution to launch_update."""
     release = _validate_release(release)
     executable = _installed_executable()
@@ -419,31 +662,31 @@ def prepare_update(release, *, progress=None, cancelled=None):
     prepared = None
     try:
         with _new_update_stage(preferences) as (stage, nonce):
+            mode = 'installer'
             prepared = PreparedUpdate(release, stage)
-            part = stage / 'installer.part'
-            received, sha = 0, hashlib.sha256()
-            with _network_scope(MAX_DOWNLOAD_SECONDS, cancelled) as operation, \
-                 _open(BASE_URL + '/downloads/' + release.file, operation) as response, part.open('xb') as output:
-                length = response.headers.get('Content-Length')
-                if length is not None:
-                    _require(length.isdecimal() and int(length) == release.bytes, 'The installer download has an unexpected size.')
-                while True:
-                    operation.check()
-                    block = getattr(response, 'read1', response.read)(DOWNLOAD_CHUNK_BYTES)
-                    if not block:
-                        break
-                    received += len(block)
-                    _require(received <= release.bytes, 'The installer download exceeded its expected size.')
-                    output.write(block)
-                    sha.update(block)
-                    if progress:
-                        progress(received, release.bytes)
-            _cancelled(cancelled)
-            _require(received == release.bytes and sha.hexdigest() == release.sha256,
-                     'The installer download did not match the published checksum. It was not run.')
-            with part.open('rb') as source:
-                _require(source.read(2) == b'MZ', 'The download is not a Windows installer.')
-            part.replace(stage / 'installer.exe')
+            if release.incremental is not None and not force_installer:
+                try:
+                    _prepare_incremental(release, executable, stage, progress, cancelled)
+                    mode = 'incremental'
+                except UpdateCancelled:
+                    raise
+                except (UpdateError, ValueError, OSError):
+                    _cancelled(cancelled)
+                    # Preparation has never touched program files. Only our own
+                    # bounded download names are removed before installer fallback.
+                    for child in stage.iterdir():
+                        if child.name in ('files.json', 'blob.part') or re.fullmatch(r'[a-f0-9]{64}\.payload', child.name):
+                            _plain_path(child).unlink()
+            if mode == 'installer':
+                part = stage / 'installer.part'
+                with _network_scope(MAX_DOWNLOAD_SECONDS, cancelled) as operation:
+                    _download(BASE_URL + '/downloads/' + release.file, part,
+                              {'bytes': release.bytes, 'sha256': release.sha256}, operation, progress)
+                _cancelled(cancelled)
+                with part.open('rb') as source:
+                    _require(source.read(2) == b'MZ', 'The download is not a Windows installer.')
+                part.replace(stage / 'installer.exe')
+            prepared = PreparedUpdate(release, stage, mode)
             (stage / 'release.json').write_bytes(release.metadata)
             (stage / 'release.sig').write_bytes(release.signature)
             runner = RUNNER_PATH.read_bytes()
@@ -456,6 +699,7 @@ def prepare_update(release, *, progress=None, cancelled=None):
                 'installer_bytes': release.bytes, 'installer_sha256': release.sha256,
                 'runner_sha256': hashlib.sha256(runner).hexdigest(),
                 'executable': str(executable), 'preferences': str(preferences),
+                'mode': mode,
             })
             _cancelled(cancelled)
             return prepared
@@ -534,11 +778,15 @@ def _launch_update_locked(prepared, stage, owner, runner):
              and job.get('from_version') == VERSION and job.get('version') == release.version
              and job.get('installer_file') == release.file and job.get('installer_bytes') == release.bytes
              and job.get('installer_sha256') == release.sha256
-             and job.get('executable') == str(executable) and job.get('preferences') == str(_preferences()),
+             and job.get('executable') == str(executable) and job.get('preferences') == str(_preferences())
+             and prepared.mode in ('installer', 'incremental') and job.get('mode', 'installer') == prepared.mode,
              'The update handoff record changed. The installer was not started.')
-    _require((stage / 'installer.exe').stat().st_size == release.bytes
-             and _digest(stage / 'installer.exe') == release.sha256,
-             'The downloaded installer changed. It was not run.')
+    if prepared.mode == 'incremental':
+        _verify_incremental_stage(release, stage, executable)
+    else:
+        _require((stage / 'installer.exe').stat().st_size == release.bytes
+                 and _digest(stage / 'installer.exe') == release.sha256,
+                 'The downloaded installer changed. It was not run.')
     runner_hash = _digest(RUNNER_PATH)
     _require(job.get('runner_sha256') == runner_hash and hashlib.file_digest(runner, 'sha256').hexdigest() == runner_hash,
              'The update helper changed. It was not run.')

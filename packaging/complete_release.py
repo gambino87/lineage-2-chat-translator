@@ -7,6 +7,7 @@ Any verification failure occurs before cleanup and preserves retry artifacts.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -75,6 +76,27 @@ def page_matches(actual: bytes, expected: bytes, *, allow_provider_script: bool)
             and extra.count(b"</script>") == 1 and b"/cdn-cgi/challenge-platform/" in extra)
 
 
+def verify_update_host(base: str, public: dict):
+    """Audit all current live update objects with a bounded eight-connection pool."""
+    if "incremental" not in public:
+        return None, set()
+    from incremental_update import validate_descriptor, validate_manifest
+    descriptor = validate_descriptor(public["incremental"], public["version"])
+    manifest = descriptor["manifest"]
+    data = fetch_https(base + "/" + manifest["file"], manifest["bytes"])
+    require(len(data) == manifest["bytes"] and hashlib.sha256(data).hexdigest() == manifest["sha256"],
+            "Live update manifest differs from its signed release; cleanup has not run.")
+    document = validate_manifest(data, public["version"])
+    tools = release_site.update_tools()
+    requests = {tools.blob_path(row): row["blob"]["bytes"] for row in document["files"]}
+    cache = {manifest["file"]: data}
+    with ThreadPoolExecutor(max_workers=8) as workers:
+        pending = {workers.submit(fetch_https, base + "/" + name, limit): name for name, limit in requests.items()}
+        for future in as_completed(pending):
+            cache[pending[future]] = future.result()
+    return tools.verify_public(lambda name, limit: cache[name], public)
+
+
 def verify_host(base: str, expected_page: bytes, metadata: bytes, signature: bytes,
                 installer: dict, *, mirror: bool) -> dict:
     """Read and authenticate actual public bytes; never trust a success receipt."""
@@ -94,7 +116,13 @@ def verify_host(base: str, expected_page: bytes, metadata: bytes, signature: byt
     page = fetch_https(base + "/", MAX_PAGE_BYTES)
     require(page_matches(page, expected_page, allow_provider_script=mirror),
             f"Homepage differs at {base}; wait for publication to finish before retrying.")
-    return {"url": base, "signature_verified": True, "installer_verified": True, "homepage_verified": True}
+    public = json.loads(published)
+    updates, used = verify_update_host(base, public)
+    result = {"url": base, "signature_verified": True, "installer_verified": True, "homepage_verified": True}
+    if updates is not None:
+        result.update(incremental_verified=True, incremental_files=len(updates["files"]),
+                      incremental_artifacts=len(used))
+    return result
 
 
 def verify_public_source(root: Path) -> dict:

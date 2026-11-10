@@ -2,7 +2,7 @@
 # In particular, this helper must never load the installed Python runtime: that
 # runtime may still load a retired DLL which this cleanup needs to remove.
 [CmdletBinding()]
-param([string]$InstallRoot, [string]$Version, [string]$ResultPath)
+param([string]$InstallRoot, [string]$Version, [string]$ResultPath, [string]$UninstallPlan)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -322,6 +322,348 @@ function Invoke-RegisteredCleanup([string]$Root, [string]$Version) {
     } finally { $guard.Dispose() }
 }
 
+function Test-IncrementalUninstallPlan($Plan) {
+    Assert-CleanupCondition ($Plan -is [pscustomobject]) 'Invalid incremental uninstall inventory.'
+    if (@($Plan.PSObject.Properties.Name) -ccontains 'preferences' -or @($Plan.PSObject.Properties.Name) -ccontains 'receipts') {
+        Assert-CleanupFields $Plan @('schema_version', 'product', 'version', 'files', 'preferences', 'receipts')
+        $null = Test-IncrementalUninstallReceipts $Plan
+    } else { Assert-CleanupFields $Plan @('schema_version', 'product', 'version', 'files') }
+    Assert-CleanupCondition (($Plan.schema_version -is [int] -or $Plan.schema_version -is [long]) -and
+        $Plan.schema_version -eq 1 -and $Plan.product -is [string] -and $Plan.product -ceq $script:CleanupProduct -and
+        $Plan.version -is [string] -and $Plan.version -cmatch '^(0|[1-9][0-9]{0,4})\.(0|[1-9][0-9]{0,4})\.(0|[1-9][0-9]{0,4})$') 'Invalid incremental uninstall identity.'
+    Assert-CleanupCondition ($Plan.files -is [Array] -and $Plan.files.Count -gt 0 -and $Plan.files.Count -le 4096) 'Invalid incremental uninstall file inventory.'
+    $paths = New-CleanupPathIndex
+    $hasExecutable = $false
+    [long]$total = 0
+    foreach ($entry in $Plan.files) {
+        Assert-CleanupFields $entry @('path', 'bytes', 'sha256')
+        $path = Assert-CleanupRelativePath $entry.path
+        $parts = $path.Split('/')
+        Assert-CleanupCondition (($parts.Count -gt 1 -and @('_internal', 'licenses') -ccontains $parts[0]) -or
+            ($parts.Count -eq 1 -and @('Lineage2ChatTranslator.exe', 'USER-README.txt', 'THIRD-PARTY-NOTICES.txt') -ccontains $path)) 'Uninstall is restricted to packaged program files.'
+        foreach ($part in $parts) {
+            Assert-CleanupCondition ($part -notin @('models', 'logs', 'captures', 'settings.json', 'runtime.json', 'network.log', '.git', '.build', '.build-tools', 'release', 'review_tools') -and
+                -not $part.StartsWith('unins', [StringComparison]::OrdinalIgnoreCase) -and
+                $part -notmatch '\.(local\.json|log|bak|old)$') 'User data and uninstaller files cannot be uninstall targets.'
+        }
+        Add-CleanupIndexedPath $paths $path
+        Assert-CleanupCondition (($entry.bytes -is [int] -or $entry.bytes -is [long]) -and
+            $entry.bytes -ge 0 -and $entry.bytes -le $script:CleanupFileBytes -and
+            $entry.sha256 -is [string] -and $entry.sha256 -cmatch '^[a-f0-9]{64}$') 'Invalid incremental uninstall size or checksum.'
+        $total += $entry.bytes
+        if ($path -ceq 'Lineage2ChatTranslator.exe') { $hasExecutable = $true }
+    }
+    Assert-CleanupCondition ($hasExecutable -and $total -le 512 * 1024 * 1024) 'The incremental uninstall inventory is incomplete or too large.'
+    return $Plan
+}
+
+function Test-IncrementalUninstallReceipts($Plan) {
+    Assert-CleanupCondition ($Plan.preferences -is [string]) 'The uninstall preferences folder is invalid.'
+    $preferences = (Assert-CleanupPlainPath $Plan.preferences).TrimEnd('\')
+    $allowed = @(
+        [IO.Path]::GetFullPath([IO.Path]::Combine($env:APPDATA, 'Lineage2ChatTranslator')).TrimEnd('\'),
+        [IO.Path]::GetFullPath([IO.Path]::Combine($env:APPDATA, 'L2Prominence\ChatTranslator')).TrimEnd('\')
+    )
+    Assert-CleanupCondition ($allowed -icontains $preferences) 'The uninstall preferences folder is not application-owned.'
+    $names = @('installed-files.json', 'installed-release.json', 'installed-release.sig')
+    Assert-CleanupFields $Plan.receipts $names
+    foreach ($name in $names) {
+        $entry = $Plan.receipts.$name
+        Assert-CleanupFields $entry @('bytes', 'sha256')
+        $maximum = $script:CleanupPlanBytes
+        if ($name -ceq 'installed-release.json') { $maximum = 64 * 1024 }
+        if ($name -ceq 'installed-release.sig') { $maximum = 384 }
+        Assert-CleanupCondition (($entry.bytes -is [int] -or $entry.bytes -is [long]) -and
+            $entry.bytes -gt 0 -and $entry.bytes -le $maximum -and
+            $entry.sha256 -is [string] -and $entry.sha256 -cmatch '^[a-f0-9]{64}$') 'An uninstall receipt identity is invalid.'
+        if ($name -ceq 'installed-release.sig') {
+            Assert-CleanupCondition ($entry.bytes -eq 384) 'The uninstall receipt signature has an invalid size.'
+        }
+    }
+    return $preferences
+}
+
+function Read-IncrementalUninstallPlan([string]$Path) {
+    $path = Assert-CleanupPlainPath $Path
+    $stream = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    $bytes = [byte[]]::new($script:CleanupPlanBytes + 1)
+    try {
+        $count = 0
+        while ($count -lt $bytes.Length) {
+            $read = $stream.Read($bytes, $count, $bytes.Length - $count)
+            if ($read -eq 0) { break }
+            $count += $read
+        }
+    } finally { $stream.Dispose() }
+    Assert-CleanupCondition ($count -le $script:CleanupPlanBytes) 'The incremental uninstall inventory is too large.'
+    $text = [Text.UTF8Encoding]::new($false, $true).GetString($bytes, 0, $count).TrimStart([char]0xfeff)
+    Assert-CleanupJsonFields ([Text.Encoding]::UTF8.GetBytes($text))
+    return Test-IncrementalUninstallPlan (ConvertFrom-Json -InputObject $text)
+}
+
+function New-IncrementalUninstallGuard {
+    if ($null -eq ('L2Cleanup.VerifiedUninstall' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Security.AccessControl;
+using System.Security.Cryptography;
+using System.Security.Principal;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+namespace L2Cleanup {
+    public sealed class VerifiedUninstall : IDisposable {
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Info {
+            public uint Attributes, C0, C1, A0, A1, W0, W1, Volume, SizeHigh, SizeLow, Links, IndexHigh, IndexLow;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct BasicInfo {
+            public long Creation, Access, Write, Change;
+            public uint Attributes;
+        }
+        [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+        private static extern SafeFileHandle CreateFileW(string path, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template);
+        [DllImport("kernel32.dll", SetLastError=true)]
+        private static extern bool GetFileInformationByHandle(SafeFileHandle file, out Info info);
+        [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+        private static extern uint GetFinalPathNameByHandleW(SafeFileHandle file, StringBuilder name, uint length, uint flags);
+        [DllImport("kernel32.dll", SetLastError=true)]
+        private static extern bool GetFileInformationByHandleEx(SafeFileHandle file, int kind, out BasicInfo info, uint size);
+        [DllImport("kernel32.dll", EntryPoint="SetFileInformationByHandle", SetLastError=true)]
+        private static extern bool SetBasic(SafeFileHandle file, int kind, ref BasicInfo info, uint size);
+        [DllImport("kernel32.dll", EntryPoint="SetFileInformationByHandle", SetLastError=true)]
+        private static extern bool SetDisposition(SafeFileHandle file, int kind, ref int delete, uint size);
+        private readonly Dictionary<string, SafeFileHandle> directories = new Dictionary<string, SafeFileHandle>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, FileStream> files = new Dictionary<string, FileStream>(StringComparer.OrdinalIgnoreCase);
+        private static string Key(string path) { return Path.GetFullPath(path).TrimEnd('\\'); }
+        private static Info Inspect(SafeFileHandle file, string path, bool directory) {
+            Info info;
+            if (!GetFileInformationByHandle(file, out info)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            var actual = new StringBuilder(32768);
+            uint length = GetFinalPathNameByHandleW(file, actual, (uint)actual.Capacity, 0);
+            if (length == 0 || length >= actual.Capacity) throw new IOException("Cannot resolve an uninstall path safely.");
+            string final = actual.ToString();
+            if (final.StartsWith(@"\\?\")) final = final.Substring(4);
+            if (!String.Equals(Key(final), Key(path), StringComparison.OrdinalIgnoreCase) ||
+                (info.Attributes & 0x400) != 0 || (((info.Attributes & 0x10) != 0) != directory) ||
+                (!directory && info.Links != 1))
+                throw new IOException("Uninstall will not follow linked, redirected or special program files.");
+            return info;
+        }
+        public void HoldDirectories(string path) {
+            var pending = new Stack<string>();
+            for (var cursor = new DirectoryInfo(Path.GetFullPath(path)); cursor != null; cursor = cursor.Parent)
+                pending.Push(cursor.FullName);
+            while (pending.Count > 0) {
+                string next = pending.Pop(), key = Key(next);
+                if (directories.ContainsKey(key)) continue;
+                var file = CreateFileW(next, 0x20001, 3, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero);
+                if (file.IsInvalid) { int error = Marshal.GetLastWin32Error(); file.Dispose(); throw new Win32Exception(error); }
+                try { Inspect(file, next, true); directories.Add(key, file); file = null; }
+                finally { if (file != null) file.Dispose(); }
+            }
+        }
+        public string Preflight(string path, long expectedBytes, string expectedHash) {
+            // Pin existing ancestors even for a missing file. Missing nested
+            // directories have no file to remove and are never created here.
+            string parent = Path.GetDirectoryName(path);
+            while (!Directory.Exists(parent)) {
+                if (File.Exists(parent)) throw new IOException("An uninstall directory was replaced by a file.");
+                parent = Path.GetDirectoryName(parent);
+            }
+            HoldDirectories(parent);
+            var file = CreateFileW(path, 0x80010100, 1, IntPtr.Zero, 3, 0x00200000, IntPtr.Zero);
+            if (file.IsInvalid) {
+                int error = Marshal.GetLastWin32Error(); file.Dispose();
+                if (error == 2 || error == 3) return "missing";
+                throw new Win32Exception(error);
+            }
+            FileStream stream = null;
+            try {
+                Inspect(file, path, false);
+                stream = new FileStream(file, FileAccess.Read, 65536, false);
+                file = null;
+                if (stream.Length != expectedBytes) return "preserved";
+                string actual;
+                using (var sha = SHA256.Create()) actual = BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
+                if (!String.Equals(actual, expectedHash, StringComparison.Ordinal)) return "preserved";
+                files.Add(Key(path), stream); stream = null;
+                return "matched";
+            } finally {
+                if (stream != null) stream.Dispose();
+                if (file != null) file.Dispose();
+            }
+        }
+        public void DeleteVerified(string path) {
+            string key = Key(path);
+            FileStream stream;
+            if (!files.TryGetValue(key, out stream)) throw new IOException("The uninstall file was not verified.");
+            BasicInfo original;
+            uint size = (uint)Marshal.SizeOf(typeof(BasicInfo));
+            if (!GetFileInformationByHandleEx(stream.SafeFileHandle, 0, out original, size))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            bool readOnly = (original.Attributes & 1) != 0;
+            if (readOnly) {
+                BasicInfo changed = original; changed.Attributes &= ~1U;
+                if (!SetBasic(stream.SafeFileHandle, 0, ref changed, size)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            }
+            int delete = 1;
+            if (!SetDisposition(stream.SafeFileHandle, 4, ref delete, 4)) {
+                int error = Marshal.GetLastWin32Error();
+                if (readOnly) SetBasic(stream.SafeFileHandle, 0, ref original, size);
+                throw new Win32Exception(error);
+            }
+            files.Remove(key);
+            stream.Dispose();
+        }
+        public void RequirePrivateFile(string path) {
+            FileStream stream;
+            if (!files.TryGetValue(Key(path), out stream)) throw new IOException("The uninstall receipt was not verified.");
+            var security = stream.GetAccessControl();
+            string owner = ((SecurityIdentifier)security.GetOwner(typeof(SecurityIdentifier))).Value;
+            string current = WindowsIdentity.GetCurrent().User.Value;
+            if (!String.Equals(owner, current, StringComparison.Ordinal)) throw new IOException("The uninstall receipt has a different owner.");
+            foreach (FileSystemAccessRule rule in security.GetAccessRules(true, true, typeof(SecurityIdentifier))) {
+                string identity = ((SecurityIdentifier)rule.IdentityReference).Value;
+                if (rule.AccessControlType == AccessControlType.Allow && identity != current &&
+                    identity != "S-1-5-18" && identity != "S-1-5-32-544")
+                    throw new IOException("The uninstall receipt is not private to this Windows account.");
+            }
+        }
+        public void DeleteAllVerified() {
+            var marked = new List<FileStream>();
+            var attributes = new Dictionary<FileStream, BasicInfo>();
+            uint size = (uint)Marshal.SizeOf(typeof(BasicInfo));
+            try {
+                // Keep all receipt handles open until every delete disposition
+                // succeeds, so a failure can undo the pending deletions.
+                foreach (var stream in files.Values) {
+                    BasicInfo original;
+                    if (!GetFileInformationByHandleEx(stream.SafeFileHandle, 0, out original, size))
+                        throw new Win32Exception(Marshal.GetLastWin32Error());
+                    if ((original.Attributes & 1) != 0) {
+                        BasicInfo changed = original; changed.Attributes &= ~1U;
+                        if (!SetBasic(stream.SafeFileHandle, 0, ref changed, size)) throw new Win32Exception(Marshal.GetLastWin32Error());
+                        attributes.Add(stream, original);
+                    }
+                    int delete = 1;
+                    if (!SetDisposition(stream.SafeFileHandle, 4, ref delete, 4)) throw new Win32Exception(Marshal.GetLastWin32Error());
+                    marked.Add(stream);
+                }
+            } catch {
+                foreach (var stream in marked) {
+                    int keep = 0; SetDisposition(stream.SafeFileHandle, 4, ref keep, 4);
+                }
+                foreach (var entry in attributes) {
+                    BasicInfo original = entry.Value; SetBasic(entry.Key.SafeFileHandle, 0, ref original, size);
+                }
+                throw;
+            }
+            foreach (var stream in files.Values) stream.Dispose();
+            files.Clear();
+        }
+        public void Dispose() {
+            foreach (var stream in files.Values) stream.Dispose();
+            files.Clear();
+            foreach (var directory in directories.Values) directory.Dispose();
+            directories.Clear();
+        }
+    }
+}
+'@
+    }
+    return [L2Cleanup.VerifiedUninstall]::new()
+}
+
+function Invoke-IncrementalUninstallCleanup([string]$Root, $Plan) {
+    $plan = Test-IncrementalUninstallPlan $Plan
+    $root = (Assert-CleanupPlainPath $Root).TrimEnd('\')
+    Assert-CleanupCondition ([IO.Directory]::Exists($root) -and $root -ine [IO.Path]::GetPathRoot($root).TrimEnd('\')) 'Invalid uninstall installation root.'
+    $guard = New-IncrementalUninstallGuard
+    $matched = [Collections.Generic.List[object]]::new()
+    $removed = [Collections.Generic.List[string]]::new()
+    $preserved = [Collections.Generic.List[string]]::new()
+    $directories = [Collections.Generic.List[string]]::new()
+    try {
+        $guard.HoldDirectories($root)
+        # Hold all verified file handles and ancestors until every entry passes
+        # preflight, then delete through those exact handles without a path race.
+        foreach ($entry in $plan.files) {
+            $path = Get-CleanupCandidate $root $entry.path
+            $state = $guard.Preflight($path, $entry.bytes, $entry.sha256)
+            if ($state -ceq 'matched') { $matched.Add([pscustomobject]@{path=$path; relative=$entry.path}) }
+            elseif ($state -ceq 'preserved') { $preserved.Add($entry.path) }
+        }
+        foreach ($entry in $matched) {
+            $guard.DeleteVerified($entry.path)
+            $removed.Add($entry.relative)
+        }
+    } finally { $guard.Dispose() }
+    foreach ($entry in $matched) {
+        foreach ($directory in @(Remove-CleanupEmptyParents $root $entry.path)) { $directories.Add($directory) }
+    }
+    return [pscustomobject]@{ok=$true; version=$plan.version; removed=$removed.ToArray(); preserved=$preserved.ToArray(); removed_directories=$directories.ToArray(); error=$null}
+}
+
+function Invoke-RegisteredIncrementalUninstall([string]$Root, [string]$PlanPath) {
+    $created = $false
+    $guard = [Threading.Mutex]::new($false, 'Local\L2ProminenceChatTranslator', [ref]$created)
+    $uninstall = $null; $update = $null
+    try {
+        Assert-CleanupCondition $created 'The translator or setup is still open. Close it before uninstalling.'
+        try { $uninstall = [Threading.Mutex]::OpenExisting('Local\Lineage2ChatTranslatorUninstall') }
+        catch [Threading.WaitHandleCannotBeOpenedException] { }
+        Assert-CleanupCondition ($null -ne $uninstall) 'The registered uninstaller is not running.'
+        try { $update = [Threading.Mutex]::OpenExisting('Local\Lineage2ChatTranslatorUpdate') }
+        catch [Threading.WaitHandleCannotBeOpenedException] { }
+        Assert-CleanupCondition ($null -eq $update) 'An update is in progress. Wait before uninstalling.'
+        $root = (Assert-CleanupPlainPath $Root).TrimEnd('\')
+        $registration = Get-ItemProperty -LiteralPath $script:CleanupRegistryKey
+        Assert-CleanupCondition ($registration.DisplayName -is [string] -and
+            ($registration.DisplayName -ceq $script:CleanupProduct -or $registration.DisplayName.StartsWith($script:CleanupProduct + ' ', [StringComparison]::Ordinal))) 'The registered installation belongs to another product.'
+        Assert-CleanupCondition ($registration.InstallLocation -is [string] -and
+            (Assert-CleanupPlainPath $registration.InstallLocation).TrimEnd('\') -ieq $root) 'Uninstall root does not match the registered installation.'
+        Assert-CleanupCondition ([IO.File]::Exists((Assert-CleanupPlainPath ([IO.Path]::Combine($root, 'unins000.exe'))))) 'The registered uninstaller is missing.'
+        $plan = Read-IncrementalUninstallPlan $PlanPath
+        Assert-CleanupFields $plan @('schema_version', 'product', 'version', 'files', 'preferences', 'receipts')
+        return Invoke-IncrementalUninstallWithReceipts $root $plan
+    } finally {
+        if ($null -ne $update) { $update.Dispose() }
+        if ($null -ne $uninstall) { $uninstall.Dispose() }
+        $guard.Dispose()
+    }
+}
+
+function Invoke-IncrementalUninstallWithReceipts([string]$Root, $Plan) {
+    $plan = Test-IncrementalUninstallPlan $Plan
+    Assert-CleanupFields $plan @('schema_version', 'product', 'version', 'files', 'preferences', 'receipts')
+    $preferences = Test-IncrementalUninstallReceipts $plan
+    $guard = New-IncrementalUninstallGuard
+    $names = @('installed-files.json', 'installed-release.json', 'installed-release.sig')
+    try {
+        $guard.HoldDirectories($preferences)
+        foreach ($name in $names) {
+            $path = Assert-CleanupPlainPath ([IO.Path]::Combine($preferences, $name))
+            $entry = $plan.receipts.$name
+            Assert-CleanupCondition ($guard.Preflight($path, $entry.bytes, $entry.sha256) -ceq 'matched') 'An installed update receipt changed or is missing. Retry uninstall before removing program files.'
+            $guard.RequirePrivateFile($path)
+        }
+        # Receipt handles remain pinned across program cleanup. Any failure
+        # preserves the complete signed inventory for the next uninstall try.
+        $result = Invoke-IncrementalUninstallCleanup $Root $plan
+        Assert-CleanupCondition ($result.ok -eq $true) 'Program cleanup did not succeed; update receipts were preserved.'
+        $guard.DeleteAllVerified()
+    } finally { $guard.Dispose() }
+    if ([IO.Directory]::Exists($preferences) -and @([IO.Directory]::EnumerateFileSystemEntries($preferences)).Count -eq 0) {
+        [IO.Directory]::Delete((Assert-CleanupPlainPath $preferences), $false)
+    }
+    return $result
+}
+
 function Write-CleanupResult([string]$Path, $Result) {
     $path = Assert-CleanupPlainPath $Path
     # Retain counts, but cap path examples and error text so install logs stay small.
@@ -343,8 +685,9 @@ function Write-CleanupResult([string]$Path, $Result) {
 if ($MyInvocation.InvocationName -ne '.') {
     $exitCode = 0
     try {
-        Assert-CleanupCondition ($InstallRoot -and $Version -and $ResultPath) 'InstallRoot, Version and ResultPath are required.'
-        $result = Invoke-RegisteredCleanup $InstallRoot $Version
+        Assert-CleanupCondition ($InstallRoot -and $ResultPath -and ($Version -or $UninstallPlan)) 'InstallRoot, Version or UninstallPlan, and ResultPath are required.'
+        if ($UninstallPlan) { $result = Invoke-RegisteredIncrementalUninstall $InstallRoot $UninstallPlan }
+        else { $result = Invoke-RegisteredCleanup $InstallRoot $Version }
     } catch {
         $exitCode = 1
         $result = [pscustomobject]@{ok = $false; version = $Version; removed = @(); preserved = @(); error = $_.Exception.Message}

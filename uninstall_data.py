@@ -294,7 +294,8 @@ def authorize_data_root(data_root: Path, preferences_dir: Path | None = None) ->
 
 def _authorize_preferences(root: Path) -> bool:
     """Repair only known app preferences whose control records are trustworthy."""
-    allowed = {"settings.json", "runtime.json", REGISTRY, "update-result.json", "updates", UNCONFIRMED_RECORDS}
+    allowed = {"settings.json", "runtime.json", REGISTRY, "update-result.json", "updates", UNCONFIRMED_RECORDS,
+               "installed-files.json", "installed-release.json", "installed-release.sig"}
     if any(entry.name not in allowed and not _PREF_TEMP.fullmatch(entry.name) for entry in root.iterdir()):
         return False
     _registry(root)
@@ -382,7 +383,8 @@ def _adopt_selected_root(root: Path, preferences: Path, expected_identity) -> No
     _disjoint_roots(trusted)
     preferences.parent.mkdir(parents=True, exist_ok=True)
     root.parent.mkdir(parents=True, exist_ok=True)
-    allowed_preferences = {"settings.json", "runtime.json", REGISTRY, "update-result.json", "updates", UNCONFIRMED_RECORDS}
+    allowed_preferences = {"settings.json", "runtime.json", REGISTRY, "update-result.json", "updates", UNCONFIRMED_RECORDS,
+                           "installed-files.json", "installed-release.json", "installed-release.sig"}
     def authorize_preferences(path):
         return all(entry.name in allowed_preferences or _PREF_TEMP.fullmatch(entry.name) for entry in path.iterdir())
     with ExitStack() as held:
@@ -542,6 +544,8 @@ def _register_data_root(data_root: Path, preferences_dir: Path) -> None:
 
 
 def _preference_targets(preferences: Path) -> list[Path]:
+    # Authenticated file-update receipts survive until the external program
+    # cleanup succeeds, so an interrupted uninstall can export its plan again.
     names = {"settings.json", "runtime.json", "update-result.json"}
     if preferences.exists():
         names.update(path.name for path in preferences.iterdir() if _PREF_TEMP.fullmatch(path.name))

@@ -1,4 +1,4 @@
-LINEAGE 2 CHAT TRANSLATOR 1.8.6
+LINEAGE 2 CHAT TRANSLATOR 1.8.7
 
 Windows 10/11, 64-bit. Python is included; no separate Python installation is needed.
 The supplied L2CT artwork is used for the program, shortcuts and window icons.
@@ -26,14 +26,18 @@ English translations include contextual help for stream promotions ending in
 This improvement is limited to promotional endings; other mixed-language
 messages can still translate incompletely.
 
-MINIMIZE TO SYSTEM TRAY
+SYSTEM TRAY OPTIONS
 
 Enable Minimize to system tray in the launcher's Settings, then use the normal
 minimize button. The existing app icon appears in the Windows notification area
 (it may be under the hidden-icons arrow). Translation and the overlay keep running.
+Close to system tray is a separate setting: enable it to make the window's X
+hide the launcher in the tray instead of quitting. Both options are off by default.
 Click the icon to reopen the same launcher, or right-click for Open translator
-and Exit. Exit and the window's X close the translator and its owned local service.
-The setting is off by default and saved immediately. If Windows cannot create
+and Exit. With Close to system tray enabled, choose Exit from the tray to quit.
+The window reopens to show closing progress while its owned local service stops.
+With that setting disabled, the window's X also quits normally.
+Changes to either setting are saved immediately. If Windows cannot create
 the icon, the launcher stays accessible instead of disappearing.
 
 LOCAL SERVICE AND FILE ACCESS
@@ -76,6 +80,13 @@ recent in-memory history, so reselecting a channel restores its retained rows.
 Click Channels again, the tray's close button, or Escape while using the tray
 to collapse it. The same selections are available in Overlay settings.
 
+Settings opens as another attached drawer with the same animation. Switching
+between Channels and Settings finishes closing the current drawer before the
+other opens. Click Settings again, Done, the close button, or Escape to collapse
+it. Settings follows the overlay's width and scrolls on smaller screens. The
+launcher's Overlay settings button also opens this drawer, including when the
+overlay is hidden or locked, so you can show it or unlock it.
+
 Drag the overlay's top-right grip to resize it while keeping its bottom-left
 corner fixed. Hiding or locking the overlay also closes the channel tray.
 
@@ -104,7 +115,10 @@ UPDATES
 
 Open Settings in the installed launcher. The Updates row checks for a newer
 version in the background and shows Install vX & restart when one is available.
-Click it to download and verify the installer. After a successful download,
+From v1.8.7, it verifies a signed file inventory and downloads only changed or
+missing application files. Unchanged libraries and backend files are reused.
+Older launchers use the full installer once to receive this new updater.
+After a successful download,
 the translator saves your preferences, stops its Ollama service, closes,
 installs the update, removes its temporary update files, and reopens itself.
 Models, model storage, chat-log selection and overlay settings are kept.
@@ -119,7 +133,14 @@ preserved. No historical installers, development reports or chat logs are
 included. If a locked old file prevents cleanup, close the translator and run
 the installer again to retry. Downloaded models and saved settings are kept.
 
-The normal Windows installer progress window appears during replacement.
+File updates keep recovery backups until the complete target files and a
+headless app self-test pass. Failed replacements are rolled back before the
+verified full installer is attempted. If rollback cannot finish, the app stays
+closed and preserves its recovery files; run the full website installer to
+repair it. After an interrupted update, normal startup is blocked until that
+repair completes. The installer verifies the full program before retiring
+backups. Unidentified temporary sidecars are preserved for manual review.
+The Windows installer progress window appears when the fallback is needed.
 Checks and downloads that fail can be retried from Settings. Installation or
 restart errors are reported; a rare Windows restart requirement needs your
 attention. Do not run another installer or uninstall while an update is active.
@@ -211,9 +232,11 @@ finishes, including failed operations. Open translator starts and checks the
 service again. If cleanup fails, Close keeps the window open so you can retry;
 starting another operation also retries cleanup before starting a new service.
 Hardware information, download logs, removal and service controls are under
-Details & model tools. Closing the main translator window saves your preferences,
-requests that loaded models unload, then stops its verified dedicated Ollama
-service. A Closing—please wait screen stays visible until shutdown finishes;
+Details & model tools. Quitting the translator saves your preferences, requests
+that loaded models unload, then stops its verified dedicated Ollama service.
+When Close to system tray is enabled, the window's X only hides the launcher;
+right-click its tray icon and choose Exit to quit. Exit restores the window,
+and a Closing—please wait screen stays visible until shutdown finishes;
 wait for that window to disappear before reopening the translator. If shutdown
 cannot be confirmed, the translator shows a warning before closing.
 Closing or hiding only the overlay keeps translation running. The next

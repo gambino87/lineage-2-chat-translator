@@ -12,6 +12,12 @@ before its verified installer. From v1.7.12, also publish `/downloads/release.si
 with the exact signed `release.json` bytes. Never reformat that JSON on the server
 or any download host. Page preparation signs locally and reuses the verified signature;
 check-only preparation does not sign. The server receives no signing key.
+From v1.8.7 signed metadata additionally binds `updates/<version>/files.json`.
+Publish that complete inventory and its content-addressed gzip objects under
+`updates/blobs/` with the installer and metadata. The existing general static
+route serves `/updates/`; this feature requires no Nginx or certificate change.
+The export and deployment verifiers audit both compressed and expanded hashes,
+retain every previous update URL unchanged, and reject unreferenced objects.
 The first signature-aware release also requires the exact `/downloads/release.sig`
 location in `main-server/https.conf`; the default download rule intentionally
 returns 404 for unlisted files. For that one-time change, preserve the active
@@ -77,6 +83,14 @@ build is only prepared, not published. Retain previous releases; never overwrite
 an installer with different bytes under the same version. Routine deployments
 need no Nginx reload and no game/service restart. Tooling or website-only changes
 do not require an app version bump or installer rebuild.
+
+File-update artifacts are also part of that atomic bundle. Their bytes come
+only from the same verified frozen payload used by Inno Setup, never a local
+installation. `complete_release.py` checks the live signed inventory and every
+referenced gzip object, including its expanded contents, before local cleanup.
+It uses at most eight HTTPS readers and never executes these downloads. Retain
+canonical `release/<version>/updates/` artifacts and the public historical files;
+clients may still be downloading a previous target when a newer release goes live.
 
 The completion command preserves the newest build and recent/unpublished upload
 packages. Older timestamped build trees, known obsolete publication bundles and

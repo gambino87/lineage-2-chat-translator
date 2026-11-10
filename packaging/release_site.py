@@ -20,6 +20,13 @@ SIGNATURE_BYTES = 384  # RSA-3072 detached signature; cryptographic validation i
 MAX_METADATA_BYTES = 64 * 1024
 
 
+def update_tools():
+    spec = importlib.util.spec_from_file_location("l2_incremental_package", Path(__file__).with_name("incremental_package.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def verify_signature(metadata: bytes, signature: bytes) -> None:
     from update_trust import verify_release_signature
     verify_release_signature(metadata, signature)
@@ -199,7 +206,45 @@ def verified_release(root: Path, version: str, sources: tuple, assets: tuple) ->
         public["runtime_libraries_bundled"] = False
     public["validation"] = {"packaged_self_test_passed": True}
     public["model"] = model_details(root, manifest["default_model"])
+    if "incremental" in manifest:
+        update_tools().verify_package(release, manifest["incremental"], version, expected_payload=manifest["payload"])
+        public["incremental"] = manifest["incremental"]
     return public, installer
+
+
+def update_artifacts(root: Path, public: dict, retained: set[str]) -> dict[str, Path]:
+    """Retain authenticated historical manifests and all their immutable objects."""
+    tools = update_tools()
+    versions = {match[1] for name in retained if (match := tools.MANIFEST_PATTERN.fullmatch(name))}
+    if "incremental" in public:
+        versions.add(public["version"])
+    artifacts = {}
+    for version in sorted(versions):
+        release = root / "release" / version
+        historical = read_json(release / "release-manifest.json")
+        descriptor = historical.get("incremental")
+        require(descriptor is not None and historical.get("version") == version,
+                "Retained update manifest has no canonical release.")
+        if version != public["version"]:
+            metadata_path, proof_path = release / "release.json", release / "release.sig"
+            require(all(path.is_file() and not path.is_symlink() and not path.is_junction()
+                        for path in (metadata_path, proof_path))
+                    and metadata_path.stat().st_size <= MAX_METADATA_BYTES
+                    and proof_path.stat().st_size == SIGNATURE_BYTES, "Historical signed metadata size/path is invalid.")
+            metadata = metadata_path.read_bytes()
+            require(len(metadata) <= MAX_METADATA_BYTES, "Historical signed metadata is too large.")
+            verify_signature(metadata, proof_path.read_bytes())
+            signed = json.loads(metadata)
+            require(signed.get("version") == version and signed.get("incremental") == descriptor,
+                    "Historical update descriptor differs from its signed release.")
+        _, used = tools.verify_package(release, descriptor, version, expected_payload=historical["payload"])
+        for name in used:
+            candidate = release / name
+            if name in artifacts:
+                require(digest(artifacts[name]) == digest(candidate), "Conflicting content-addressed update objects.")
+            artifacts[name] = candidate
+    require(retained.issubset(artifacts), "Unexpected or unreferenced public update artifact.")
+    return artifacts
 
 
 def prepare_site(root: Path, site: Path, sources: tuple, assets: tuple, *, check: bool = False) -> dict:
@@ -212,15 +257,20 @@ def prepare_site(root: Path, site: Path, sources: tuple, assets: tuple, *, check
     dist = site / "dist"
     require(not dist.is_symlink() and not dist.is_junction() and dist.resolve().is_relative_to(site), "Invalid public output path.")
     history = {}
+    retained_updates = set()
     fixed = {"index.html", "_headers", "robots.txt", "assets/L2CT.ico", "assets/L2CT.png",
              "downloads/SHA256SUMS.txt", "downloads/release.json", "downloads/release.sig"}
+    tools = update_tools()
     for path in dist.rglob("*"):
         require(not path.is_symlink() and not path.is_junction(), "Links are not allowed in public output.")
         if not path.is_file():
             continue
         relative = path.relative_to(dist).as_posix()
         match = re.fullmatch(rf"downloads/({INSTALLER_PATTERN})", relative)
-        require(relative in fixed or match is not None, f"Unexpected public file: {relative}")
+        update = tools.MANIFEST_PATTERN.fullmatch(relative) or tools.BLOB_PATTERN.fullmatch(relative)
+        require(relative in fixed or match is not None or update, f"Unexpected public file: {relative}")
+        if update:
+            retained_updates.add(relative)
         if match:
             # Verify retained downloads against their original local release manifests.
             old = read_json(root / "release" / match.group(2) / "release-manifest.json")["installer"]
@@ -231,6 +281,9 @@ def prepare_site(root: Path, site: Path, sources: tuple, assets: tuple, *, check
         require(digest(history[installer.name]) == public["installer"]["sha256"],
                 "This version already has different installer bytes. Increase the application version.")
     history[installer.name] = installer
+    updates = update_artifacts(root, public, retained_updates)
+    for name in retained_updates:
+        require(digest(dist / name) == digest(updates[name]), "Retained update bytes differ from the canonical release.")
     model = public["model"]
     tokens = {
         "VERSION": version, "INSTALLER": installer.name,
@@ -257,6 +310,8 @@ def prepare_site(root: Path, site: Path, sources: tuple, assets: tuple, *, check
     for name, content_type in (("SHA256SUMS.txt", "text/plain"), ("release.json", "application/json")):
         headers += f"/downloads/{name}\n  Content-Type: {content_type}; charset=utf-8\n  Cache-Control: no-cache\n"
     headers += "/downloads/release.sig\n  Content-Type: application/octet-stream\n  Cache-Control: no-cache\n"
+    if updates:
+        headers += "/updates/*\n  Cache-Control: public, max-age=31536000, immutable\n"
     metadata, signature = signed_metadata(root, version, public, check=check)
     # Staging and backups stay under a checked, ignored directory in this Site.
     scratch = site / ".sites-artifacts"
@@ -282,6 +337,11 @@ def prepare_site(root: Path, site: Path, sources: tuple, assets: tuple, *, check
         # Writing bytes avoids newline conversion after signing on Windows.
         (staged / "downloads/release.json").write_bytes(metadata)
         (staged / "downloads/release.sig").write_bytes(signature)
+        for name, source in updates.items():
+            destination = staged / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
+            require(digest(destination) == digest(source), "Update artifact changed while staging.")
         # Catch source/artifact edits made while assembling the release.
         require(verified_release(root, version, sources, assets)[0] == public, "Release changed during preparation.")
         require(signed_metadata(root, version, public, check=True) == (metadata, signature),

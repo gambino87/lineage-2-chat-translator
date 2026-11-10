@@ -24,10 +24,16 @@ $parentExitTimeoutMs = 180000
 $restartRequiredExitCode = 3010  # Inno's configured reboot-required result.
 $maxResultMessageChars = 7800  # Leaves room for a bounded failure explanation.
 $maxInstallerLogBytes = 2 * 1024 * 1024
+$maxFileManifestBytes = 2 * 1024 * 1024
+$maxPayloadBytes = 128 * 1024 * 1024
+$maxPayloadTotalBytes = 512 * 1024 * 1024
+$maxPayloadFiles = 4096
+$maxTransactionBytes = 16 * 1024 * 1024
 $stagePrefix = 'update-'
 $allowedFiles = @('owner.json', 'job.json', 'installer.part', 'installer.exe', 'apply-update.ps1',
                   'release.json', 'release.sig',
-                  'ready.json', 'commit.json', 'commit.pending', 'cancel', 'self-test.json', 'installer.log')
+                  'ready.json', 'commit.json', 'commit.pending', 'cancel', 'self-test.json', 'installer.log',
+                  'files.json', 'transaction.json', 'transaction.pending', 'receipt.pending')
 $stage = $null
 $job = $null
 $safeStage = $false
@@ -39,6 +45,9 @@ $originalProcess = $null
 $pathLocks = $null
 $restartExecutable = $null
 $restartPermitted = $true
+$preserveStage = $false
+$signedRelease = $null
+$fileManifest = $null
 $status = 'error'
 $message = 'The update did not complete. Saved models and settings have not been removed.'
 
@@ -124,6 +133,28 @@ namespace L2Update {
             handle.Dispose();
         }
         public bool IsHeld(string path) { return held.ContainsKey(Key(path)); }
+        public static void AssertSingleLinkFile(SafeFileHandle handle) {
+            Info info;
+            if (!GetFileInformationByHandle(handle, out info)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            if (info.Links != 1 || (info.Attributes & 0x410) != 0)
+                throw new IOException("Updates require ordinary program files without links.");
+        }
+        public static string FileObjectId(SafeFileHandle handle) {
+            AssertSingleLinkFile(handle);
+            Info info;
+            if (!GetFileInformationByHandle(handle, out info)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            return info.Volume + ":" + info.IndexHigh + ":" + info.IndexLow;
+        }
+        public static void ReplaceFile(string source, string destination) {
+            File.Replace(source, destination, null);
+        }
+        public void ReleaseDescendantsForInstaller(string path) {
+            string prefix = Key(path) + "\\";
+            var remove = new List<string>();
+            foreach (string key in held.Keys)
+                if (key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) remove.Add(key);
+            foreach (string key in remove) { held[key].Dispose(); held.Remove(key); }
+        }
         public void RemoveEmptyDirectory(string path) {
             string key = Key(path);
             SafeFileHandle original;
@@ -269,6 +300,7 @@ function Assert-SignedRelease {
         ($document.installer.bytes -is [int] -or $document.installer.bytes -is [long]) -and
         ($document.installer.bytes -eq $job.installer_bytes) -and ($document.installer.sha256 -is [string]) -and
         ($document.installer.sha256 -ceq $job.installer_sha256)) 'The installer does not match its signed release.'
+    $script:signedRelease = $document
 }
 
 function Assert-InstalledVersion([string]$Executable) {
@@ -353,15 +385,450 @@ function Test-InstalledProgram([string[]]$AllowedVersions) {
     return $executable
 }
 
+function Assert-ExactFields($Value, [string[]]$Names) {
+    Assert-Condition ($null -ne $Value) 'An incremental update record is missing.'
+    $actual = @($Value.PSObject.Properties.Name)
+    Assert-Condition ($actual.Count -eq $Names.Count) 'An incremental update record has unexpected fields.'
+    foreach ($name in $Names) {
+        Assert-Condition ($actual -ccontains $name) 'An incremental update record has missing fields.'
+    }
+}
+
+function Assert-Integer($Value, [long]$Minimum, [long]$Maximum) {
+    Assert-Condition (($Value -is [int] -or $Value -is [long]) -and
+        $Value -ge $Minimum -and $Value -le $Maximum) 'An incremental update size or count is invalid.'
+}
+
+function Assert-ProgramRelativePath($Value, [bool]$Obsolete = $false) {
+    Assert-Condition ($Value -is [string] -and $Value.Length -gt 0 -and $Value.Length -le 1024 -and
+        $Value -notmatch '[\x00-\x1f\x7f\\:*?"<>|]') 'An incremental program path is invalid.'
+    $parts = $Value.Split('/')
+    foreach ($part in $parts) {
+        Assert-Condition ($part.Length -gt 0 -and $part.Length -le 255 -and $part -cne '.' -and $part -cne '..' -and
+            $part -ceq $part.Trim() -and -not $part.EndsWith('.') -and
+            $part -notmatch '^(con|prn|aux|nul|conin\$|conout\$|com[1-9\u00b9\u00b2\u00b3]|lpt[1-9\u00b9\u00b2\u00b3])(\.|$)' -and
+            $part -notmatch '^(models|logs|captures|\.git|\.build|\.build-tools|release|review_tools|settings\.json|runtime\.json|network\.log)$' -and
+            -not $part.EndsWith('.local.json', [StringComparison]::OrdinalIgnoreCase) -and
+            $part -notmatch '\.(log|bak|old)$' -and
+            -not $part.StartsWith('unins', [StringComparison]::OrdinalIgnoreCase)) 'An incremental program path is unsafe.'
+    }
+    $rootFiles = @('Lineage2ChatTranslator.exe', 'USER-README.txt', 'THIRD-PARTY-NOTICES.txt')
+    Assert-Condition (($parts.Length -gt 1 -and @('_internal', 'licenses') -ccontains $parts[0]) -or
+        ($parts.Length -eq 1 -and $rootFiles -ccontains $Value)) 'Incremental updates are restricted to program files.'
+    if ($Obsolete) {
+        Assert-Condition (-not $Value.EndsWith('.exe', [StringComparison]::OrdinalIgnoreCase)) 'Cleanup cannot remove executables.'
+    }
+    return $Value
+}
+
+function Assert-PathSet([object[]]$Paths) {
+    $files = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $parents = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($path in $Paths) {
+        Assert-Condition (-not $parents.Contains($path) -and $files.Add($path)) 'Incremental paths collide on Windows.'
+        $parent = $path
+        while ($parent.Contains('/')) {
+            $parent = $parent.Substring(0, $parent.LastIndexOf('/'))
+            Assert-Condition (-not $files.Contains($parent)) 'An incremental file conflicts with a directory.'
+            $null = $parents.Add($parent)
+        }
+    }
+}
+
+function Get-ProgramFile([string]$Root, [string]$Relative) {
+    $relative = Assert-ProgramRelativePath $Relative
+    $checkedRoot = (Assert-PlainPath $Root).TrimEnd('\')
+    $path = Assert-PlainPath ([IO.Path]::Combine($checkedRoot, $relative.Replace('/', '\')))
+    Assert-Condition ($path.StartsWith($checkedRoot + '\', [StringComparison]::OrdinalIgnoreCase)) 'The update escaped its installation folder.'
+    return $path
+}
+
+function Get-ProgramTemporary([string]$Root, $Entry) {
+    Assert-Condition ($Entry.temporary -ceq ($Entry.path + '.l2ct-' + $job.nonce)) 'An update temporary path is invalid.'
+    return Assert-PlainPath ((Get-ProgramFile $Root $Entry.path) + '.l2ct-' + $job.nonce)
+}
+
+function Get-FileIdentity([string]$Path) {
+    $checked = Assert-PlainPath $Path
+    Assert-Condition (-not [IO.Directory]::Exists($checked)) 'A program file was replaced with a directory.'
+    if (-not [IO.File]::Exists($checked)) { return $null }
+    $stream = [IO.File]::Open($checked, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        [L2Update.PathLocks]::AssertSingleLinkFile($stream.SafeFileHandle)
+        Assert-Condition ($stream.Length -le $maxPayloadBytes) 'A program file exceeds the update size limit.'
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try { $hash = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+        finally { $sha.Dispose() }
+        return [pscustomobject]@{bytes=$stream.Length; sha256=$hash; object_id=[L2Update.PathLocks]::FileObjectId($stream.SafeFileHandle)}
+    } finally { $stream.Dispose() }
+}
+
+function Assert-FileMatches([string]$Path, $Record) {
+    $identity = Get-FileIdentity $Path
+    Assert-Condition ($null -ne $identity -and $identity.bytes -eq $Record.bytes -and
+        $identity.sha256 -ceq $Record.sha256) 'A program file failed its signed size/checksum verification.'
+}
+
+function Assert-FileManifest {
+    Assert-Condition ($null -ne $signedRelease -and
+        @($signedRelease.PSObject.Properties.Name) -ccontains 'incremental') 'This release has no incremental update.'
+    $incremental = $signedRelease.incremental
+    Assert-ExactFields $incremental @('schema_version', 'manifest')
+    Assert-Integer $incremental.schema_version 1 1
+    $descriptor = $incremental.manifest
+    Assert-ExactFields $descriptor @('file', 'bytes', 'sha256')
+    Assert-Condition ($descriptor.file -ceq ('updates/' + $job.version + '/files.json') -and
+        $descriptor.sha256 -is [string] -and $descriptor.sha256 -cmatch '^[a-f0-9]{64}$') 'The signed file manifest identity is invalid.'
+    Assert-Integer $descriptor.bytes 1 $maxFileManifestBytes
+    $manifestPath = Assert-PlainPath ([IO.Path]::Combine($stage, 'files.json'))
+    Assert-FileMatches $manifestPath $descriptor
+    $manifest = Read-Record $manifestPath $maxFileManifestBytes
+    Assert-ExactFields $manifest @('schema_version', 'product', 'platform', 'version', 'files', 'cleanup')
+    Assert-Integer $manifest.schema_version 1 1
+    Assert-Condition ($manifest.product -ceq $productName -and $manifest.platform -ceq 'windows-x64' -and
+        $manifest.version -ceq $job.version -and $manifest.files -is [array]) 'The file manifest does not belong to this release.'
+    Assert-Integer $manifest.files.Count 1 $maxPayloadFiles
+    [long]$total = 0; [long]$compressed = 0
+    $paths = [Collections.Generic.List[string]]::new()
+    foreach ($file in $manifest.files) {
+        Assert-ExactFields $file @('path', 'bytes', 'sha256', 'blob')
+        $null = $paths.Add((Assert-ProgramRelativePath $file.path))
+        Assert-Integer $file.bytes 0 $maxPayloadBytes
+        Assert-Condition ($file.sha256 -is [string] -and $file.sha256 -cmatch '^[a-f0-9]{64}$') 'A program checksum is invalid.'
+        Assert-ExactFields $file.blob @('bytes', 'sha256')
+        Assert-Integer $file.blob.bytes 1 $maxPayloadBytes
+        Assert-Condition ($file.blob.sha256 -is [string] -and $file.blob.sha256 -cmatch '^[a-f0-9]{64}$') 'A compressed program checksum is invalid.'
+        $total += $file.bytes; $compressed += $file.blob.bytes
+    }
+    Assert-Condition ($paths -ccontains 'Lineage2ChatTranslator.exe' -and $total -le $maxPayloadTotalBytes -and
+        $compressed -le $maxPayloadTotalBytes) 'The file manifest is incomplete or exceeds its size limit.'
+    Assert-PathSet @($paths)
+    $cleanup = $manifest.cleanup
+    Assert-ExactFields $cleanup @('schema_version', 'product', 'version', 'current_paths', 'obsolete_files')
+    Assert-Integer $cleanup.schema_version 1 1
+    Assert-Condition ($cleanup.product -ceq $productName -and $cleanup.version -ceq $job.version -and
+        $cleanup.current_paths -is [array] -and $cleanup.obsolete_files -is [array] -and
+        $cleanup.current_paths.Count -eq $paths.Count -and $cleanup.obsolete_files.Count -le 10000) 'The cleanup plan does not match the file manifest.'
+    Assert-PathSet @($cleanup.current_paths)
+    foreach ($path in $cleanup.current_paths) {
+        Assert-Condition ($paths -ccontains $path) 'The cleanup plan does not describe the current files.'
+    }
+    $obsoletePaths = [Collections.Generic.List[string]]::new()
+    foreach ($old in $cleanup.obsolete_files) {
+        Assert-ExactFields $old @('path', 'hashes')
+        $null = $obsoletePaths.Add((Assert-ProgramRelativePath $old.path $true))
+        Assert-Condition ($old.hashes -is [array] -and $old.hashes.Count -gt 0 -and $old.hashes.Count -le 128) 'An obsolete checksum list is invalid.'
+        foreach ($hash in $old.hashes) {
+            Assert-Condition ($hash -is [string] -and $hash -cmatch '^[a-f0-9]{64}$') 'An obsolete checksum is invalid.'
+        }
+    }
+    Assert-PathSet @($obsoletePaths)
+    Assert-PathSet @(@($paths) + @($obsoletePaths))
+    $script:fileManifest = $manifest
+}
+
+function Write-Transaction($Value) {
+    $path = Assert-PlainPath ([IO.Path]::Combine($stage, 'transaction.json'))
+    $pending = Assert-PlainPath ([IO.Path]::Combine($stage, 'transaction.pending'))
+    $bytes = [Text.UTF8Encoding]::new($false).GetBytes(($Value | ConvertTo-Json -Compress -Depth 10))
+    Assert-Condition ($bytes.Length -le $maxTransactionBytes) 'The update recovery journal exceeded its size limit.'
+    $stream = [IO.File]::Open($pending, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try { $stream.Write($bytes, 0, $bytes.Length); $stream.Flush($true) }
+    finally { $stream.Dispose() }
+    if ([IO.File]::Exists($path)) { [L2Update.PathLocks]::ReplaceFile($pending, $path) }
+    else { [IO.File]::Move($pending, $path) }
+}
+
+function Hold-ProgramParent([string]$Path) {
+    $parent = Assert-PlainPath ([IO.Path]::GetDirectoryName($Path))
+    $missing = [Collections.Generic.Stack[string]]::new()
+    $cursor = $parent
+    while (-not [IO.Directory]::Exists($cursor)) {
+        Assert-Condition (-not [IO.File]::Exists($cursor)) 'An update directory was replaced by a file.'
+        $missing.Push($cursor)
+        $cursor = [IO.Path]::GetDirectoryName($cursor)
+    }
+    $pathLocks.HoldDirectoryPath($cursor)
+    while ($missing.Count -gt 0) {
+        $next = $missing.Pop()
+        $null = [IO.Directory]::CreateDirectory((Assert-PlainPath $next))
+        $pathLocks.HoldDirectoryPath($next)
+    }
+    $pathLocks.HoldDirectoryPath($parent)
+}
+
+function Copy-FlushedFile([string]$Source, [string]$Destination, [bool]$Overwrite) {
+    $sourcePath = Assert-PlainPath $Source
+    $destinationPath = Assert-PlainPath $Destination
+    $sourceFile = [IO.File]::Open($sourcePath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        [L2Update.PathLocks]::AssertSingleLinkFile($sourceFile.SafeFileHandle)
+        $mode = [IO.FileMode]::CreateNew
+        if ($Overwrite) {
+            if ([IO.File]::Exists($destinationPath)) { $null = Get-FileIdentity $destinationPath }
+            $mode = [IO.FileMode]::Create
+        }
+        $output = [IO.File]::Open($destinationPath, $mode, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        try { $sourceFile.CopyTo($output); $output.Flush($true) } finally { $output.Dispose() }
+    } finally { $sourceFile.Dispose() }
+}
+
+function New-InstalledReceipts([int]$BackupStart) {
+    $receipts = [Collections.Generic.List[object]]::new()
+    $sources = @('files.json', 'release.json', 'release.sig')
+    $names = @('installed-files.json', 'installed-release.json', 'installed-release.sig')
+    for ($index = 0; $index -lt $names.Length; $index++) {
+        $destination = Assert-PlainPath ([IO.Path]::Combine($job.preferences, $names[$index]))
+        $source = Assert-PlainPath ([IO.Path]::Combine($stage, $sources[$index]))
+        $target = Get-FileIdentity $source
+        $original = Get-FileIdentity $destination
+        $receipt = [pscustomobject]@{name=$names[$index]; source=$sources[$index]; existed=($null -ne $original);
+            bytes=0; sha256=''; backup=''; target_sha256=$target.sha256}
+        if ($null -ne $original) {
+            $receipt.bytes=$original.bytes; $receipt.sha256=$original.sha256
+            $receipt.backup='rollback-'+($BackupStart+$index).ToString('00000')+'.bak'
+            $backup=Assert-PlainPath ([IO.Path]::Combine($stage,$receipt.backup))
+            Copy-FlushedFile $destination $backup $false
+            Assert-FileMatches $backup $receipt
+        }
+        $receipts.Add($receipt)
+    }
+    return ,$receipts.ToArray()
+}
+
+function Save-InstalledReceipts($Transaction) {
+    foreach ($receipt in $Transaction.receipts) {
+        $source = Assert-PlainPath ([IO.Path]::Combine($stage, $receipt.source))
+        $destination = Assert-PlainPath ([IO.Path]::Combine($job.preferences, $receipt.name))
+        $pending = Assert-PlainPath ([IO.Path]::Combine($stage, 'receipt.pending'))
+        Copy-FlushedFile $source $pending $false
+        Assert-Condition ((Get-FileIdentity $pending).sha256 -ceq $receipt.target_sha256) 'Installed update metadata changed while saving.'
+        if ([IO.File]::Exists($destination)) {
+            $null = Get-FileIdentity $destination
+            [L2Update.PathLocks]::ReplaceFile($pending, $destination)
+        } else { [IO.File]::Move($pending, $destination) }
+    }
+}
+
+function Restore-IncrementalTransaction($Transaction, [string]$Root) {
+    # Every backup was verified and flushed before the journal became active.
+    # Restore all planned paths: this also covers a crash between mutation/journal writes.
+    foreach ($entry in $Transaction.entries) {
+        $destination = Get-ProgramFile $Root $entry.path
+        Hold-ProgramParent $destination
+        $temporary = Get-ProgramTemporary $Root $entry
+        if ([IO.File]::Exists($temporary)) {
+            Assert-Condition ((Get-FileIdentity $temporary).object_id -ceq $entry.temporary_id) 'An update temporary file changed identity and was kept.'
+            [IO.File]::Delete($temporary)
+        }
+        if ($entry.existed) {
+            $backup = Assert-PlainPath ([IO.Path]::Combine($stage, $entry.backup))
+            Assert-FileMatches $backup $entry
+            $source = [IO.File]::Open($backup, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+            try {
+                [L2Update.PathLocks]::AssertSingleLinkFile($source.SafeFileHandle)
+                $output = [IO.File]::Open($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+                try {
+                    $entry.temporary_id = [L2Update.PathLocks]::FileObjectId($output.SafeFileHandle)
+                    Write-Transaction $Transaction
+                    $source.CopyTo($output); $output.Flush($true)
+                } finally { $output.Dispose() }
+            } finally { $source.Dispose() }
+            Assert-FileMatches $temporary $entry
+            if ([IO.File]::Exists($destination)) { [L2Update.PathLocks]::ReplaceFile($temporary, $destination) }
+            else { [IO.File]::Move($temporary, $destination) }
+            Assert-FileMatches $destination $entry
+        } elseif ([IO.File]::Exists($destination)) {
+            # A raced unknown file is never deleted on rollback.
+            Assert-Condition ((Get-FileIdentity $destination).sha256 -ceq $entry.target_sha256) 'A newly added file changed during rollback; it was kept.'
+            [IO.File]::Delete($destination)
+            Assert-Condition (-not [IO.File]::Exists($destination)) 'A newly added file could not be removed during rollback.'
+        }
+    }
+    foreach ($receipt in $Transaction.receipts) {
+        Assert-Condition (@('installed-files.json', 'installed-release.json', 'installed-release.sig') -ccontains $receipt.name) 'An installed metadata recovery name is invalid.'
+        $destination = Assert-PlainPath ([IO.Path]::Combine($job.preferences, $receipt.name))
+        if ($receipt.existed) {
+            $backup=Assert-PlainPath ([IO.Path]::Combine($stage,$receipt.backup))
+            Assert-FileMatches $backup $receipt
+            Copy-FlushedFile $backup $destination $true
+            Assert-FileMatches $destination $receipt
+        } elseif ([IO.File]::Exists($destination)) {
+            Assert-Condition ((Get-FileIdentity $destination).sha256 -ceq $receipt.target_sha256) 'An installed metadata recovery file changed and was kept.'
+            [IO.File]::Delete($destination)
+        }
+    }
+    $Transaction.state = 'rolled_back'
+    Write-Transaction $Transaction
+}
+
+function Invoke-IncrementalUpdate([string]$Root) {
+    Assert-FileManifest
+    $entries = [Collections.Generic.List[object]]::new()
+    foreach ($file in $fileManifest.files) {
+        $destination = Get-ProgramFile $Root $file.path
+        $identity = Get-FileIdentity $destination
+        if ($null -ne $identity -and $identity.bytes -eq $file.bytes -and $identity.sha256 -ceq $file.sha256) { continue }
+        $payload = Assert-PlainPath ([IO.Path]::Combine($stage, $file.sha256 + '.payload'))
+        Assert-FileMatches $payload $file
+        $entries.Add([pscustomobject]@{path=$file.path; existed=($null -ne $identity); bytes=0; sha256='';
+            backup=''; target_sha256=$file.sha256; remove=$false; temporary=($file.path+'.l2ct-'+$job.nonce); temporary_id=''})
+    }
+    foreach ($old in $fileManifest.cleanup.obsolete_files) {
+        $destination = Get-ProgramFile $Root $old.path
+        $identity = Get-FileIdentity $destination
+        if ($null -eq $identity) { continue }
+        if ($old.hashes -cnotcontains $identity.sha256) {
+            Assert-Condition ([IO.Path]::GetExtension($old.path) -notin @('.dll', '.pyd', '.exe')) ('Retired program file ' + $old.path + ' differs from known releases. Use the website installer to repair it.')
+            continue
+        }
+        $entries.Add([pscustomobject]@{path=$old.path; existed=$true; bytes=0; sha256='';
+            backup=''; target_sha256=''; remove=$true; temporary=($old.path+'.l2ct-'+$job.nonce); temporary_id=''})
+    }
+    # Snapshot every original before allowing a single installation change.
+    for ($index = 0; $index -lt $entries.Count; $index++) {
+        $entry = $entries[$index]
+        $destination = Get-ProgramFile $Root $entry.path
+        Hold-ProgramParent $destination
+        if ($entry.existed) {
+            $identity = Get-FileIdentity $destination
+            Assert-Condition ($null -ne $identity) 'A program file disappeared before its backup.'
+            $entry.bytes = $identity.bytes; $entry.sha256 = $identity.sha256
+            $entry.backup = 'rollback-' + $index.ToString('00000') + '.bak'
+            $backup = Assert-PlainPath ([IO.Path]::Combine($stage, $entry.backup))
+            Assert-Condition (-not [IO.File]::Exists($backup)) 'An update backup already exists.'
+            [IO.File]::Copy($destination, $backup, $false)
+            Assert-FileMatches $backup $entry
+            $stream = [IO.File]::Open($backup, [IO.FileMode]::Open, [IO.FileAccess]::Write, [IO.FileShare]::None)
+            try { $stream.Flush($true) } finally { $stream.Dispose() }
+        } else {
+            Assert-Condition (-not [IO.File]::Exists($destination)) 'A new program path changed before installation.'
+        }
+    }
+    $transaction = [pscustomobject]@{app_id=$appIdentity; schema_version=1; nonce=$job.nonce;
+        state='applying'; version=$job.version; from_version=$job.from_version; entries=$entries.ToArray();
+        receipts=(New-InstalledReceipts $entries.Count)}
+    Write-Transaction $transaction
+    $script:restartPermitted = $false
+    try {
+        foreach ($entry in $entries) {
+            Write-Transaction $transaction
+            $destination = Get-ProgramFile $Root $entry.path
+            if ($entry.existed) { Assert-FileMatches $destination $entry }
+            else { Assert-Condition (-not [IO.File]::Exists($destination)) 'A new program file appeared during installation.' }
+            if ($entry.remove) { [IO.File]::Delete($destination) }
+            else {
+                $payload = Assert-PlainPath ([IO.Path]::Combine($stage, $entry.target_sha256 + '.payload'))
+                $source = [IO.File]::Open($payload, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+                try {
+                    [L2Update.PathLocks]::AssertSingleLinkFile($source.SafeFileHandle)
+                    $sha = [Security.Cryptography.SHA256]::Create()
+                    try { $hash = [BitConverter]::ToString($sha.ComputeHash($source)).Replace('-', '').ToLowerInvariant() }
+                    finally { $sha.Dispose() }
+                    Assert-Condition ($hash -ceq $entry.target_sha256) 'A staged update file changed.'
+                    $source.Position = 0
+                    $temporary = Get-ProgramTemporary $Root $entry
+                    $output = [IO.File]::Open($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+                    try {
+                        $entry.temporary_id = [L2Update.PathLocks]::FileObjectId($output.SafeFileHandle)
+                        Write-Transaction $transaction
+                        $source.CopyTo($output); $output.Flush($true)
+                    } finally { $output.Dispose() }
+                } finally { $source.Dispose() }
+                Assert-Condition ((Get-FileIdentity $temporary).sha256 -ceq $entry.target_sha256) 'An update temporary file failed verification.'
+                if ($entry.existed) { [L2Update.PathLocks]::ReplaceFile($temporary, $destination) }
+                else { [IO.File]::Move($temporary, $destination) }
+            }
+        }
+        foreach ($file in $fileManifest.files) { Assert-FileMatches (Get-ProgramFile $Root $file.path) $file }
+        $verified = Test-InstalledProgram @($job.version)
+        Save-InstalledReceipts $transaction
+        $transaction.state = 'committed'
+        Write-Transaction $transaction
+        $script:restartPermitted = $true
+        return $verified
+    } catch {
+        $failure = $_.Exception.Message
+        try {
+            Restore-IncrementalTransaction $transaction $Root
+            $script:restartPermitted = $true
+        } catch {
+            $script:preserveStage = $true
+            $transaction.state = 'rollback_failed'
+            try { Write-Transaction $transaction } catch { }
+            throw ('The file update failed and rollback could not finish. Recovery files were kept at ' + $stage + '. Use the website installer to repair the translator. ' + $_.Exception.Message)
+        }
+        throw ('The file update was rolled back. ' + $failure)
+    }
+}
+
+function New-FullInstallerRequest([string]$Url) {
+    Assert-Condition ($Url -ceq ('https://40.160.140.227/downloads/' + $job.installer_file)) 'Unexpected installer fallback URL.'
+    $request = [Net.HttpWebRequest]::Create($Url)
+    $request.AllowAutoRedirect = $false
+    $request.Proxy = $null
+    $request.Timeout = 20000
+    $request.ReadWriteTimeout = 20000
+    $request.UserAgent = 'Lineage2ChatTranslator/' + $job.from_version
+    return $request
+}
+
+function Download-FullInstaller {
+    Assert-SignedRelease
+    $url = 'https://40.160.140.227/downloads/' + $job.installer_file
+    $request = New-FullInstallerRequest $url
+    $response = $null; $source = $null; $output = $null
+    $part = Assert-PlainPath ([IO.Path]::Combine($stage, 'installer.part'))
+    $target = Assert-PlainPath ([IO.Path]::Combine($stage, 'installer.exe'))
+    Assert-Condition (-not [IO.File]::Exists($part) -and -not [IO.File]::Exists($target)) 'The installer fallback was already attempted.'
+    try {
+        $response = $request.GetResponse()
+        Assert-Condition ($response.StatusCode -eq [Net.HttpStatusCode]::OK -and $response.ResponseUri.AbsoluteUri -ceq $url -and
+            ($response.ContentLength -eq -1 -or $response.ContentLength -eq $job.installer_bytes)) 'The installer server returned an unexpected response.'
+        $source = $response.GetResponseStream()
+        $output = [IO.File]::Open($part, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        $buffer = [byte[]]::new(262144); [long]$received = 0
+        $deadline = [DateTime]::UtcNow.AddSeconds(300)
+        while ($true) {
+            Assert-Condition ([DateTime]::UtcNow -lt $deadline) 'The installer fallback download timed out.'
+            $count = $source.Read($buffer, 0, $buffer.Length)
+            if ($count -eq 0) { break }
+            $received += $count
+            Assert-Condition ($received -le $job.installer_bytes) 'The installer fallback exceeded its signed size.'
+            $output.Write($buffer, 0, $count)
+        }
+        $output.Flush($true); $output.Dispose(); $output = $null
+        Assert-Condition ($received -eq $job.installer_bytes) 'The installer fallback download was incomplete.'
+        $lock = Open-VerifiedInstaller $part
+        try {
+            $lock.Position = 0
+            Assert-Condition ($lock.ReadByte() -eq 77 -and $lock.ReadByte() -eq 90) 'The fallback is not a Windows installer.'
+        } finally { $lock.Dispose() }
+        [IO.File]::Move($part, $target)
+    } finally {
+        if ($output) { $output.Dispose() }
+        if ($source) { $source.Dispose() }
+        if ($response) { $response.Dispose() }
+        $request.Abort()
+    }
+}
+
 function Remove-OwnedStage {
     # Delete only this job's allowlisted direct files, never a recursive tree.
-    if (-not $safeStage -or -not [IO.Directory]::Exists($stage)) { return }
+    if ($preserveStage -or -not $safeStage -or -not [IO.Directory]::Exists($stage)) { return }
+    Assert-Condition (-not [IO.File]::Exists((Assert-PlainPath ([IO.Path]::Combine($stage, 'transaction.pending'))))) 'An unfinished journal has recovery files which were kept.'
+    $journal = [IO.Path]::Combine($stage, 'transaction.json')
+    if ([IO.File]::Exists($journal)) {
+        $transaction = Read-Record $journal $maxTransactionBytes
+        Assert-Condition (@('committed', 'rolled_back') -ccontains $transaction.state) 'An unfinished update has recovery files which were kept.'
+    }
     Assert-PlainPath $stage | Out-Null
     $owner = Read-Record ([IO.Path]::Combine($stage, 'owner.json')) $maxSmallRecordBytes
     Assert-Condition (($owner.app_id -eq $appIdentity) -and ($owner.nonce -eq $job.nonce)) 'Temporary update ownership changed; files were kept.'
     $files = @(Get-ChildItem -LiteralPath $stage -Force)
     foreach ($file in $files) {
-        Assert-Condition (($allowedFiles -contains $file.Name) -and -not $file.PSIsContainer) 'Unrecognized temporary update files were kept.'
+        Assert-Condition ((($allowedFiles -contains $file.Name) -or $file.Name -cmatch '^[a-f0-9]{64}\.payload$' -or
+            $file.Name -cmatch '^rollback-[0-9]{5}\.bak$') -and -not $file.PSIsContainer) 'Unrecognized temporary update files were kept.'
         Assert-PlainPath $file.FullName | Out-Null
     }
     foreach ($file in $files) {
@@ -421,6 +888,11 @@ try {
     $safeStage = $true
     Assert-InstalledVersion $executable
     Assert-SignedRelease
+    $incrementalMode = @($job.PSObject.Properties.Name) -ccontains 'mode' -and $job.mode -ceq 'incremental'
+    if (@($job.PSObject.Properties.Name) -ccontains 'mode') {
+        Assert-Condition (@('incremental', 'installer') -ccontains $job.mode) 'Unknown update mode.'
+    }
+    if ($incrementalMode) { Assert-FileManifest }
 
     $created = $false
     $helperMutex = [Threading.Mutex]::new($false, 'Local\Lineage2ChatTranslatorUpdate', [ref]$created)
@@ -451,6 +923,19 @@ try {
     Assert-Installation $executable | Out-Null
     Assert-InstalledVersion $executable
     Assert-SignedRelease
+    $incrementalFinished = $false
+    if ($incrementalMode) {
+        try {
+            $restartExecutable = Invoke-IncrementalUpdate ([IO.Path]::GetDirectoryName($executable))
+            $incrementalFinished = $true
+        } catch {
+            Assert-Condition (-not $preserveStage -and $restartPermitted) $_.Exception.Message
+            # Any changed files have already been restored before fallback.
+            # The complete installer has the same pinned signature/checksum gates.
+            Download-FullInstaller
+        }
+    }
+    if (-not $incrementalFinished) {
     $installer = Assert-PlainPath ([IO.Path]::Combine($stage, 'installer.exe'))
     $arguments = @('/SP-', '/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NORESTARTAPPLICATIONS',
                    '/NOCLOSEAPPLICATIONS', ('/RESTARTEXITCODE=' + $restartRequiredExitCode), '/AUTOUPDATE=1',
@@ -465,6 +950,7 @@ try {
         $restartPermitted = $false
         # Inno's trusted permission helper needs a delete-capable handle. Keep
         # parents pinned and bind the root's object ID across this handoff.
+        $pathLocks.ReleaseDescendantsForInstaller([IO.Path]::GetDirectoryName($executable))
         $pathLocks.ReleaseForInstaller([IO.Path]::GetDirectoryName($executable))
         $installerProcess = Start-VerifiedProcess $installer $arguments $false
         # Inno shows its normal progress window; it never closes unrelated apps.
@@ -484,8 +970,12 @@ try {
         $installerLock.Dispose()
     }
     $restartExecutable = Test-InstalledProgram @($job.version)
+    }
+    # The uninstaller registration remains the same; Settings and Windows now
+    # report the successfully verified file update's application version.
+    Set-ItemProperty -LiteralPath $registryPath -Name DisplayVersion -Value $job.version
     $status = 'success'
-    $message = 'Updated to version ' + $job.version + '. Temporary installer files were removed.'
+    $message = 'Updated to version ' + $job.version + '. Temporary update files were removed.'
 } catch {
     $message = $_.Exception.Message
     if ($committed -and $parentExited -and $restartPermitted) {

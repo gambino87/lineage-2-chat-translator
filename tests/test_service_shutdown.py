@@ -70,9 +70,11 @@ class ServiceShutdownTests(unittest.TestCase):
     def test_unmanaged_connection_closes_without_service_calls(self):
         app = closing_app(None)
         app.close()
+        app.root.destroy.assert_not_called()
+        app._show_closing_state.assert_called_once()
+        app._finish_shutdown()
         app.root.destroy.assert_called_once()
         app.root.withdraw.assert_not_called()
-        app._show_closing_state.assert_not_called()
 
     def test_closing_view_removes_controls_and_keeps_progress_visible_until_done(self):
         app = closing_app(Mock())
@@ -85,6 +87,7 @@ class ServiceShutdownTests(unittest.TestCase):
             app._shutdown_thread.join(2)
             app._content.destroy.assert_called_once()
             app.root.deiconify.assert_called_once()
+            app.root.lift.assert_called_once()
             app.root.focus_set.assert_called_once()
             app.root.withdraw.assert_not_called()
             app.root.destroy.assert_not_called()

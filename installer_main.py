@@ -28,6 +28,7 @@ from translator_core import OllamaClient, parse_chat_line
 from uninstall_data import (register_data_root, uninstall_data, storage_requires_confirmation,
                             storage_confirmation_identity)
 from app_updater import cleanup_update_cache, consume_update_result, update_in_progress
+from app_updater import ensure_no_interrupted_update, finish_installer_repair, prepare_incremental_uninstall
 from app_updater import _powershell as _system_powershell
 from installation_cleanup import CLEANUP_PLAN_NAME, read_cleanup_plan
 
@@ -1073,12 +1074,21 @@ def main(argv=None) -> int:
     modes.add_argument("--install-model", action="store_true", help="Complete model setup, then return to the installer")
     modes.add_argument("--uninstall-cleanup", action="store_true", help="Remove this installation's managed data before program uninstall")
     modes.add_argument("--cleanup-program-files", action="store_true", help=argparse.SUPPRESS)
+    modes.add_argument("--finish-update-repair", action="store_true", help=argparse.SUPPRESS)
     modes.add_argument("--self-test", action="store_true")
     modes.add_argument("--diagnose", action="store_true")
     parser.add_argument("--ui-language", choices=tuple(LANGUAGE_NAMES), help="Interface language selected by the installer")
     parser.add_argument("--output", type=Path, help="Write headless JSON to this file")
     parser.add_argument("--cleanup-result", type=Path, help="Write a plain-text result for the Windows installer or uninstaller")
     args = parser.parse_args(argv)
+    if args.finish_update_repair:
+        try:
+            report, code = finish_installer_repair(SETTINGS_PATH.parent), 0
+        except Exception as exc:
+            report, code = {"ok": False, "version": VERSION, "error": str(exc)}, 1
+        if args.output:
+            write_json(args.output, report)
+        return code
     # Maintenance stays headless; only an explicit installer language changes prefs.
     if args.ui_language:
         set_language(args.ui_language)
@@ -1106,6 +1116,7 @@ def main(argv=None) -> int:
                 raise ValueError(tr('Close the translator and its setup window, then retry uninstalling.'))
             if update_in_progress():
                 raise ValueError(tr('An update is in progress. Wait for it to finish before uninstalling.'))
+            prepare_incremental_uninstall(args.cleanup_result, SETTINGS_PATH.parent)
             report = uninstall_data(SETTINGS_PATH.parent)
             code, result = 0, "Local model, runtime, settings and log cleanup completed."
             retained = (report.get("unconfirmed_records_preserved", [])
@@ -1162,6 +1173,7 @@ def main(argv=None) -> int:
             return 2
         if args.ui_language:
             save_ui_language(args.ui_language)
+        ensure_no_interrupted_update(SETTINGS_PATH.parent)
         cleanup_update_cache(SETTINGS_PATH.parent, strict=False)
         root = tk.Tk()
         apply_window_icon(root)

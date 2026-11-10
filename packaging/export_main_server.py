@@ -131,6 +131,14 @@ def verify_archive(archive: Path, manifest: dict) -> None:
         require(public.get("version") == manifest["version"]
                 and public.get("installer") == manifest["installer"],
                 "Signed archive metadata differs from the export manifest.")
+        def read_update(name, limit):
+            member = bundle.getinfo(name)
+            require(member.file_size <= limit, "Oversized archived update artifact.")
+            with bundle.open(member) as stream:
+                data = stream.read(limit + 1)
+            require(len(data) <= limit, "Archived update artifact exceeded its bound.")
+            return data
+        release_site.update_tools().verify_public(read_update, public, names=set(names))
     installer = manifest["installer"]
     require({"path": "downloads/" + installer["file"], "bytes": installer["bytes"],
              "sha256": installer["sha256"]} in records, "Installer metadata mismatch.")

@@ -44,6 +44,7 @@ class InstallerLocalizationTests(unittest.TestCase):
              patch.object(setup, "uninstall_in_progress", return_value=False), \
              patch.object(setup, "update_in_progress", return_value=False), \
              patch.object(setup, "cleanup_update_cache"), \
+             patch.object(setup, "ensure_no_interrupted_update"), \
              patch.object(setup, "consume_update_result", return_value=None), \
              patch.object(setup, "apply_window_icon"), \
              patch.object(setup.tk, "Tk"), patch.object(setup, "SetupWindow") as window:

@@ -1,7 +1,7 @@
-"""Tk-owned minimize/restore state; native callbacks carry data through a queue.
+"""Tk-owned hide/restore state; native callbacks carry data through a queue.
 
-Only an iconic launcher with a successfully registered notification icon is
-withdrawn. A delayed callback can never hide a restored or closing window.
+Only a requested hide with a successfully registered notification icon can
+withdraw the launcher. A delayed callback cannot hide a restored/closing window.
 Translation, overlay and backend ownership are independent of this controller.
 """
 from __future__ import annotations
@@ -19,9 +19,10 @@ TRAY_SHUTDOWN_SECONDS = 5.0
 
 
 class TrayControls:
-    def __init__(self, root, *, enabled, on_exit, on_error, factory=None):
+    def __init__(self, root, *, enabled, on_exit, on_error, close_enabled=None, factory=None):
         self.root = root
         self.enabled = enabled
+        self.close_enabled = close_enabled or (lambda: False)
         self.on_exit = on_exit
         self.on_error = on_error
         self._factory = factory or NativeTray
@@ -30,6 +31,8 @@ class TrayControls:
         self._retired = []
         self._generation = 0
         self._hidden = False
+        self._hide_reason = None
+        self._native_ready = False
         self._closed = False
         self._poll_timer = None
         self._minimize_timer = None
@@ -69,6 +72,39 @@ class TrayControls:
         if (self._closed or not self.enabled() or self.root.state() != "iconic"
                 or self._native is not None):
             return
+        self._hide_reason = "minimize"
+        self._start()
+
+    def hide_on_close(self):
+        """Keep the session alive; hide only after the icon is usable."""
+        if self._closed or not self.close_enabled():
+            return
+        state = self.root.state()
+        if state in ("normal", "zoomed"):
+            self._last_state = state
+        self._cancel_timer("_minimize_timer")
+        self._hide_reason = "close"
+        if self._native is None:
+            self._start()
+        elif self._native_ready:
+            self._hide_if_requested()
+
+    def _hide_enabled(self):
+        if self._hide_reason == "close":
+            return self.close_enabled()
+        return self._hide_reason == "minimize" and self.enabled()
+
+    def _hide_if_requested(self):
+        state = self.root.state()
+        if (self._hide_enabled() and not self._hidden
+                and (state == "iconic" or (self._hide_reason == "close"
+                                          and state in ("normal", "zoomed")))):
+            self._hidden = True
+            self.root.withdraw()
+        elif not self._hidden:
+            self._remove()
+
+    def _start(self):
         self._generation += 1
         generation = self._generation
         events = self._events
@@ -96,11 +132,8 @@ class TrayControls:
             if generation != self._generation or self._native is None:
                 continue
             if kind == "ready":
-                if self.enabled() and self.root.state() == "iconic":
-                    self._hidden = True
-                    self.root.withdraw()
-                elif not self._hidden:
-                    self._remove()
+                self._native_ready = True
+                self._hide_if_requested()
             elif kind == "restore":
                 self.restore()
             elif kind == "exit":
@@ -126,6 +159,8 @@ class TrayControls:
         self._generation += 1
         native, self._native = self._native, None
         self._hidden = False
+        self._hide_reason = None
+        self._native_ready = False
         self._cancel_timer("_poll_timer")
         # A stopped thread may still report failed resource cleanup. Keep that
         # failure for shutdown/update checks; a zero timeout never blocks Tk.
@@ -150,17 +185,18 @@ class TrayControls:
             self.root.lift()
 
     def preference_changed(self):
-        if not self._closed and not self.enabled():
-            if self._native is not None:
+        if not self._closed:
+            if self._native is not None and not self._hide_enabled():
                 self.restore()
-            self._cancel_timer("_minimize_timer")
+            if not self.enabled():
+                self._cancel_timer("_minimize_timer")
 
     def _fallback(self, message):
         # A native failure must never strand the launcher without an icon.
         try:
             self.restore()
         finally:
-            self.on_error(tr("Minimize to tray unavailable: {error}", error=tr(message)))
+            self.on_error(tr("System tray unavailable: {error}", error=tr(message)))
 
     def close(self):
         """Stop accepting events; native cleanup completes on its owner thread."""

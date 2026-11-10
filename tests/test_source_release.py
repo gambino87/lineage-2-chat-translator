@@ -63,6 +63,20 @@ class SnapshotFixture:
 
 class SnapshotTests(SnapshotFixture, unittest.TestCase):
 
+    def test_incremental_manifest_identity_is_published_and_pinned_by_new_tags(self):
+        release = self.release()
+        descriptor = {"schema_version": 1, "manifest": {"file": "updates/1.2.3/files.json", "bytes": 123,
+                                                       "sha256": "a" * 64}}
+        release["incremental"] = descriptor
+        self.put("release/1.2.3/release-manifest.json", json.dumps(release))
+        _, document = source.snapshot(self.root)
+        self.assertEqual(document["published_incremental_update"], descriptor)
+        self.assertEqual(source.release_identity(document)["incremental"], descriptor)
+        older = dict(document)
+        older.pop("published_incremental_update")
+        self.assertNotIn("incremental", source.release_identity(older))
+        self.assertNotEqual(source.release_identity(older), source.release_identity(document))
+
     def test_snapshot_excludes_private_and_generated_files(self):
         for name in ("settings.json", "review_tools/old.py", "private.local.json", "AGENTS.md",
                      "release/old.exe", "sites/nested/.git/config"):

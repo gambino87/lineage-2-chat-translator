@@ -1,6 +1,7 @@
 """Publication gate tests use synthetic bytes only; no network, apps or deletion."""
 from contextlib import nullcontext
 import hashlib
+import gzip
 import importlib.util
 import json
 from pathlib import Path
@@ -37,6 +38,35 @@ class HostVerificationTests(unittest.TestCase):
         self.assertTrue(self.verify()["installer_verified"])
         self.assertEqual(self.fetch.call_count, 5)
         self.signature_check.assert_called_once_with(self.metadata, self.signature)
+
+    def add_incremental(self):
+        raw = b"MZ synthetic application"
+        compressed = gzip.compress(raw, mtime=0)
+        row = {"path": "Lineage2ChatTranslator.exe", "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest(),
+               "blob": {"bytes": len(compressed), "sha256": hashlib.sha256(compressed).hexdigest()}}
+        document = {"schema_version": 1, "product": "Lineage 2 Chat Translator", "platform": "windows-x64", "version": "1.2.3",
+                    "files": [row], "cleanup": {"schema_version": 1, "product": "Lineage 2 Chat Translator", "version": "1.2.3",
+                        "current_paths": [row["path"]], "obsolete_files": []}}
+        data = json.dumps(document).encode()
+        descriptor = {"schema_version": 1, "manifest": {"file": "updates/1.2.3/files.json", "bytes": len(data),
+                                                        "sha256": hashlib.sha256(data).hexdigest()}}
+        public = {"version": "1.2.3", "installer": self.installer, "incremental": descriptor}
+        self.metadata = json.dumps(public).encode()
+        self.responses["/downloads/release.json"] = self.metadata
+        self.responses["/updates/1.2.3/files.json"] = data
+        blob_path = "/updates/blobs/" + row["blob"]["sha256"] + ".gz"
+        self.responses[blob_path] = compressed
+        return blob_path
+
+    def test_every_live_incremental_object_is_verified_before_completion(self):
+        blob_path = self.add_incremental()
+        result = self.verify()
+        self.assertTrue(result["incremental_verified"])
+        self.assertEqual(result["incremental_files"], 1)
+        self.assertEqual(self.fetch.call_count, 7)
+        self.responses[blob_path] = b"changed compressed object"
+        with self.assertRaisesRegex(ValueError, "checksum/size"):
+            self.verify()
 
     def test_stale_metadata_stops_before_installer_download(self):
         self.responses["/downloads/release.json"] = b'{"version":"1.2.2"}'

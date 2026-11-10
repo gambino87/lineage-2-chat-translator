@@ -1,5 +1,16 @@
 [
   {
+    "version": "1.8.7",
+    "changes": [
+      "Future updates download only changed or missing application files, with signed verification and a full installer fallback when needed.",
+      "File updates keep recovery backups, verify the installed files and roll back failed updates. Models and settings stay preserved.",
+      "Overlay Settings now opens as an attached animated drawer, matching Channels. Switching between them finishes the current drawer's closing animation before opening the other.",
+      "The Settings drawer follows the overlay's position and width, with wrapped controls and scrolling to keep settings reachable on smaller screens.",
+      "Added an optional Close to system tray setting. Closing the window keeps translation and the overlay running; right-click the tray icon and choose Exit to quit.",
+      "Exiting from the tray brings the main window back with closing progress until shutdown finishes. Minimize to system tray remains a separate setting."
+    ]
+  },
+  {
     "version": "1.8.6",
     "changes": [
       "Extended Greeklish 'good evening to all' greetings to supported group messages, including 'ektos apo ton' ('except') endings with one- or two-word person labels."

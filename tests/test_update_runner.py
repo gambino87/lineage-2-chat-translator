@@ -38,7 +38,8 @@ class UpdateRunnerTests(unittest.TestCase):
         # Exercise the actual installer-result branch with inert process doubles.
         # No installer, installed EXE, registry, service or GUI is touched.
         branch = source.split('    $installerProcess = $null\n', 1)[1].split(
-            "    $status = 'success'", 1)[0]
+            '    $restartExecutable = Test-InstalledProgram @($job.version)\n', 1)[0]
+        branch += '    $restartExecutable = Test-InstalledProgram @($job.version)\n'
         harness = r'''
 function Start-VerifiedProcess {
     $fake=[pscustomobject]@{ExitCode=$script:fixtureExit}
@@ -49,6 +50,7 @@ function Start-VerifiedProcess {
 function Test-InstalledProgram { $script:probes++; return 'fixture-never-launched.exe' }
 function Assert-PrivateUpdateDirectory {}
 $pathLocks=[pscustomobject]@{}
+$pathLocks | Add-Member ScriptMethod ReleaseDescendantsForInstaller {}
 $pathLocks | Add-Member ScriptMethod ReleaseForInstaller {}
 $pathLocks | Add-Member ScriptMethod HoldDirectoryPath {}
 $executable='C:\fixture\launcher.exe'
