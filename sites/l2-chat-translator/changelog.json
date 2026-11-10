@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.8.4",
+    "changes": [
+      "Preserved repeated ASCII-art decorations such as ',i, ,i, ,i,' in translated messages instead of dropping or rewriting them.",
+      "Decorations framing a message stay on their original side while the complete text between them is translated."
+    ]
+  },
+  {
     "version": "1.8.3",
     "changes": [
       "Linked items now appear in light grey and party recruitment links in light blue in the launcher and overlay.",

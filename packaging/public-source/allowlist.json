@@ -82,6 +82,7 @@
   "sites/l2-chat-translator/index.template.html",
   "tests/test_app_update_integration.py",
   "tests/test_app_updater.py",
+  "tests/test_ascii_art.py",
   "tests/test_build_environment.py",
   "tests/test_chat_links.py",
   "tests/test_chat_overlay.py",

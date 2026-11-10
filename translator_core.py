@@ -84,6 +84,14 @@ _LEADING_ACRONYMS = re.compile(
 _URL = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
 # Explicit currency shorthand only; ordinary levels and item-name digits stay contextual.
 _PRICE = re.compile(r"(?<!\w)(?<!\d[.,])[+-]?\d+(?:[.,]\d+)*(?:[kк]{1,2})(?!\w)", re.IGNORECASE)
+# Repeated whitespace-delimited gestures/decorations, never arbitrary words in
+# brackets. Punctuation ranges are ASCII-only; isolated letters can form art.
+_ASCII_PUNCTUATION = r"[!-/:-@\[-`{-~]"
+_ASCII_ART_RUN = re.compile(
+    r"(?<!\S)(?P<art_atom>(?:" + _ASCII_PUNCTUATION + r"{1,4}[A-Za-z]"
+    + _ASCII_PUNCTUATION + r"{1,4}|" + _ASCII_PUNCTUATION + r"{3,10}))"
+    r"(?:[ \t]+(?P=art_atom))+(?!\S)"
+)
 _TRADE_TAG = re.compile(r"(?<![A-Za-z0-9_])(?:WTS|WTB|WTT)(?![A-Za-z0-9_])", re.IGNORECASE)
 _RECRUITMENT_TAG = re.compile(r"(?<![A-Za-z0-9_])(?:LFG|LFP|LFM|LF)(?![A-Za-z0-9_])", re.IGNORECASE)
 _TRADE_CONTACT = re.compile(r"\bPM(?:\s*ME)?\b", re.IGNORECASE)
@@ -121,6 +129,8 @@ def _language_text(text: str, item_links: tuple[str, ...], party_details: tuple[
         raise ValueError("The message is too long to identify its language (over 4,000 characters).")
     for match in reversed(list(_url_matches(text))):
         text = text[:match.start()] + " " + text[match.end():]
+    for start, end in reversed(_ascii_art_spans(text)):
+        text = text[:start] + " " * (end - start) + text[end:]
     text = re.sub(r"\bpm\s*me\b", " ", text, flags=re.IGNORECASE)
     text = _ACRONYM.sub(" ", text)
     return re.sub(r"\s+", " ", text).strip()
@@ -243,21 +253,13 @@ def _protect_item_links(text: str, labels: tuple[str, ...], *, protect_prices: b
     labels = tuple(dict.fromkeys(label for label in labels if label and label in text))
     has_urls = any(_url_matches(text))
     nickname_spans = set(_trade_nickname_spans(text, labels, trade_context=trade_context))
-    if not labels and not nickname_spans and not _ACRONYM.search(text) and not has_urls and not (protect_prices and _PRICE.search(text)):
+    art_spans = _ascii_art_spans(text, labels)
+    if not labels and not nickname_spans and not art_spans and not _ACRONYM.search(text) and not has_urls and not (protect_prices and _PRICE.search(text)):
         return text, {}
     prefix = "L2ITEM"
     while prefix.casefold() in text.casefold():
         prefix = "_" + prefix
     replacements = {}
-
-    def protect(match):
-        if match.groupdict().get("nickname") is not None and match.span() not in nickname_spans:
-            return match.group()
-        if match.groupdict().get("url") is not None and not _valid_url_context(text, match.start()):
-            return match.group()
-        token = f"[[{prefix}{len(replacements)}]]"
-        replacements[token] = match.group()
-        return token
 
     # Match whole item labels first so an acronym inside a title is not split.
     patterns = [re.escape(label) for label in sorted(labels, key=len, reverse=True)]
@@ -270,7 +272,21 @@ def _protect_item_links(text: str, labels: tuple[str, ...], *, protect_prices: b
         patterns.append("(?i:" + _PRICE.pattern + ")")
     patterns.append("(?i:" + _ACRONYM.pattern + ")")
     pattern = re.compile("|".join(patterns))
-    return pattern.sub(protect, text), replacements
+    spans = [match.span() for match in pattern.finditer(text)
+             if not (match.groupdict().get("nickname") is not None and match.span() not in nickname_spans)
+             and not (match.groupdict().get("url") is not None and not _valid_url_context(text, match.start()))]
+    # Existing immutable spans take precedence even when an art-like sequence
+    # crosses the boundary of a linked title or address.
+    spans.extend((start, end) for start, end in art_spans
+                 if not any(start < right and left < end for left, right in spans))
+    parts, cursor = [], 0
+    for start, end in sorted(spans):
+        token = f"[[{prefix}{len(replacements)}]]"
+        replacements[token] = text[start:end]
+        parts.extend((text[cursor:start], token))
+        cursor = end
+    parts.append(text[cursor:])
+    return "".join(parts), replacements
 
 
 def parse_chat_line(line: str) -> ChatRecord | None:
@@ -535,6 +551,20 @@ def _mask_labels(text: str, labels: tuple[str, ...], *, fill: str = " ") -> str:
         return text
     pattern = re.compile("|".join(re.escape(label) for label in labels))
     return pattern.sub(lambda match: fill * len(match.group()), text)
+
+
+def _ascii_art_spans(text: str, labels: tuple[str, ...] = ()) -> list[tuple[int, int]]:
+    """Find conservative repeated decorations outside opaque titles/URLs."""
+    boundaries = tuple(label for label in labels
+                       if len(label) == 1 and 0xe000 <= ord(label) <= 0xf8ff)
+    view = _mask_labels(text, tuple(label for label in labels if label not in boundaries), fill="\0")
+    # Generated display boundaries are invisible; they must not hide art at a
+    # party title's edge. NUL barriers keep opaque labels from supplying atoms.
+    for label in boundaries:
+        view = view.replace(label, " ")
+    for match in reversed(list(_url_matches(text))):
+        view = view[:match.start()] + "\0" * len(match.group()) + view[match.end():]
+    return [match.span() for match in _ASCII_ART_RUN.finditer(view)]
 
 
 def _trade_nickname_spans(text: str, labels: tuple[str, ...] = (), *,
@@ -864,6 +894,25 @@ class OllamaClient:
             raise ValueError("The message is too long to translate (over 4,000 characters).")
         if not text.strip():
             return text
+        # Decorations framing a message do not need a model decision at all.
+        # Translate the complete middle normally and retain the source edges,
+        # including their spacing, so a model cannot move both runs to one end.
+        art_spans = _ascii_art_spans(text, fixed_labels)
+        start, end = 0, len(text)
+        if art_spans and not text[:art_spans[0][0]].strip():
+            start = art_spans[0][1]
+            while start < len(text) and text[start].isspace():
+                start += 1
+        if art_spans and not text[art_spans[-1][1]:].strip():
+            end = art_spans[-1][0]
+            while end > start and text[end - 1].isspace():
+                end -= 1
+        if start or end < len(text):
+            if start >= end:
+                return text
+            middle = self.translate(text[start:end], item_links=item_links, party_details=party_details,
+                                    _trade_context=_trade_context)
+            return text[:start] + middle + text[end:]
         # Keep leading trade/group tags entirely outside the model. In
         # particular, WTB must never become WTS or disappear in translation.
         leading = _LEADING_ACRONYMS.match(text)
@@ -915,7 +964,7 @@ class OllamaClient:
         )
         if protected_links:
             system += (
-                " Tokens in double square brackets are fixed text (item names, URLs, or universal abbreviations). "
+                " Tokens in double square brackets are fixed text (item names, URLs, universal abbreviations, or repeated ASCII art). "
                 "Copy each token exactly once into the translated sentence in its appropriate position. "
                 "Never translate, change, expand, or omit these tokens."
             )
@@ -976,13 +1025,15 @@ class OllamaClient:
             url_labels = set(expected_urls)
             url_names = [name for name, label in names.items() if label in url_labels]
             reordered_urls = [name for name in found if name in url_names] != url_names
-            if len(found) != len(names) or set(found) != set(names) or reordered_party_details or reordered_urls:
+            art_names = [name for name, label in names.items() if _ASCII_ART_RUN.fullmatch(label)]
+            reordered_art = [name for name in found if name in art_names] != art_names
+            if len(found) != len(names) or set(found) != set(names) or reordered_party_details or reordered_urls or reordered_art:
                 if self.target_language.casefold() == "english":
                     return recover_fixed_text()
                 # Fragment recovery was validated for incoming English chat.
                 # Other targets can lose grammar/meaning across boundaries;
                 # do not copy a degraded outgoing reply as a successful result.
-                raise TranslationInvariantError("The model changed a linked item, URL, game abbreviation, or party detail. Try translating again.")
+                raise TranslationInvariantError("The model changed a linked item, URL, game abbreviation, party detail, or ASCII art. Try translating again.")
             # One substitution pass prevents an item name resembling a token
             # from being mistaken for another placeholder during restoration.
             def restore(match):
