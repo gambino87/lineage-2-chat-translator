@@ -75,7 +75,7 @@ included in the installer, while GPU libraries and model weights download at set
 Generated files go into `.build/`, `release/` and the site's `dist/`, all ignored
 by Git. See [the build documentation](packaging/README.md) for details.
 
-Official release completion verifies both public hosts and GitHub before
+Official release completion verifies the public OVH server and GitHub before
 automatically pruning approved old build caches and redundant upload packages.
 Models, source, canonical installers/manifests, current build and required release
 tools are preserved. See [publication and cleanup](packaging/HOSTING.md).
@@ -85,8 +85,9 @@ its public trust anchors and hosting configuration. See [update signing](packagi
 Tests skip checks that require an unavailable platform facility; a successful
 test run does not establish coverage of every Windows or model configuration.
 
-The included website project ID identifies the public mirror and is not a
-credential. Local page preparation does not publish anything. Deploying a
+The included legacy website project ID is historical configuration, not a
+credential or a release dependency. Releases use the OVH server only.
+Local page preparation does not publish anything. Deploying a
 separate instance requires your own hosting and credentials; read the deployment
 scripts before using them. Do not deploy a modified build under an existing
 official version or upload it to the official update feed.

@@ -209,9 +209,6 @@ def prepare_site(root: Path, site: Path, sources: tuple, assets: tuple, *, check
     version = current_version(root)
     public, installer = verified_release(root, version, sources, assets)
     changelog = render_changelog(site, version)
-    hosting = read_json(site / ".openai/hosting.json")
-    require(bool(hosting.get("project_id")) and hosting.get("static", {}).get("directory") == "dist",
-            "Existing Site identity and static dist configuration are required.")
     dist = site / "dist"
     require(not dist.is_symlink() and not dist.is_junction() and dist.resolve().is_relative_to(site), "Invalid public output path.")
     history = {}
@@ -315,7 +312,7 @@ def prepare_site(root: Path, site: Path, sources: tuple, assets: tuple, *, check
                 require(backup.resolve().is_relative_to(scratch.resolve())
                         and not backup.is_symlink() and not backup.is_junction(), "Unsafe backup cleanup path.")
                 shutil.rmtree(backup)
-    return {"version": version, "installer": public["installer"], "project_id": hosting["project_id"],
+    return {"version": version, "installer": public["installer"],
             "retained_installers": len(history), "site": str(site), "checked_only": check,
             "published": False}
 

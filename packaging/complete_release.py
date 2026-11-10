@@ -1,6 +1,6 @@
 """Verify the published release, then automatically prune local build leftovers.
 
-This is the final release-workflow step, after both website deployments. It does
+This is the final release-workflow step, after the server deployment. It does
 not publish, execute an installer, start services, or access model directories.
 Any verification failure occurs before cleanup and preserves retry artifacts.
 """
@@ -29,7 +29,6 @@ from release_cleanup import cleanup_release, plan_cleanup
 from release_lock import release_lock
 from payload_layout import retirement_plan
 
-MIRROR_URL = "https://lineage-2-chat-translator.vargas87706341.chatgpt.site"
 REQUEST_SECONDS = 90
 CONNECT_SECONDS = 15
 MAX_PAGE_BYTES = 1024 * 1024
@@ -137,7 +136,7 @@ def verify_retained_inputs(root: Path, version: str) -> dict:
 
 
 def complete_release(root: Path = ROOT, *, main_url: str = DEFAULT_BASE_URL,
-                     mirror_url: str = MIRROR_URL, dry_run: bool = False) -> dict:
+                     dry_run: bool = False) -> dict:
     root = Path(root).absolute()
     with release_lock(root):
         site = root / "sites/l2-chat-translator"
@@ -152,8 +151,7 @@ def complete_release(root: Path = ROOT, *, main_url: str = DEFAULT_BASE_URL,
         # an exporter/build success are not proof that a release is live.
         source = verify_public_source(root)
         hosts = [verify_host(main_url, rewrite_homepage(local_page, main_url), metadata, signature,
-                             prepared["installer"], mirror=False),
-                 verify_host(mirror_url, local_page, metadata, signature, prepared["installer"], mirror=True)]
+                             prepared["installer"], mirror=False)]
         require(release_site.prepare_site(root, site, SOURCES, ASSETS, check=True) == prepared,
                 "Local release changed during verification; cleanup has not run.")
         source_release.verify_source_current(root, source)
@@ -176,7 +174,7 @@ def complete_release(root: Path = ROOT, *, main_url: str = DEFAULT_BASE_URL,
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dry-run", action="store_true", help="Verify both live hosts and source, then list cleanup without deleting.")
+    parser.add_argument("--dry-run", action="store_true", help="Verify the live server and source, then list cleanup without deleting.")
     args = parser.parse_args()
     try:
         print(json.dumps(complete_release(dry_run=args.dry_run), indent=2))

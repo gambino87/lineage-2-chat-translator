@@ -138,6 +138,13 @@ class ReleaseSiteTests(unittest.TestCase):
         self.assertEqual(public["version"], "1.2.4")
         self.assertEqual(public["installer"], artifact)
 
+    def test_server_preparation_does_not_require_a_sites_hosting_identity(self):
+        (self.site / ".openai/hosting.json").unlink()
+        result = self.prepare()
+        self.assertEqual(result["version"], "1.2.3")
+        self.assertNotIn("project_id", result)
+        self.assertTrue(self.prepare(check=True)["checked_only"])
+
     def test_identical_preparation_is_idempotent_and_check_does_not_write_dist(self):
         self.prepare()
         snapshot = self.public_snapshot()

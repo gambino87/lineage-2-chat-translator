@@ -10,7 +10,7 @@ must not redirect. Publishing the homepage, installer and metadata in one atomic
 release makes that version available to the updater. Never publish metadata
 before its verified installer. From v1.7.12, also publish `/downloads/release.sig`
 with the exact signed `release.json` bytes. Never reformat that JSON on the server
-or mirror. Site preparation signs locally and reuses the verified signature;
+or any download host. Page preparation signs locally and reuses the verified signature;
 check-only preparation does not sign. The server receives no signing key.
 The first signature-aware release also requires the exact `/downloads/release.sig`
 location in `main-server/https.conf`; the default download rule intentionally
@@ -39,7 +39,7 @@ restarted as part of translator website work.
    `PUBLIC-SOURCE.md` for the source-only allowlist and privacy checks.
    The exporter validates source/asset hashes, installer bytes,
    the public allowlist and changelog. It changes only the exported page's
-   canonical/og:url origin to the main server; the Sites source remains intact.
+   canonical/og:url origin to the main server.
 3. Upload the resulting ZIP and `.manifest.json` from `release/`, plus
    `packaging/main-server/deploy_release.py` and
    `packaging/main-server/discord_release.py`, into `/home/ubuntu/l2ct-publish/`.
@@ -55,12 +55,12 @@ restarted as part of translator website work.
    Check the release/version/download link and compare the downloaded bytes with
    both the manifest and `downloads/SHA256SUMS.txt`. Never execute the installer
    as part of download verification. Check that HTTP redirects to HTTPS.
-6. Publish the Sites mirror with the same verified files, then run
+6. After the server deployment, run
    `.build-tools/venv/Scripts/python.exe -B packaging/complete_release.py`.
-   This required completion command verifies both live homepages, exact signed
+   This required completion command verifies the server homepage, exact signed
    metadata and complete installers, and the current GitHub source/version tag.
    Only after every check passes does it automatically prune old local build
-   caches and redundant publication packages. An outdated mirror or any failed
+   caches and redundant publication packages. Any failed
    check leaves files in place for retry. `--dry-run` performs the same live
    checks and lists the proposed cleanup without deleting.
 
@@ -137,13 +137,13 @@ configuration is only for initial HTTP validation. Never deploy it over the live
 HTTPS configuration for a routine release. Validate any web config change with
 `sudo nginx -t` before reloading Nginx. No other service needs restarting.
 
-## Existing mirror and public content
+## Server-only hosting and public content
 
-The original public mirror remains at
-https://lineage-2-chat-translator.vargas87706341.chatgpt.site
-with its existing identity in `sites/l2-chat-translator/.openai/hosting.json`.
-Publishing to the main server does not update that separate mirror. Use the
-connected Sites workflow when updating it; preserve public access and project ID.
+The user's OVH server is the sole release host. Do not publish or require the
+legacy ChatGPT Sites mirror. Keep its existing identity in
+`sites/l2-chat-translator/.openai/hosting.json` as historical configuration;
+it is not used by release preparation, export or completion. The local `sites/`
+folder remains the website source and verified public download tree.
 
 Source template and changelog remain in `sites/l2-chat-translator/`. Public files
 are allowlisted, with no external assets or JavaScript dependencies. The page

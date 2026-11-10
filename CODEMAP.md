@@ -286,7 +286,7 @@ translator's normal execution path.
 | [packaging/export_main_server.py](packaging/export_main_server.py) | Production export requires source publication first. Emit only the verified public static tree and sidecar checksum inventory. |
 | [packaging/main-server/deploy_release.py](packaging/main-server/deploy_release.py) | Server verifies bundle and exact file set, preserves immutable downloads and switches the static release atomically. It does not change game/database/web service configuration. |
 | [packaging/main-server/discord_release.py](packaging/main-server/discord_release.py) | Publisher-side release announcement after public verification, using private server configuration. Not installed bot code or client telemetry. |
-| [packaging/complete_release.py](packaging/complete_release.py), [release_cleanup.py](packaging/release_cleanup.py), [release_lock.py](packaging/release_lock.py) | Fresh verification of both public hosts and source/tag precedes narrowly scoped old build-cache pruning. Shared lock excludes active build/export work. |
+| [packaging/complete_release.py](packaging/complete_release.py), [release_cleanup.py](packaging/release_cleanup.py), [release_lock.py](packaging/release_lock.py) | Fresh verification of the public OVH server and source/tag precedes narrowly scoped old build-cache pruning. Shared lock excludes active build/export work. |
 
 The website is static source under [sites/l2-chat-translator](sites/l2-chat-translator/README.md).
 Hosting identity is public configuration, not a credential. Hosting configuration

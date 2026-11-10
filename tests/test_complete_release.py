@@ -102,7 +102,9 @@ class CompletionGateTests(unittest.TestCase):
 
     def test_cleanup_runs_automatically_only_after_every_gate_and_recheck(self):
         report = complete.complete_release(self.root)
-        self.assertEqual(self.order, ["source", "main", "mirror", "recheck", "cleanup"])
+        self.assertEqual(self.order, ["source", "main", "recheck", "cleanup"])
+        self.host.assert_called_once()
+        self.assertEqual(report["hosts"], [{"url": complete.DEFAULT_BASE_URL}])
         self.cleanup.assert_called_once_with(self.root, "1.2.3", self.latest)
         self.assertFalse(report["models_touched"])
         self.assertTrue((self.root / ".build/release-completion-1.2.3.local.json").is_file())
@@ -121,14 +123,11 @@ class CompletionGateTests(unittest.TestCase):
         self.source.assert_not_called()
         self.cleanup.assert_not_called()
 
-    def test_either_unfinished_host_blocks_all_cleanup(self):
-        for responses in ([ValueError("main not live")], [{"ok": True}, ValueError("mirror still old")]):
-            with self.subTest(responses=responses):
-                self.host.side_effect = responses
-                self.lock.return_value = nullcontext()
-                with self.assertRaises(ValueError):
-                    complete.complete_release(self.root)
-                self.cleanup.assert_not_called()
+    def test_unfinished_server_blocks_all_cleanup(self):
+        self.host.side_effect = ValueError("main not live")
+        with self.assertRaisesRegex(ValueError, "main not live"):
+            complete.complete_release(self.root)
+        self.cleanup.assert_not_called()
 
     def test_local_edits_during_verification_keep_artifacts(self):
         self.prepare.side_effect = [self.prepared, {**self.prepared, "version": "1.2.4"}]
@@ -144,7 +143,7 @@ class CompletionGateTests(unittest.TestCase):
 
     def test_dry_run_never_deletes_and_still_requires_live_gates(self):
         self.assertTrue(complete.complete_release(self.root, dry_run=True)["cleanup"]["dry_run"])
-        self.assertEqual(self.order, ["source", "main", "mirror", "recheck"])
+        self.assertEqual(self.order, ["source", "main", "recheck"])
         self.plan.assert_called_once_with(self.root, "1.2.3", self.latest)
         self.cleanup.assert_not_called()
 

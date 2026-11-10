@@ -191,7 +191,7 @@
     },
     {
       "path": "CODEMAP.md",
-      "sha256": "0c97c8a5b2adc4f1f63e557335650bfc0556fd89a6403859bbeb0aa78eaa937a"
+      "sha256": "00f21ae7df77e34fda78d8eaeb5545a259e904d30c24ac22105928ed807d1679"
     },
     {
       "path": "LICENSE-NOTICE.md",
@@ -199,7 +199,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "9d972ae2a2bd00772f98d386decf5e7b6ff77f8d8ca58bfbf92297f945914e5a"
+      "sha256": "e16a4b3976a6e7c858058d08e12eace0b899a969c6aab43ad427579153bc2bb9"
     },
     {
       "path": "SECURITY.md",
@@ -315,7 +315,7 @@
     },
     {
       "path": "packaging/HOSTING.md",
-      "sha256": "9be0832e695f1abc33287e4e6b4bdd7d4157397198a6c86f3d72622da45933a0"
+      "sha256": "3c8c793432247e7767a090f51109a69ee0f75c86549e253cfcb63328c2e37800"
     },
     {
       "path": "packaging/INSTALL-COMPLETE.txt",
@@ -323,11 +323,11 @@
     },
     {
       "path": "packaging/PUBLIC-SOURCE.md",
-      "sha256": "6a43f47e1433dc44d3ef18491227b2a028455782d6ef601a8a5aabcb97b8ffa5"
+      "sha256": "522dead66d9a5edc1b33195be507c117e70bbfa0f50f46a60e348392bd1b3431"
     },
     {
       "path": "packaging/README.md",
-      "sha256": "6c50c143ab94ae48202c83765a6a8576e68e75dd07553d5c03fc9e06e29c4866"
+      "sha256": "6205db81703e06926f798a33fddc569b50b06ee02e8e37d384afc8be517b8865"
     },
     {
       "path": "packaging/THIRD-PARTY-NOTICES.txt",
@@ -335,7 +335,7 @@
     },
     {
       "path": "packaging/UPDATE-SIGNING.md",
-      "sha256": "7343b58387019e49195e4f348150ea7b2312813c0e59be9dcef3c7727f35ca40"
+      "sha256": "aa513a6500d14166a079071542d0b7f5aeb933868b7dc791c9481499fe758640"
     },
     {
       "path": "packaging/USER-README.txt",
@@ -355,7 +355,7 @@
     },
     {
       "path": "packaging/complete_release.py",
-      "sha256": "c45ad253f9c848518296e4a9079f8ac295e7ffc41c7b4fd86130d1bf2c34474c"
+      "sha256": "61eb90375789a5fcc6c6cc6fedf87ee7fc6ce116a8afc05d3333d27d91cc4a3d"
     },
     {
       "path": "packaging/download-page.html",
@@ -491,7 +491,7 @@
     },
     {
       "path": "packaging/public-source/README.template.md",
-      "sha256": "b4a21a9a062971d811c8b790ec8c3b738914e0bc8962b610219810bfeaacf788"
+      "sha256": "0854d650ba7ef5a56f31111e588eba06b6cab106eeefbb355b65bb5d96cbfa90"
     },
     {
       "path": "packaging/public-source/allowlist.json",
@@ -515,7 +515,7 @@
     },
     {
       "path": "packaging/release_site.py",
-      "sha256": "7100b85715296bbc519f62ffba88dfc028bee17fcc05e8f003404006960184c5"
+      "sha256": "0d86e69ec4da3bd95dd24c147c669021a326dc915275f9eaf0b99df89075c8a1"
     },
     {
       "path": "packaging/requirements-build.txt",
@@ -615,7 +615,7 @@
     },
     {
       "path": "sites/l2-chat-translator/index.template.html",
-      "sha256": "d05d5d35ec4d6199f32648da9d0930192a1b22e026d4454af80d967e19ac9344"
+      "sha256": "2646c2e1ca234270a2335d8f416b885badae7bfc1ac97c32ab251be94edaa6ba"
     },
     {
       "path": "tests/test_app_update_integration.py",
@@ -643,7 +643,7 @@
     },
     {
       "path": "tests/test_complete_release.py",
-      "sha256": "3ceef148ab8c334a36bce1d61f9fb0faf34b734a7475fa816f30d569000216e5"
+      "sha256": "7f5d3108992728073f907ce6325c6f573ba3170da155291f6491eb28e6d3c481"
     },
     {
       "path": "tests/test_discord_deploy_hook.py",
@@ -779,7 +779,7 @@
     },
     {
       "path": "tests/test_release_site.py",
-      "sha256": "b31f6ed7eb86be345aab0e3c460a3084e63e950554439722c63fb42d8d52c180"
+      "sha256": "8cf42fd1bc6bf0fc9139308b8950858bd65dfa12ba61e22c0d706ece37fec3cf"
     },
     {
       "path": "tests/test_reply_composer.py",

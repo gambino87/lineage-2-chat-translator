@@ -55,7 +55,7 @@ key rotation is not implemented.
 Normal release preparation validates the built installer and signs its public
 metadata locally once. Later preparations reuse the exact verified pair.
 Check-only validation never generates a signature or provisions a key.
-Publish the installer, `release.json` and `release.sig` atomically on both hosts.
+Publish the installer, `release.json` and `release.sig` atomically on the OVH server.
 The public source gate and existing immutable installer rules still apply.
 
 Versions before v1.7.12 do not contain the trust anchor. Merely placing a

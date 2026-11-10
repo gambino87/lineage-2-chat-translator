@@ -15,9 +15,9 @@ no additional open-source license is selected for the original application.
 3. Run `packaging/export_main_server.py` with the build environment's Python.
    The command validates the prepared release, calls `source_release.py`, then
    creates the server upload bundle only after source publication is verified.
-4. Publish and verify the website/installer on the main server and mirror using
+4. Publish and verify the website/installer on the user's OVH server using
    the existing hosting workflow. Confirm the returned GitHub commit and tag.
-5. Run `packaging/complete_release.py` to recheck both live releases and GitHub,
+5. Run `packaging/complete_release.py` to recheck the live server release and GitHub,
    then automatically prune approved old local build caches/packages. A stale
    or failed publication leaves retry artifacts intact. Canonical installers,
    manifests, source and required build inputs are always retained.

@@ -68,7 +68,7 @@ its attribution notice, and the trusted update and cleanup helpers. Personal set
 review data, development scripts, tests and model weights cannot enter this
 source staging directory. PyInstaller discovers Python/Tcl/Tk dependencies.
 
-After publication to both hosts, `packaging/complete_release.py` verifies the
+After publication to the user's OVH server, `packaging/complete_release.py` verifies the
 live signed release and GitHub source, then automatically prunes approved old
 build trees, redundant upload packages and backend tool/download caches. A failed
 release does not trigger cleanup. The newest build and recent packages remain,
@@ -210,7 +210,8 @@ publication failure blocks export. See [PUBLIC-SOURCE.md](PUBLIC-SOURCE.md).
 Then publish atomically to the main server
 following `HOSTING.md`. Run the check above immediately before export. Deploy the
 homepage and installer together, then verify the public installer checksum.
-The original Sites mirror is separate and retains its existing identity/audience.
+The OVH server is the sole release host. The legacy Sites mirror is not published
+or required; the local `sites/` folder holds the website source and output.
 
 Interactive installation waits for `--install-model` before its completion page.
 That mode returns only after successful model verification, owned archive cleanup,
