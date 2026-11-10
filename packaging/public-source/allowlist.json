@@ -1,4 +1,6 @@
 [
+  "CODEMAP.md",
+  "SECURITY.md",
   "Setup Ollama.ps1",
   "Start Translator.cmd",
   "Start Translator.ps1",

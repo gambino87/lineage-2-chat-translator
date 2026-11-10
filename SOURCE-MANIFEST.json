@@ -162,12 +162,20 @@
       "sha256": "60489b424e2a64e6995f9abf6dae9964210a078478b78d0b286df11594c4393f"
     },
     {
+      "path": "CODEMAP.md",
+      "sha256": "cc87b4727d4cc77b094539af57892eb17fe878994bc09660cb5b5fd1048c3fdc"
+    },
+    {
       "path": "LICENSE-NOTICE.md",
       "sha256": "8616b91db1fd58c31992a906a3a681d7ab7a2fb8b21c74e6704801212717d115"
     },
     {
       "path": "README.md",
-      "sha256": "59900933c53abb0ba4607852e904caee22da5ebd5466921e4fc46f209c28df99"
+      "sha256": "0167565e17b72a833a595ee3c8c79162ca7047aa29086209dd79a5729b309258"
+    },
+    {
+      "path": "SECURITY.md",
+      "sha256": "09bbe76e42a8fe6912b86799c3cb7c2d97d1b51e7f9defe42e3e9eca5c209dc3"
     },
     {
       "path": "Setup Ollama.ps1",
@@ -403,11 +411,11 @@
     },
     {
       "path": "packaging/public-source/README.template.md",
-      "sha256": "27d7cc0343915a669861a4043ceb91afe35e7f9dec7c301e0cc257dd82e846fb"
+      "sha256": "7598e84df7f0a7100bbb447a1eb2da9e974a80cb7d8cd7047d1cbccaf8a2c70c"
     },
     {
       "path": "packaging/public-source/allowlist.json",
-      "sha256": "b4c90dbc51267d0dfaeae6a15512f8642e7e7da12829e52c3407db144b3aa255"
+      "sha256": "2767af7968a1893a875dfd0a0fe10e634632936ea210a91650d28428ddd70726"
     },
     {
       "path": "packaging/public-source/gitattributes.txt",
@@ -779,7 +787,7 @@
     },
     {
       "path": "verify_local.py",
-      "sha256": "2c924871800e8b91e6294d7b197b4df24bda196f8ba78b0f29088146eda5f683"
+      "sha256": "54043da1bc21f1f31a963de89da30dd20bd08d354636ed218ac9386d5544b0e3"
     }
   ]
 }

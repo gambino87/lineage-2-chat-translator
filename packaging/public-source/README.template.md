@@ -7,6 +7,11 @@ build scripts, tests, item catalog, artwork, and website source.
 [Download the Windows installer](https://40.160.140.227/) ·
 [Feedback and bug reports on Discord](https://discord.gg/V4ph4Ww5m)
 
+Read the [security and privacy overview](SECURITY.md) for the trust boundaries,
+network activity, local data, update protections and remaining limitations.
+The [code reading guide](CODEMAP.md) follows the important functions in execution
+order and maps each module to its side effects and tests.
+
 ## What it does
 
 - Reads chat from a supported Lineage II client's existing `Network.log`.
@@ -37,9 +42,9 @@ client/server. Translation quality depends on the selected model and message.
 | `game_slang_research.json` | Glossary references with synthetic examples |
 
 Other root modules and PowerShell/CMD scripts support icons, versioning, log
-selection and development startup. `verify_local.py` is an optional diagnostic
-that contacts an already configured local model and checks the selected log;
-it is **not** part of the offline regression suite.
+selection and development startup. `verify_local.py` runs the offline application
+self-test. It does not read the user's log, contact a model, start a service or
+open a window. It cannot establish translation quality or a working GPU setup.
 
 ## Build and test
 
