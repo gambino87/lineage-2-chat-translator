@@ -229,6 +229,11 @@ def self_test() -> dict:
     import chat_overlay
     import reply_composer
     import translator_app
+    # Imports only: never create a tray icon/window or start its native thread.
+    import windows_tray
+    import tray_controls
+    if not callable(windows_tray.NativeTray) or not callable(tray_controls.TrayControls):
+        raise AssertionError("The bundled system tray components are missing.")
     from app_updater import RUNNER_PATH
     helper = RUNNER_PATH.read_text(encoding="utf-8-sig")
     if len(helper) < 1000 or "JobPath" not in helper or "Lineage2ChatTranslatorUpdate" not in helper:
@@ -278,6 +283,7 @@ def self_test() -> dict:
             "app_settings_path": str(translator_app.SETTINGS),
             "item_catalog_version": catalog.version, "item_catalog_entries": len(catalog.items),
             "checks": ["bundled imports", "Tcl runtime", "native TLS, hashing and compression", "synthetic log parser", "model catalog", "loopback client", "bundled icon", "bundled item database", "localized item ID resolution", "party link separation", "source URL protection", "bundled update helper", "bundled external cleanup helper", "bundled installation permission helper"] + (["bundled cleanup inventory", "no obsolete app-local UCRT"] if getattr(sys, "frozen", False) else []) + (["Windows system UCRT"] if system_ucrt else []),
+            "system_tray_imports": True,
             "windows_opened": False, "network_requests": False}
 
 

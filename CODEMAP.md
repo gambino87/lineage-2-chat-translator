@@ -1,6 +1,6 @@
 # Code reading guide
 
-This guide follows the v1.7.13 application in execution order. It names the
+This guide follows the v1.7.14 application in execution order. It names the
 functions to inspect, their inputs and side effects, and the checks protecting
 each boundary. Read [SECURITY.md](SECURITY.md) for the threat model and limits.
 The public README is generated from
@@ -191,6 +191,28 @@ close signals workers to stop; it does not join every translation thread.
 _finish_shutdown waits for owned-backend shutdown before committing an update
 handoff.
 
+### Optional system tray
+
+[tray_controls.py](tray_controls.py): TrayControls listens only to the
+launcher's own minimize/map/configure/destroy events. The saved
+minimize_to_tray flag defaults to false. A deferred iconic-state check starts
+the native icon; only a successful ready event permits withdrawing the root.
+Callbacks carry instance generations through a queue, so a late event cannot
+hide a restored/closing window. Overlay replies reuse restore. Hiding never
+stops the log reader, model session or overlay.
+
+[windows_tray.py](windows_tray.py): NativeTray owns a hidden top-level Windows
+message window, existing L2CT.ico handle, notification icon and fixed popup menu
+on one native thread. It handles click/Open/Exit and Explorer's TaskbarCreated
+message. No game window, global hook, network or model data is involved.
+Construction/import creates no UI. Native callbacks enqueue plain events;
+Tk consumes them. Failure returns the launcher to ordinary window/taskbar access.
+Closing requests native teardown, then the shutdown worker waits for cleanup
+before update handoff. The X and tray Exit use the real close path.
+
+Headless tests mock Windows APIs; they do not demonstrate actual tray appearance,
+click behavior or Explorer recovery on every supported desktop configuration.
+
 ## 6. Updates: check, prepare, commit, execute
 
 Read these in order:
@@ -288,6 +310,7 @@ Neither is a live game, real model or interactive upgrade test.
 | Does malformed chat stay data? | test_translator_core, test_source_url_protection, test_url_restore_pipeline, test_party_links, test_item_link_catalog |
 | Can stale replies copy text? | test_reply_composer, test_whisper_integration |
 | Are histories/filtering and window behavior bounded? | test_chat_overlay, test_overlay_channel_filters, test_overlay_tray, test_overlay_integration |
+| Can minimizing strand the launcher or interrupt shutdown? | test_tray_controls, test_windows_tray, test_app_update_integration |
 | Can another listener obtain credentials? | test_local_service, test_ollama_service; Go overlay security/process_windows tests |
 | Can runtime files or storage redirect execution/deletion? | test_runtime_integrity, test_secure_storage, test_installer_runtime, test_install_directory_security |
 | Can host metadata replace trusted update code? | test_update_trust, test_app_updater, test_update_runner, test_update_network, test_update_controls |

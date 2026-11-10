@@ -1,7 +1,17 @@
-LINEAGE 2 CHAT TRANSLATOR 1.7.13
+LINEAGE 2 CHAT TRANSLATOR 1.7.14
 
 Windows 10/11, 64-bit. Python is included; no separate Python installation is needed.
 The supplied L2CT artwork is used for the program, shortcuts and window icons.
+
+MINIMIZE TO SYSTEM TRAY
+
+Enable Minimize to system tray in the launcher's Settings, then use the normal
+minimize button. The existing app icon appears in the Windows notification area
+(it may be under the hidden-icons arrow). Translation and the overlay keep running.
+Click the icon to reopen the same launcher, or right-click for Open translator
+and Exit. Exit and the window's X close the translator and its owned local service.
+The setting is off by default and saved immediately. If Windows cannot create
+the icon, the launcher stays accessible instead of disappearing.
 
 LOCAL SERVICE AND FILE ACCESS
 

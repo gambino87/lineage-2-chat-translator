@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.7.14",
+    "changes": [
+      "Added an optional Minimize to system tray setting. Minimizing hides the launcher behind the existing app icon while translation and the overlay keep running.",
+      "Click the tray icon to reopen the same window, or right-click for Open translator and Exit. The window's X still exits; the tray preference is saved for the next launch.",
+      "If Windows cannot create or recover the tray icon, the launcher stays accessible. Closing or updating removes the icon and finishes the existing local-service shutdown."
+    ]
+  },
+  {
     "version": "1.7.13",
     "changes": [
       "Protected runtime and model folders against changes by other Windows accounts while retaining the installing user's full access. Older folders with unprotected ownership records require a one-time review in Configure; parent-folder permissions are unchanged.",

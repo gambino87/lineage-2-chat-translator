@@ -89,7 +89,8 @@ class InstallerConfigurationTests(unittest.TestCase):
 
     def test_upgrade_and_model_switch_preserve_overlay_log_and_language(self):
         old = {"log_path": "D:/Game/system/Network.log", "overlay": {"x": -800, "opacity": 0.7},
-               "target_language": "Portuguese", "show_original": True, "include_notices": True}
+               "target_language": "Portuguese", "show_original": True, "include_notices": True,
+               "minimize_to_tray": True}
         setup.write_json(self.settings, old)
         setup.save_configuration(self.root / "data", "qwen2.5:3b", "", self.settings, self.location)
         saved = setup.read_json(self.settings)

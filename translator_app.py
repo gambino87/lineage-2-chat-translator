@@ -26,6 +26,7 @@ from app_icon import apply_window_icon
 from installer_runtime import DEFAULT_MODEL, ENDPOINT, RuntimeManager
 from update_controls import UpdateControls
 from app_updater import discard_update, launch_update
+from tray_controls import TrayControls
 
 PROJECT = Path(__file__).resolve().parent
 SETTINGS = settings_file()
@@ -36,6 +37,7 @@ DEFAULTS = {
     "target_language": "English",
     "include_notices": False,
     "show_original": False,
+    "minimize_to_tray": False,
     "overlay": {},
 }
 BG, PANEL, FG, MUTED, ACCENT = "#111820", "#1b2632", "#edf3f8", "#a4b4c3", "#66dec3"
@@ -72,6 +74,7 @@ def load_settings(*, migrate_legacy_models: bool = True) -> dict:
             settings[key] = DEFAULTS[key]
     settings["include_notices"] = settings["include_notices"] is True
     settings["show_original"] = settings["show_original"] is True
+    settings["minimize_to_tray"] = settings["minimize_to_tray"] is True
     # An earlier open window may save its old model when it closes.
     # Migrate the removed 3B model and initial trials to the selected 9B model.
     if migrate_legacy_models and not getattr(sys, "frozen", False) and settings["model"] in ("qwen2.5:3b", "qwen3:4b", "l2-translator:4b"):
@@ -151,6 +154,7 @@ class TranslatorApp:
         self.log_path = tk.StringVar(value=self.config["log_path"])
         self.notices = tk.BooleanVar(value=self.config["include_notices"])
         self.show_original = tk.BooleanVar(value=self.config["show_original"])
+        self.minimize_to_tray = tk.BooleanVar(value=self.config["minimize_to_tray"])
         self.on_top = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value="Connecting to local Ollama…")
         self.counter = tk.StringVar(value="No messages translated yet")
@@ -159,6 +163,8 @@ class TranslatorApp:
         self.overlay = ChatOverlay(self.root, self.config["overlay"], on_change=self._overlay_changed,
                                    on_reply=self.select_reply, model=self.config["model"])
         self.overlay_button.configure(text="Hide overlay" if self.overlay.settings["enabled"] else "Show overlay")
+        self.tray = TrayControls(self.root, enabled=self.minimize_to_tray.get,
+                                 on_exit=self.close, on_error=self.status.set)
         threading.Thread(target=self._worker, daemon=True, name="local-translator").start()
         self.check_connection()
         self.root.after(UI_POLL_INTERVAL_MS, self._drain_events)
@@ -231,6 +237,8 @@ class TranslatorApp:
         ttk.Checkbutton(controls, text="Include notices", variable=self.notices).pack(side="left")
         ttk.Checkbutton(controls, text="Main window on top", variable=self.on_top,
                         command=lambda: self.root.attributes("-topmost", self.on_top.get())).pack(side="right")
+        ttk.Checkbutton(self.settings_panel, text="Minimize to system tray", variable=self.minimize_to_tray,
+                        command=self._tray_setting_changed).pack(anchor="w", pady=(0, 6))
         source = ttk.Frame(self.settings_panel)
         source.pack(fill="x", pady=(0, 6))
         ttk.Label(source, text="Chat log", foreground=MUTED).pack(side="left", padx=(0, 8))
@@ -298,8 +306,7 @@ class TranslatorApp:
                 self.updates.settings_shown()
 
     def _update_ready(self, prepared):
-        """Accept a verified download only after preferences can be saved."""
-        """Take ownership of a verified download and close before installation."""
+        """Save preferences and close the owned session before installation."""
         pending = getattr(self, "_pending_update", None)
         if pending is prepared:
             return
@@ -313,12 +320,20 @@ class TranslatorApp:
         self._pending_update = prepared
         self.close()
 
+    def _tray_setting_changed(self):
+        """Persist the opt-in immediately; disabling it restores a hidden root."""
+        self.save_settings()
+        self.tray.preference_changed()
+
     def select_reply(self, record, *, whisper=False):
         if self.stop.is_set() or getattr(self, "_closing", False):
             return
         self._cancel_reply_focus()
-        self.root.deiconify()
-        self.root.lift()
+        if hasattr(self, "tray"):
+            self.tray.restore()
+        else:
+            self.root.deiconify()
+            self.root.lift()
         self.reply.select(record, whisper=whisper)
         # The overlay click can still change focus while its bindings run.
         # Activate the input after dispatch, when the restored root is mapped.
@@ -699,6 +714,8 @@ class TranslatorApp:
         """Replace preferences atomically; never serialize transcript or replies."""
         self.config.update(log_path=self.log_path.get(), target_language=self.target.get(), include_notices=self.notices.get(),
                            show_original=self.show_original.get())
+        if hasattr(self, "minimize_to_tray"):
+            self.config["minimize_to_tray"] = self.minimize_to_tray.get() is True
         if hasattr(self, "overlay"):
             self.config["overlay"] = dict(self.overlay.settings)
         try:
@@ -723,6 +740,9 @@ class TranslatorApp:
         cleanup = [("Saving preferences", self.save_settings),
                    ("Closing replies", self.reply.close),
                    ("Closing the overlay", self.overlay.destroy)]
+        tray = getattr(self, "tray", None)
+        if tray is not None:
+            cleanup.insert(0, ("Removing the system tray icon", tray.close))
         if hasattr(self, "updates"):
             cleanup.insert(0, ("Canceling update checks", self.updates.close))
         if self.tail:
@@ -737,7 +757,7 @@ class TranslatorApp:
         self._shutdown_results = queue.Queue(maxsize=1)
         self._shutdown_progress = None
         pending_update = getattr(self, "_pending_update", None)
-        if shutdown is None and pending_update is None:
+        if shutdown is None and pending_update is None and (tray is None or tray.wait_closed(0)):
             self._shutdown_results.put(None)
             self._finish_shutdown()
             return
@@ -752,8 +772,22 @@ class TranslatorApp:
         def work():
             failure = None
             try:
+                shutdown_errors = []
                 if shutdown is not None:
-                    shutdown()
+                    try:
+                        shutdown()
+                    except Exception as exc:
+                        shutdown_errors.append(str(exc))
+                # A tray failure must not skip backend shutdown. Wait off Tk's
+                # thread and refuse update handoff while tray code is still live.
+                if tray is not None:
+                    try:
+                        if not tray.wait_closed():
+                            raise RuntimeError("Windows could not finish system tray cleanup. Reopen the translator and retry.")
+                    except Exception as exc:
+                        shutdown_errors.append(str(exc))
+                if shutdown_errors:
+                    raise RuntimeError("\n".join(shutdown_errors))
                 if pending_update is not None:
                     if self._close_errors:
                         raise RuntimeError("The update was canceled because shutdown could not finish cleanly.")
@@ -820,10 +854,11 @@ class TranslatorApp:
 def main(*, migrate_legacy_models: bool = True, runtime_root: Path | None = None):
     shutdown = service_shutdown_callback(load_settings(migrate_legacy_models=migrate_legacy_models), runtime_root)
     root = None
+    application = None
     try:
         root = tk.Tk()
         apply_window_icon(root)
-        TranslatorApp(root, migrate_legacy_models=migrate_legacy_models, on_shutdown=shutdown)
+        application = TranslatorApp(root, migrate_legacy_models=migrate_legacy_models, on_shutdown=shutdown)
         root.mainloop()
     except Exception as exc:
         if root is not None:
@@ -831,6 +866,13 @@ def main(*, migrate_legacy_models: bool = True, runtime_root: Path | None = None
             root.destroy()
         raise
     finally:
+        if application is not None:
+            try:
+                application.tray.close()
+                application.tray.wait_closed()
+            except Exception as exc:
+                if sys.stderr:
+                    print(f"Could not remove the system tray icon: {exc}", file=sys.stderr)
         # Covers startup failure or a main-loop exit other than the X button.
         # The captured callback serializes concurrent calls and runs only once.
         if shutdown is not None:

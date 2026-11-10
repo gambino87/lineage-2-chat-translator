@@ -1,6 +1,6 @@
 # Lineage 2 Chat Translator
 
-Source for **v1.7.13**, published so users can inspect how the translator works
+Source for **v1.7.14**, published so users can inspect how the translator works
 before installing it. This repository contains the application, installer and
 build scripts, tests, item catalog, artwork, and website source.
 
@@ -18,6 +18,7 @@ order and maps each module to its side effects and tests.
 - Translates through a local Ollama model and displays an always-on-top overlay.
 - Preserves item names, prices and common game abbreviations; offers channel filters.
 - Translates replies into the selected language and copies them to the clipboard.
+- Optionally minimizes the launcher to its app icon in the Windows system tray while translation and the overlay continue. Click to reopen; right-click for Open translator or Exit. Enable it in Settings; the window's X still exits.
 - Includes a protected Ollama frontend, downloads native libraries/the selected model during setup, and manages its local service.
 
 The translator reads the log file; it does not read game process memory, inject
@@ -30,6 +31,7 @@ client/server. Translation quality depends on the selected model and message.
 | --- | --- |
 | `translator_core.py`, `game_slang.py`, `item_catalog.py` | Parsing, local-model requests, glossary and protected text |
 | `translator_app.py`, `chat_overlay.py`, `overlay_tray.py`, `reply_composer.py` | Launcher, overlay, filters and replies |
+| `tray_controls.py`, `windows_tray.py` | Optional minimize/restore state and the owned Windows notification icon/menu |
 | `installer_main.py`, `installer_runtime.py`, `app_paths.py` | Setup, model downloads and owned service lifecycle |
 | `app_updater.py`, `update_controls.py`, `installation_cleanup.py`, `uninstall_data.py` | Updates, cleanup and uninstall |
 | `local_service.py`, `runtime_integrity.py`, `secure_storage.py`, `update_network.py` | Authenticated local connections, trusted runtime files, private storage and bounded downloads |
@@ -89,7 +91,7 @@ official version or upload it to the official update feed.
 
 ## Relationship to the published installer
 
-[SOURCE-MANIFEST.json](SOURCE-MANIFEST.json) records the v1.7.13 release installer
+[SOURCE-MANIFEST.json](SOURCE-MANIFEST.json) records the v1.7.14 release installer
 checksum and the SHA-256 hashes of its application modules and assets.
 From v1.7.12, clients verify a separate release signature against the public key
 bundled in the app. The signing key stays off the download server and is never
@@ -103,7 +105,7 @@ Git preserves their original line endings so those hashes remain checkable.
 Documentation and test fixtures are adapted for publication: example player
 names, a streamer URL path and a private operator key-file location are replaced
 with generic examples, and the user guide's version heading is corrected to
-1.7.13. These changes are listed in the source manifest. The
+1.7.14. These changes are listed in the source manifest. The
 private development diary and review tooling/data are omitted.
 
 This is a source transparency snapshot, **not a claim of byte-for-byte binary

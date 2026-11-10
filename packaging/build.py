@@ -32,6 +32,7 @@ SOURCES = (
     "game_log_setup.py", "chat_overlay.py", "overlay_tray.py", "reply_composer.py", "uninstall_data.py",
     "app_updater.py", "update_trust.py", "update_controls.py", "installation_cleanup.py",
     "local_service.py", "runtime_integrity.py", "secure_storage.py", "update_network.py",
+    "windows_tray.py", "tray_controls.py",
 )
 ASSETS = ("assets/L2CT.ico", "assets/L2CT.png", "assets/item_catalog.json", "assets/ITEM-CATALOG-NOTICE.txt",
           "assets/apply-update.ps1", "assets/cleanup-program-files.ps1", "assets/protect-install-directory.ps1",

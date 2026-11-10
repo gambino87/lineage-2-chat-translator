@@ -1,6 +1,6 @@
 # Security and privacy overview
 
-Reviewed application: **1.7.13**. Review date: **2026-11-09**.
+Reviewed application: **1.7.14**. Security overview updated: **2026-11-10**.
 
 The reviewed source implements a local chat-log reader and translator. It does
 not contain a game-memory reader, injected game component, screen capture,
@@ -37,6 +37,15 @@ translator. The launcher retains ownership of its child backend and shuts down
 its process tree. It does not terminate every process named Ollama. Interactive
 launch, model setup, update installation and uninstall are different actions;
 the offline self-test does not perform those actions.
+
+The optional Minimize to system tray setting hides only the launcher; translation,
+the overlay and the owned backend continue running. The notification icon uses
+the existing app artwork and an owned hidden native message window. It installs
+no global input hook and handles no chat data. Click/Open restores the same
+session; tray Exit or the window's X invokes the normal shutdown path. Native
+events reach Tk through a queue, and the launcher is hidden only after icon
+registration succeeds. Native cleanup must finish before update handoff.
+See [tray_controls.py](tray_controls.py) and [windows_tray.py](windows_tray.py).
 
 Evidence: [installer_main.py](installer_main.py),
 [installer_runtime.py](installer_runtime.py),
@@ -308,7 +317,7 @@ and update/cleanup boundaries. Important functions already have trust-boundary
 docstrings and named limits; CODEMAP.md explains their order and relationships
 without changing the verified application inputs for cosmetic comments.
 
-The headless regression run completed **982 Python tests, with 10 skipped**. Platform
+The v1.7.13 security-review regression run completed **982 Python tests, with 10 skipped**. Platform
 skips and mocks limit the evidence. The offline diagnostic also exercises the
 existing synthetic self-test rather than authenticating to another running
 launcher's session. Live game behavior, new model inference, interactive install
