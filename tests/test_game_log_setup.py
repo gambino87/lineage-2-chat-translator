@@ -40,7 +40,6 @@ def app_without_ui(log_path="", connected=False, reading=False):
     app.events = queue.Queue()
     app.jobs = queue.Queue()
     app.read_button = Mock()
-    app.recent_button = Mock()
     app.settings_panel = Mock()
     app.settings_button = Mock()
     app.reply = Mock()
@@ -249,13 +248,10 @@ class FolderSelectionFlowTests(unittest.TestCase):
     def test_blank_path_never_opens_current_directory_as_log(self):
         app = app_without_ui(" ", connected=True)
         with patch.object(app, "choose_system_folder") as choose, \
-             patch.object(translator_app, "LogTail") as tail, \
-             patch.object(translator_app, "read_recent_chat") as recent:
+             patch.object(translator_app, "LogTail") as tail:
             app.toggle_reading()
-            app.translate_recent()
-        self.assertEqual(choose.call_count, 2)
+        choose.assert_called_once_with()
         tail.assert_not_called()
-        recent.assert_not_called()
         self.assertFalse(app.reading)
 
     def test_connecting_without_path_does_not_open_another_picker(self):

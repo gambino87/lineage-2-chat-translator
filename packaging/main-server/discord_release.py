@@ -30,6 +30,8 @@ ANNOUNCEMENT_CHANNEL_NAME = 'updates-and-announcements'
 REQUEST_TIMEOUT = 15
 DOWNLOAD_DEADLINE = 60
 MAX_JSON_BYTES = 1024 * 1024
+MAX_PUBLIC_MANIFEST_BYTES = 8 * 1024 * 1024
+MAX_PUBLIC_FILES = 20000  # Current file objects plus retained immutable releases.
 MAX_PAGE_BYTES = 2 * 1024 * 1024
 MAX_INSTALLER_BYTES = 256 * 1024 * 1024
 STREAM_BYTES = 64 * 1024
@@ -281,7 +283,7 @@ def _validate_manifest(manifest):
             and isinstance(installer.get('sha256'), str) and SHA_RE.fullmatch(installer['sha256']),
             'Invalid installer metadata.')
     rows = manifest.get('files')
-    require(isinstance(rows, list) and 0 < len(rows) <= 1000, 'Invalid public file manifest.')
+    require(isinstance(rows, list) and 0 < len(rows) <= MAX_PUBLIC_FILES, 'Invalid public file manifest.')
     records = {}
     for row in rows:
         require(isinstance(row, dict) and isinstance(row.get('path'), str)
@@ -512,7 +514,7 @@ def current_manifest(root=ROOT):
             'Invalid current release target.')
     path = root / 'manifests' / (release.name + '.json')
     require(path.is_file() and not path.is_symlink(), 'Current release manifest is missing.')
-    manifest = _read_json(path)
+    manifest = _read_json(path, MAX_PUBLIC_MANIFEST_BYTES)
     _validate_manifest(manifest)
     _assert_current(root, manifest['release_id'])
     return manifest

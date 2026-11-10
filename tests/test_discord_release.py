@@ -79,6 +79,20 @@ class SourceVerificationTests(unittest.TestCase):
         self.assertTrue(all('Authorization' not in req.headers for req in self.requests))
         self.assertTrue(all(req.full_url.startswith(bot.BASE_URL + '/') for req in self.requests))
 
+    def test_incremental_objects_can_exceed_the_old_thousand_file_limit(self):
+        for index in range(1100):
+            self.manifest['files'].append({'path': f'updates/blobs/{index:064x}.gz',
+                                           'bytes': 1, 'sha256': hashlib.sha256(b'x').hexdigest()})
+        identify(self.manifest)
+        with patch.object(bot, '_assert_current'), patch.object(bot, 'https_opener', return_value=self.source_opener()):
+            self.assertEqual(bot.verified_notes(self.manifest), ['Improved Party chat.', 'Saved selections & reply links.'])
+        self.assertEqual(len(self.requests), 3)
+        # The higher bound remains explicit; duplicate/unbounded inventories
+        # cannot consume the bot's memory before public verification.
+        self.manifest['files'] = [self.manifest['files'][0]] * (bot.MAX_PUBLIC_FILES + 1)
+        with self.assertRaises(bot.AnnouncementError):
+            bot._validate_manifest(self.manifest)
+
     def test_bad_live_bytes_prevent_any_announcement(self):
         for wanted in ('index.html', 'downloads/release.json', 'downloads/' + self.manifest['installer']['file']):
             with self.subTest(wanted=wanted), patch.object(bot, '_assert_current'), patch.object(

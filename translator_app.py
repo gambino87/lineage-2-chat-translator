@@ -18,7 +18,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from translator_core import (ChatRecord, LogTail, OllamaClient, REPLY_LANGUAGES, MAX_CHAT_CHARACTERS,
-                             UNIVERSAL_TRADE_LANGUAGE, is_universal_trade_message, read_recent_chat)
+                             UNIVERSAL_TRADE_LANGUAGE, is_universal_trade_message)
 from chat_overlay import CHANNEL_COLORS, ChatOverlay, normalize_overlay_settings
 from chat_links import LINK_COLORS, insert_linked_text, normalize_display
 from reply_composer import ReplyComposer
@@ -55,8 +55,6 @@ DISCORD_URL = "https://discord.gg/V4ph4Ww5m"
 MAX_QUEUED_TRANSLATIONS = 80
 MAX_TRANSCRIPT_MESSAGES = 250
 MAX_CACHED_TRANSLATIONS = 128
-RECENT_LOG_SCAN_MESSAGES = 60
-RECENT_REPLAY_MESSAGES = 8
 NOTICE_CHANNELS = frozenset({10, 11})  # Client system/notice channels.
 
 # UI scheduling uses milliseconds; the worker queue uses seconds.
@@ -262,17 +260,15 @@ class TranslatorApp:
 
         toolbar = ttk.Frame(outer)
         toolbar.grid(row=2, column=0, sticky="ew", pady=(0, 8))
-        for column in range(3):
+        for column in range(2):
             toolbar.columnconfigure(column, weight=1)
         self.read_button = ttk.Button(toolbar, text="Start reading", style="Accent.TButton", command=self.toggle_reading)
         self.read_button.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=(0, 5))
-        self.recent_button = ttk.Button(toolbar, text="Translate recent chat", command=self.translate_recent)
-        self.recent_button.grid(row=0, column=1, sticky="ew", padx=(0, 6), pady=(0, 5))
-        ttk.Button(toolbar, text="Clear", command=self.clear).grid(row=0, column=2, sticky="ew", pady=(0, 5))
+        ttk.Button(toolbar, text="Clear", command=self.clear).grid(row=0, column=1, sticky="ew", pady=(0, 5))
         self.overlay_button = ttk.Button(toolbar, text="Show overlay", command=lambda: self.overlay.toggle())
         self.overlay_button.grid(row=1, column=0, sticky="ew", padx=(0, 6))
         ttk.Button(toolbar, text="Overlay settings…", command=lambda: self.overlay.open_settings()).grid(
-            row=1, column=1, columnspan=2, sticky="ew")
+            row=1, column=1, sticky="ew")
 
         self.settings_panel = ttk.Frame(outer)
         self.settings_panel.grid(row=3, column=0, sticky="ew", pady=(0, 8))
@@ -306,7 +302,6 @@ class TranslatorApp:
         self.updates = UpdateControls(self.settings_panel, current_version=VERSION,
                                       on_ready=self._update_ready)
         self.updates.frame.pack(fill="x", pady=(3, 0))
-        self.recent_button.configure(state="disabled")
         self.settings_panel.grid_remove()
 
         display = ttk.Frame(outer)
@@ -332,7 +327,7 @@ class TranslatorApp:
             self.transcript.tag_configure(f"channel{channel}", foreground=color)
         for tag, color in LINK_COLORS.items():
             self.transcript.tag_configure(tag, foreground=color)
-        self._note("Waiting for new chat. Use Translate recent chat to read saved messages.")
+        self._note("Waiting for new chat.")
 
         footer = ttk.Frame(outer)
         footer.grid(row=5, column=0, sticky="ew", pady=(5, 8))
@@ -621,21 +616,6 @@ class TranslatorApp:
         except queue.Full:
             self._append(record, tr("The queue is full. This message was not translated."), self.target.get(), source, 0, error=True)
 
-    def translate_recent(self):
-        if not self.log_path.get().strip():
-            self.choose_system_folder()
-            return
-        try:
-            records = read_recent_chat(self.log_path.get(), limit=RECENT_LOG_SCAN_MESSAGES)
-            if not self.notices.get():
-                records = [r for r in records if r.channel not in NOTICE_CHANNELS]
-            if not records:
-                self._note("No matching chat entries found in this log.")
-            for record in records[-RECENT_REPLAY_MESSAGES:]:
-                self.enqueue(record, "Saved chat")
-        except (OSError, ValueError) as exc:
-            self._note(tr("Could not read saved chat: {error}", error=str(exc)), error=True)
-
     def _worker(self):
         """Translate sequentially off Tk; keep only a bounded, memory-only cache."""
         clients = {}
@@ -701,7 +681,6 @@ class TranslatorApp:
                 self.connection.set("LOCAL · READY")
                 self.reply.set_connected(True)
                 self.translation_error = False
-                self.recent_button.configure(state="normal")
                 if not was_connected and not self.reading:
                     if self.log_path.get().strip():
                         self.toggle_reading()
@@ -712,7 +691,6 @@ class TranslatorApp:
                 self.connection.set("OLLAMA OFFLINE")
                 self.reply.set_connected(False)
                 self.read_button.configure(text=tr("Retry connection"))
-                self.recent_button.configure(state="disabled")
                 self.status.set("Start Ollama with Start Translator.cmd, then click Start reading.")
                 self._note(data, error=True)
             elif kind == "working":

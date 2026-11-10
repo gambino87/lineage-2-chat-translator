@@ -1,5 +1,11 @@
 [
   {
+    "version": "1.8.8",
+    "changes": [
+      "Removed Translate recent chat and simplified the main toolbar. The translator continues reading new chat as it appears."
+    ]
+  },
+  {
     "version": "1.8.7",
     "changes": [
       "Future updates download only changed or missing application files, with signed verification and a full installer fallback when needed.",

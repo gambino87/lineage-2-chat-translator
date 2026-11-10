@@ -9,7 +9,7 @@ from urllib import request
 
 import translator_core
 from chat_links import ChatLinkSpan
-from translator_core import ChatRecord, LogTail, OllamaClient, OllamaError, parse_chat_line, read_recent_chat
+from translator_core import ChatRecord, LogTail, OllamaClient, OllamaError, parse_chat_line
 
 
 def line(message="Привет, мир!", sender="Player", channel=25):
@@ -153,26 +153,19 @@ class TailTests(unittest.TestCase):
         self.write(line("created"))
         self.assertEqual([x.message for x in self.tail.poll()], ["created"])
 
-    def test_recent_limit_and_partial_line(self):
-        self.write(line("one") + line("two") + line("three") + line("partial").rstrip())
-        self.assertEqual([x.message for x in read_recent_chat(self.path, 2)], ["two", "three"])
-        self.assertEqual(read_recent_chat(self.path, 0), [])
-
-    def test_link_split_during_utf16_write_is_decoded_once_for_live_and_recent(self):
+    def test_link_split_during_utf16_write_is_decoded_once(self):
         self.write("")
         self.tail = LogTail(self.path, start_at_end=False)
         raw = line("Продам " + item_link("Necklace of Freya") + " 10kk").encode("utf-16-le")
         split = raw.index("Freya".encode("utf-16-le")) + 3
         self.append(raw[:split])
         self.assertEqual(self.tail.poll(), [])
-        self.assertEqual(read_recent_chat(self.path), [])
         self.append(raw[split:])
         live = self.tail.poll()
         self.assertEqual(live, [ChatRecord(
             "16:23:42", "Player", "Продам [Necklace of Freya] 10kk", 25,
             ("[Necklace of Freya]",),
             link_spans=(ChatLinkSpan("item", 7, 7 + len("[Necklace of Freya]")),))])
-        self.assertEqual(read_recent_chat(self.path), live)
         self.assertEqual(self.tail.poll(), [])
 
 

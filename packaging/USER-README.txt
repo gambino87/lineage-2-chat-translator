@@ -1,7 +1,13 @@
-LINEAGE 2 CHAT TRANSLATOR 1.8.7
+LINEAGE 2 CHAT TRANSLATOR 1.8.8
 
 Windows 10/11, 64-bit. Python is included; no separate Python installation is needed.
 The supplied L2CT artwork is used for the program, shortcuts and window icons.
+
+CHAT READING
+
+The translator reads new messages as they appear in the game's chat log. Messages
+already in the log are skipped when reading starts. The main toolbar includes
+Start/Pause reading, Clear and overlay controls.
 
 INTERFACE LANGUAGE
 

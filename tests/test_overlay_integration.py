@@ -118,7 +118,6 @@ def headless_app():
     app.overlay.settings = normalize_overlay_settings({})
     app.overlay_button = Mock()
     app.read_button = Mock()
-    app.recent_button = Mock()
     app.reply = Mock()
     return app
 
@@ -166,10 +165,10 @@ class OverlayMessageIntegrationTests(unittest.TestCase):
         self.assertEqual(self.app.overlay.add_message.call_count, 1)
 
     def test_worker_failure_preserves_original_and_marks_overlay_error(self):
-        self.app.enqueue(self.record, "Saved chat")
+        self.app.enqueue(self.record, "Live")
         self.finish_one_job(failure="Local model is unavailable")
         self.app.overlay.add_message.assert_called_once_with(
-            self.record, "Local model is unavailable", source="Saved chat", error=True)
+            self.record, "Local model is unavailable", source="Live", error=True)
         self.assertIn(self.record.message, self.app.transcript.text)
         self.assertIn("Translation unavailable", self.app.transcript.text)
         self.assertEqual(self.app.completed, 0)

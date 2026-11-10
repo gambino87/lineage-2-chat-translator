@@ -5,7 +5,6 @@ This module never opens the game process, writes a game file, or stores chat.
 from __future__ import annotations
 
 import codecs
-from collections import deque
 from dataclasses import dataclass
 from functools import lru_cache
 import ipaddress
@@ -29,7 +28,6 @@ MAX_CHAT_CHARACTERS = 4_000
 MAX_CHAT_RECORD_CHARACTERS = 64 * 1024
 MAX_OLLAMA_RESPONSE_BYTES = 1024 * 1024
 LOG_POLL_BYTES = 2 * 1024 * 1024
-RECENT_LOG_BYTES = 8 * 1024 * 1024
 MAX_PENDING_LOG_CHARACTERS = 1024 * 1024
 LOG_CHECKPOINT_BYTES = 64  # Detect truncate-and-regrow between polling cycles.
 MAX_SIGNED_INT32 = (1 << 31) - 1
@@ -443,30 +441,6 @@ class LogTail:
             self._text = ""
             self._skip_line = True
         return [record for line in lines if (record := parse_chat_line(line)) is not None]
-
-
-def read_recent_chat(path: str | Path, limit: int = 20) -> list[ChatRecord]:
-    """Read up to limit chat records from the last 8 MiB, without keeping logs."""
-    if limit <= 0:
-        return []
-    with _open_shared(Path(path)) as source:
-        encoding, bom_size = _encoding(source.read(4))
-        size = source.seek(0, os.SEEK_END)
-        start = max(bom_size, size - RECENT_LOG_BYTES)
-        if encoding.startswith("utf-16"):
-            start += (start - bom_size) % 2
-        source.seek(start)
-        data = source.read(RECENT_LOG_BYTES)
-    text = data.decode(encoding, errors="replace")
-    lines = text.split("\n")
-    lines.pop()  # An incomplete final line is not yet a record.
-    if start > bom_size and lines:
-        lines.pop(0)
-    records: deque[ChatRecord] = deque(maxlen=limit)
-    for line in lines:
-        if record := parse_chat_line(line):
-            records.append(record)
-    return list(records)
 
 
 class OllamaError(RuntimeError):
