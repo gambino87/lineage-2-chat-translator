@@ -1,0 +1,9 @@
+﻿LINEAGE 2 CHAT TRANSLATOR
+
+Windows 10/11, 64 bit. Ayrı bir Python kurulumu gerekmez.
+
+Kurulum yerel çalışma zamanını ve seçtiğiniz modeli indirir. İndirmeden önce model lisansını inceleyip kabul edin. Model depolama klasörünü ve Lineage II system klasörünü seçin.
+
+Sohbet çevirisi yerel olarak çalışır. Arayüz dili sohbet çeviri dilinden bağımsızdır ve başlatıcının üst kısmından değiştirilebilir.
+
+Kaldırma, uygulamanın kayıtlı modellerini, çalışma zamanını, ayarlarını ve günlüklerini siler. Lineage II oyun dosyalarınız korunur.

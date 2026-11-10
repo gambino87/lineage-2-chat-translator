@@ -4,10 +4,11 @@ from __future__ import annotations
 import math
 import time
 import tkinter as tk
+from ui_i18n import tr
 
 
-ANIMATION_SECONDS = 0.18
-ANIMATION_FRAME_MS = 16
+ANIMATION_SECONDS = 0.22
+ANIMATION_FRAME_MS = 1000 / 60
 MAX_COLUMNS = 3
 CONTENT_PADDING = 8
 CHOICE_GAP = 6
@@ -60,10 +61,14 @@ class ChannelTray:
         self._duration = ANIMATION_SECONDS
         self._layout_width = None
         self._wanted_height = 1
+        self._anchor = None
+        self._bounds = None
+        self._last_placement = None
+        self._localized_widgets = []
 
         self.window = tk.Toplevel(owner)
         self.window.withdraw()
-        self.window.title("Overlay channels")
+        self.window.title(tr("Overlay channels"))
         self.window.overrideredirect(True)
         self.window.configure(bg=palette["border"])
         self.window.attributes("-topmost", True)
@@ -89,12 +94,12 @@ class ChannelTray:
                                 padx=CONTENT_PADDING, pady=CONTENT_PADDING)
         self.heading = tk.Frame(self.content, bg=colors["header"])
         self.heading.pack(fill="x", pady=(0, 4))
-        tk.Label(self.heading, text="Channels", bg=colors["header"], fg=colors["foreground"],
+        self._localized_widget(tk.Label, self.heading, text="Channels", bg=colors["header"], fg=colors["foreground"],
                  font=("Tahoma", 9, "bold")).pack(side="left")
         for text, command in (("×", lambda: self._animate_to(False)),
                               ("None", lambda: self._choose([])),
                               ("All", lambda: self._choose([key for key, _label in self.options]))):
-            tk.Button(self.heading, text=text, command=command, bg=colors["header"],
+            self._localized_widget(tk.Button, self.heading, text=text, command=command, bg=colors["header"],
                       fg=colors["foreground"], activebackground=colors["border"],
                       activeforeground=colors["foreground"], relief="flat", borderwidth=0,
                       padx=6, pady=1, font=("Tahoma", 9), cursor="hand2").pack(side="right")
@@ -104,12 +109,29 @@ class ChannelTray:
             variable = tk.BooleanVar(master=self.window, value=False)
             self._variables[key] = variable
             color = self.channel_colors.get(key, colors["foreground"])
-            self._choices.append(tk.Checkbutton(
+            self._choices.append(self._localized_widget(tk.Checkbutton,
                 self.choices, text=label, variable=variable, command=self._selected,
                 bg=colors["header"], fg=color,
                 activebackground=colors["header"], activeforeground=color,
                 selectcolor=colors["background"], anchor="w", font=("Tahoma", 9),
                 highlightcolor=colors["foreground"], cursor="hand2"))
+
+    def _localized_widget(self, factory, parent, **options):
+        source = options.get("text", "")
+        options["text"] = tr(source)
+        widget = factory(parent, **options)
+        self._localized_widgets.append((widget, source))
+        return widget
+
+    def refresh_language(self):
+        """Retranslate and remeasure labels without changing selections or animation."""
+        if self._destroyed:
+            return
+        self.window.title(tr("Overlay channels"))
+        for widget, source in self._localized_widgets:
+            widget.configure(text=tr(source))
+        self._layout_width = None
+        self.reposition()
 
     def _choose(self, selected):
         if self._destroyed:
@@ -135,7 +157,7 @@ class ChannelTray:
 
     def _layout(self, width):
         if width == self._layout_width:
-            return
+            return False
         self.window.update_idletasks()
         choice_width = max((widget.winfo_reqwidth() for widget in self._choices), default=1)
         choice_height = max((widget.winfo_reqheight() for widget in self._choices), default=1)
@@ -147,26 +169,39 @@ class ChannelTray:
         self._wanted_height = (2 * (CONTENT_PADDING + BORDER_WIDTH) +
                                self.heading.winfo_reqheight() + 4 + rows * (choice_height + 2))
         self._layout_width = width
+        return True
 
-    def _place(self):
-        anchor, bounds = self.get_anchor(), self.get_bounds()
+    def _place(self, *, refresh=False):
+        if refresh or self._anchor is None:
+            self._anchor, self._bounds = self.get_anchor(), self.get_bounds()
+        anchor, bounds = self._anchor, self._bounds
         width = min(anchor[2], max(1, bounds[2]))
-        self._layout(width)
+        layout_changed = self._layout(width)
         x, y, width, height = tray_geometry(anchor, bounds, self._wanted_height, self._progress)
-        self.content.place(x=BORDER_WIDTH, y=BORDER_WIDTH,
-                           width=max(1, width - 2 * BORDER_WIDTH),
-                           height=max(1, self._wanted_height - 2 * BORDER_WIDTH))
+        if layout_changed:
+            self.content.place(x=BORDER_WIDTH, y=BORDER_WIDTH,
+                               width=max(1, width - 2 * BORDER_WIDTH),
+                               height=max(1, self._wanted_height - 2 * BORDER_WIDTH))
+            if self._native:
+                # Settle Tk's requested size only when the controls reflow.
+                self.window.geometry(f"{width}x{height}")
+                self.window.update_idletasks()
+            self._last_placement = None
+        placement = x, y, width, height
+        if placement == self._last_placement:
+            return
         if self._native:
-            # Synchronize Tk's clip size before setting signed monitor positions.
-            self.window.geometry(f"{width}x{height}")
-            self.window.update_idletasks()
+            # Mapped native resizes update Tk's recorded size. One atomic move
+            # and resize avoids drawing at the old y first, and lets the normal
+            # event loop paint instead of flushing every window on every frame.
             self._native.place(x, y, width, height)
         else:
             self.window.geometry(f"{width}x{height}{x:+d}{y:+d}")
+        self._last_placement = placement
 
     def reposition(self):
         if not self._destroyed and self._shown:
-            self._place()
+            self._place(refresh=True)
 
     def toggle(self):
         if not self._destroyed:
@@ -184,7 +219,7 @@ class ChannelTray:
     def _advance(self):
         elapsed = (time.monotonic() - self._started_at) / max(self._duration, 0.001)
         fraction = max(0.0, min(1.0, elapsed))
-        eased = 1.0 - (1.0 - fraction) ** 2
+        eased = fraction * fraction * (3.0 - 2.0 * fraction)
         target = 1.0 if self._open else 0.0
         self._progress = self._start_progress + (target - self._start_progress) * eased
         return fraction >= 1.0
@@ -198,10 +233,12 @@ class ChannelTray:
         changed = self._open != opened
         self._open = opened
         self._start_progress = self._progress
-        self._started_at = time.monotonic()
         self._duration = ANIMATION_SECONDS * abs((1.0 if opened else 0.0) - self._progress)
         if opened and not self._shown:
-            self._place()
+            # A withdrawn HWND does not feed its native size back into Tk.
+            # Prepare it again on reopen so mapping cannot flash the old size.
+            self._layout_width = None
+            self._place(refresh=True)
             if self._native:
                 # Map without activation, then restore interactive mouse input.
                 # The overlay's locked style includes WS_EX_NOACTIVATE.
@@ -209,9 +246,15 @@ class ChannelTray:
             self.window.deiconify()
             if self._native:
                 self._native.style(False, self._opacity)
+            # Mapping queues Tk geometry work. Finish it before restoring the
+            # signed native position and starting the clock, so a slow first
+            # layout cannot consume the opening animation or overwrite a frame.
+            self.window.update_idletasks()
+            self._last_placement = None
             self._shown = True
         if changed:
             self.on_open_change(opened)
+        self._started_at = time.monotonic()
         self._tick(self._generation)
 
     def _tick(self, generation):
@@ -225,7 +268,16 @@ class ChannelTray:
                 self.window.withdraw()
                 self._shown = False
             return
-        self._timer = self.window.after(ANIMATION_FRAME_MS, lambda: self._tick(generation))
+        # Rendering time belongs inside the frame budget. Skip missed deadlines
+        # after a busy event loop instead of adding another full frame or trying
+        # to replay frames that can no longer be displayed.
+        now = time.monotonic()
+        frame_seconds = ANIMATION_FRAME_MS / 1000
+        next_frame = math.floor((now - self._started_at) / frame_seconds) + 1
+        deadline = min(self._started_at + next_frame * frame_seconds,
+                       self._started_at + self._duration)
+        delay = max(1, math.ceil((deadline - now) * 1000))
+        self._timer = self.window.after(delay, lambda: self._tick(generation))
 
     def _escape(self, _event=None):
         self._animate_to(False)
@@ -239,6 +291,7 @@ class ChannelTray:
         self._cancel_animation()
         self._open = self._shown = False
         self._progress = 0.0
+        self._last_placement = None
         self.window.withdraw()
         if changed:
             self.on_open_change(False)

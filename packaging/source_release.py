@@ -30,7 +30,7 @@ VERSION = r"(?:0|[1-9][0-9]{0,4})\.(?:0|[1-9][0-9]{0,4})\.(?:0|[1-9][0-9]{0,4})"
 MAX_SOURCE_BYTES = 32 * 1024 * 1024
 FORBIDDEN_PARTS = {".git", ".build", ".build-tools", "release", "dist", "review_tools",
                    "logs", "captures", "models", "__pycache__", "venv", ".venv"}
-TEXT_SUFFIXES = {".py", ".go", ".ps1", ".cmd", ".iss", ".txt", ".md", ".html", ".conf", ".sh", ".json"}
+TEXT_SUFFIXES = {".py", ".go", ".ps1", ".cmd", ".iss", ".isl", ".txt", ".md", ".html", ".conf", ".sh", ".json"}
 
 
 def require(value: bool, message: str) -> None:

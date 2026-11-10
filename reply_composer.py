@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from translator_core import MAX_CHAT_CHARACTERS, OllamaClient, REPLY_LANGUAGES, UNIVERSAL_TRADE_LANGUAGE
+from ui_i18n import LocalizedStringVar, localize_tree, set_message, source_text, tr
 
 
 CHOOSE_LANGUAGE = "Choose language"
@@ -63,14 +64,16 @@ class ReplyComposer:
         self._waiting_reply = None
         self._result_context = None
         self._timer = None
-        self.title = tk.StringVar(master=parent, value="Reply · choose a message above")
+        self.title = LocalizedStringVar(master=parent, value="Reply · choose a message above")
         self.language = tk.StringVar(master=parent, value=CHOOSE_LANGUAGE)
+        self.language_display = tk.StringVar(master=parent, value=tr(CHOOSE_LANGUAGE))
         self.draft = tk.StringVar(master=parent)
         self.output = tk.StringVar(master=parent)
-        self.status = tk.StringVar(master=parent, value="Click Reply, write in English, then press Enter to translate and copy.")
+        self.status = LocalizedStringVar(master=parent, value="Click Reply, write in English, then press Enter to translate and copy.")
         self._build(parent)
         self.draft.trace_add("write", self._draft_changed)
         self._update_actions()
+        localize_tree(self.frame)
         threading.Thread(target=self._worker, daemon=True, name="local-reply-translator").start()
         self._timer = self.root.after(REPLY_EVENT_POLL_MS, self._drain_events)
 
@@ -89,8 +92,8 @@ class ReplyComposer:
         ttk.Label(heading, textvariable=self.title, width=1, anchor="w",
                   font=("Segoe UI", 9, "bold")).grid(row=0, column=0, sticky="ew", padx=(0, 8))
         ttk.Label(heading, text="Reply in", font=("Segoe UI", 9)).grid(row=0, column=1, padx=(0, 5))
-        self.language_box = ttk.Combobox(heading, textvariable=self.language,
-            values=REPLY_LANGUAGES, state="readonly", width=15)
+        self.language_box = ttk.Combobox(heading, textvariable=self.language_display,
+            values=tuple(tr(name) for name in REPLY_LANGUAGES), state="readonly", width=18)
         self.language_box.grid(row=0, column=2, sticky="e")
         self.language_box.bind("<<ComboboxSelected>>", self._language_changed)
 
@@ -140,17 +143,21 @@ class ReplyComposer:
                     self.language.get(), self._recipient))
 
     def _update_actions(self):
-        subject = f"Reply to {self._recipient}" if self._recipient else "Reply"
         language = self.language.get()
         if language in REPLY_LANGUAGES:
-            heading = f"{subject} in {language}"
+            heading = (tr("Reply to {name} in {target}", name=self._recipient, target=tr(language)) if self._recipient
+                       else tr("Reply in {target}", target=tr(language)))
         elif language == DETECTING_LANGUAGE:
-            heading = f"{subject} · detecting language…"
+            heading = (tr("Reply to {name} · detecting language…", name=self._recipient) if self._recipient
+                       else tr("Reply · detecting language…"))
         elif self._record is not None:
-            heading = f"{subject} · choose language"
+            heading = (tr("Reply to {name} · choose language", name=self._recipient) if self._recipient
+                       else tr("Reply · choose language"))
         else:
-            heading = "Reply · choose a message above"
+            heading = tr("Reply · choose a message above")
         self.title.set(heading)
+        if hasattr(self, "language_display"):
+            self.language_display.set(tr(language))
         valid = (self.connected and self.language.get() in (*REPLY_LANGUAGES, DETECTING_LANGUAGE)
                  and bool(self.draft.get().strip()) and self._translating is None
                  and self._waiting_reply is None)
@@ -172,8 +179,10 @@ class ReplyComposer:
         self._record = record
         if record.source_language in REPLY_LANGUAGES:
             self.language.set(record.source_language)
-            self.status.set(f"Reply in {record.source_language}. Press Enter to translate and copy." if self.connected
-                            else "Local model is offline. Reconnect to translate your reply.")
+            if self.connected:
+                set_message(self.status, "Reply in {target}. Press Enter to translate and copy.", target=tr(record.source_language))
+            else:
+                self.status.set("Local model is offline. Reconnect to translate your reply.")
         elif record.source_language in ("Unknown", UNIVERSAL_TRADE_LANGUAGE):
             self.language.set(CHOOSE_LANGUAGE)
             self.status.set("Universal trade message. Choose a reply language, then press Enter to translate and copy."
@@ -212,10 +221,21 @@ class ReplyComposer:
     def _language_changed(self, _event=None):
         if self._closed:
             return
+        if hasattr(self, "language_display"):
+            canonical = source_text(self.language_display.get())
+            if canonical in REPLY_LANGUAGES:
+                self.language.set(canonical)
         self._invalidate_selection()
-        self.status.set(f"Reply language: {self.language.get()}. Press Enter to translate and copy.")
+        set_message(self.status, "Reply language: {target}. Press Enter to translate and copy.", target=tr(self.language.get()))
         self._update_actions()
         self.input.focus_set()
+
+    def refresh_language(self):
+        """Refresh labels while preserving the draft, result and pending job."""
+        localize_tree(self.frame)
+        self.language_box.configure(values=tuple(tr(name) for name in REPLY_LANGUAGES))
+        self.status.refresh_language()
+        self._update_actions()
 
     def _draft_changed(self, *_args):
         if self._closed:
@@ -255,7 +275,7 @@ class ReplyComposer:
             self._translating = (self._selection, self._revision)
             self._queue_latest(ReplyJob("translate", self._selection, self._revision, text, target,
                                        recipient=self._recipient))
-            self.status.set(f"Translating into {target}… The result will be copied automatically.")
+            set_message(self.status, "Translating into {target}… The result will be copied automatically.", target=tr(target))
         self._update_actions()
         return "break"
 
@@ -273,9 +293,11 @@ class ReplyComposer:
         except tk.TclError:
             self.status.set("Could not copy. Select the translated text and copy it manually.")
         else:
-            copied = (f"Copied whisper to {self._recipient} in {self.language.get()}." if self._recipient
-                      else f"Copied in {self.language.get()}.")
-            self.status.set(copied + " Paste it into the game when you’re ready.")
+            if self._recipient:
+                set_message(self.status, "Copied whisper to {name} in {target}. Paste it into the game when you’re ready.",
+                            name=self._recipient, target=tr(self.language.get()))
+            else:
+                set_message(self.status, "Copied in {target}. Paste it into the game when you’re ready.", target=tr(self.language.get()))
 
     def clear_selection(self):
         if self._closed:
@@ -344,10 +366,10 @@ class ReplyComposer:
                 self._waiting_reply = None
                 if error:
                     self.language.set(CHOOSE_LANGUAGE)
-                    self.status.set("Could not identify the language. Choose it manually. " + error)
+                    set_message(self.status, "Could not identify the language. Choose it manually. {error}", error=error)
                 elif value in REPLY_LANGUAGES:
                     self.language.set(value)
-                    self.status.set(f"Detected {value}. You can change the language if needed.")
+                    set_message(self.status, "Detected {target}. You can change the language if needed.", target=tr(value))
                 else:
                     self.language.set(CHOOSE_LANGUAGE)
                     self.status.set("Language is unclear. Choose it manually before translating your reply.")
@@ -363,7 +385,7 @@ class ReplyComposer:
                 self._translating = None
                 if error or not isinstance(value, str) or not value.strip():
                     self._clear_output()
-                    self.status.set("Reply translation failed. " + (error or "The local model returned no text."))
+                    set_message(self.status, "Reply translation failed. {error}", error=error or tr("The local model returned no text."))
                 elif any((ord(char) < 32 and not char.isspace()) or ord(char) == 127 for char in value):
                     # Whitespace is flattened below, but invisible NUL/ESC and
                     # editing controls must never be copied into the game input.

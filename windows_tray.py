@@ -18,6 +18,8 @@ import math
 import os
 import threading
 
+from ui_i18n import tr
+
 
 # Use pointer-sized message parameters/results and fixed-width Win32 integers.
 UINT = ctypes.c_uint32
@@ -105,7 +107,7 @@ class _Windows:
     """Declare the exact native ABI; construction alone does not create UI."""
     def __init__(self):
         if os.name != "nt":
-            raise OSError("The notification area is available only on Windows.")
+            raise OSError(tr("The notification area is available only on Windows."))
         self.user = ctypes.WinDLL("user32.dll", use_last_error=True)
         self.shell = ctypes.WinDLL("shell32.dll", use_last_error=True)
         self.kernel = ctypes.WinDLL("kernel32.dll", use_last_error=True)
@@ -197,7 +199,7 @@ class NativeTray:
                 self._thread = None
                 failure = exc
         if failure is not None:
-            self._report_error("The notification-area worker could not start.")
+            self._report_error(tr("The notification-area worker could not start."))
 
     def is_alive(self):
         """Report actual worker lifetime, including final native cleanup."""
@@ -239,9 +241,9 @@ class NativeTray:
             try:
                 if not api.PostMessageW(hwnd, WM_CLOSE, 0, 0):
                     if not api.PostThreadMessageW(thread_id, WM_QUIT, 0, 0):
-                        self._report_error("Windows could not request notification-area cleanup.")
+                        self._report_error(tr("Windows could not request notification-area cleanup."))
             except Exception:
-                self._report_error("Windows could not request notification-area cleanup.")
+                self._report_error(tr("Windows could not request notification-area cleanup."))
 
     def _emit(self, event, message=None):
         # A failed caller callback must not escape a ctypes WNDPROC or leave a
@@ -262,11 +264,11 @@ class NativeTray:
 
     def _add_icon(self):
         if not self._api.Shell_NotifyIconW(NIM_ADD, ctypes.byref(self._notify)):
-            raise OSError("Windows could not add the notification-area icon.")
+            raise OSError(tr("Windows could not add the notification-area icon."))
         self._icon_added = True
         self._notify.uVersion = NOTIFYICON_VERSION_4
         if not self._api.Shell_NotifyIconW(NIM_SETVERSION, ctypes.byref(self._notify)):
-            raise OSError("Windows could not enable notification-area controls.")
+            raise OSError(tr("Windows could not enable notification-area controls."))
 
     def _remove_icon(self):
         if self._icon_added:
@@ -281,16 +283,16 @@ class NativeTray:
         if self._menu is None:
             self._menu = api.CreatePopupMenu()
             if not self._menu:
-                raise OSError("Windows could not create the notification-area menu.")
-            for command, label in ((OPEN_COMMAND, "Open translator"), (EXIT_COMMAND, "Exit")):
+                raise OSError(tr("Windows could not create the notification-area menu."))
+            for command, label in ((OPEN_COMMAND, tr("Open translator")), (EXIT_COMMAND, tr("Exit"))):
                 if not api.AppendMenuW(self._menu, MF_STRING, command, label):
-                    raise OSError("Windows could not create the notification-area menu controls.")
+                    raise OSError(tr("Windows could not create the notification-area menu controls."))
         x = ctypes.c_int16(position & 0xFFFF).value
         y = ctypes.c_int16((position >> 16) & 0xFFFF).value
         if (x, y) == (-1, -1):
             point = POINT()
             if not api.GetCursorPos(ctypes.byref(point)):
-                raise OSError("Windows could not position the notification-area menu.")
+                raise OSError(tr("Windows could not position the notification-area menu."))
             x, y = point.x, point.y
         # Microsoft requires foreground ownership, then WM_NULL after dismissal,
         # so clicking elsewhere dismisses the menu and a second opening works.
@@ -315,17 +317,17 @@ class NativeTray:
         try:
             if message == WM_CLOSE:
                 if not self._stop.is_set():
-                    self._report_error("The notification-area controls closed unexpectedly.")
+                    self._report_error(tr("The notification-area controls closed unexpectedly."))
                 self._stop.set()
                 if self._menu_open:
                     self._api.EndMenu()
                 self._remove_icon()
                 if not self._api.DestroyWindow(hwnd):
-                    raise OSError("Windows could not close the notification-area receiver.")
+                    raise OSError(tr("Windows could not close the notification-area receiver."))
                 return 0
             if message == WM_DESTROY:
                 if not self._stop.is_set():
-                    self._report_error("The notification-area controls closed unexpectedly.")
+                    self._report_error(tr("The notification-area controls closed unexpectedly."))
                 self._stop.set()
                 self._remove_icon()
                 with self._lock:
@@ -374,14 +376,14 @@ class NativeTray:
                 return
             self._instance = api.GetModuleHandleW(None)
             if not self._instance:
-                raise OSError("Windows could not identify the notification-area module.")
+                raise OSError(tr("Windows could not identify the notification-area module."))
             self._icon = api.LoadImageW(None, self.icon_path, IMAGE_ICON, 0, 0,
                                        LR_LOADFROMFILE | LR_DEFAULTSIZE)
             if not self._icon:
-                raise OSError("The translator notification-area icon could not be loaded.")
+                raise OSError(tr("The translator notification-area icon could not be loaded."))
             self._taskbar_created = api.RegisterWindowMessageW("TaskbarCreated")
             if not self._taskbar_created:
-                raise OSError("Windows could not register notification-area recovery.")
+                raise OSError(tr("Windows could not register notification-area recovery."))
             self._wndproc_ref = WNDPROC(self._window_proc)
             window_class = WNDCLASSW()
             window_class.lpfnWndProc = self._wndproc_ref
@@ -389,11 +391,11 @@ class NativeTray:
             window_class.lpszClassName = self._class_name
             self._class_atom = api.RegisterClassW(ctypes.byref(window_class))
             if not self._class_atom:
-                raise OSError("Windows could not register the notification-area receiver.")
+                raise OSError(tr("Windows could not register the notification-area receiver."))
             hwnd = api.CreateWindowExW(WS_EX_TOOLWINDOW, self._class_name, "", WS_POPUP,
                                        0, 0, 0, 0, None, None, self._instance, None)
             if not hwnd:
-                raise OSError("Windows could not create the notification-area receiver.")
+                raise OSError(tr("Windows could not create the notification-area receiver."))
             with self._lock:
                 self._hwnd = hwnd
             self._notify = NOTIFYICONDATAW()
@@ -413,10 +415,10 @@ class NativeTray:
             while not self._stop.is_set():
                 result = api.GetMessageW(ctypes.byref(message), None, 0, 0)
                 if result == -1:
-                    raise OSError("The notification-area message loop failed.")
+                    raise OSError(tr("The notification-area message loop failed."))
                 if result == 0:
                     if not self._stop.is_set():
-                        raise OSError("The notification-area controls stopped unexpectedly.")
+                        raise OSError(tr("The notification-area controls stopped unexpectedly."))
                     break
                 api.TranslateMessage(ctypes.byref(message))
                 api.DispatchMessageW(ctypes.byref(message))
@@ -450,10 +452,10 @@ class NativeTray:
             try:
                 if action() == 0:
                     self._cleanup_failed = True
-                    self._report_error("Windows could not finish notification-area cleanup.")
+                    self._report_error(tr("Windows could not finish notification-area cleanup."))
             except Exception:
                 self._cleanup_failed = True
-                self._report_error("Windows could not finish notification-area cleanup.")
+                self._report_error(tr("Windows could not finish notification-area cleanup."))
         with self._lock:
             self._hwnd = None
         self._menu = self._icon = None

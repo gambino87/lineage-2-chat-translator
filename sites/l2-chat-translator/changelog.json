@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.8.0",
+    "changes": [
+      "Added interface translations for English, Spanish, Brazilian Portuguese, Russian, Polish, German, French, Turkish, Korean, Japanese and Simplified Chinese across the installer, launcher and chat overlay.",
+      "Choose your language before the installer begins. A language selector stays visible at the top of the launcher; changes apply immediately to the launcher and overlay and are remembered for future launches.",
+      "Interface language is separate from the chat translation target. Changing menus does not change translated chat or reply content.",
+      "Matched Whisper chat and its filter labels to the in-game bright magenta color.",
+      "Smoothed opening and closing of the Channels drawer, with steadier frame timing and gentler motion."
+    ]
+  },
+  {
     "version": "1.7.16",
     "changes": [
       "Improved English translations of mixed English/PT-BR stream promotions ending in 'só vem o pai tá on' ('come join me, I'm live'), including unaccented forms. This improvement is limited to promotional endings."

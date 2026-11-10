@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import ttk
 
 import app_updater
+from ui_i18n import LocalizedStringVar, localize_tree, set_message, tr
 
 CHECK_INTERVAL_SECONDS = 15 * 60
 EVENT_POLL_MS = 100
@@ -38,11 +39,13 @@ class UpdateControls:
         self.frame.columnconfigure(1, weight=1)
         ttk.Label(self.frame, text="Updates", foreground=foreground).grid(
             row=0, column=0, sticky="nw", padx=(0, 12), pady=5)
-        self.status = tk.StringVar(master=self.frame, value=f"v{current_version} · Not checked yet")
+        self.status = LocalizedStringVar(master=self.frame)
+        set_message(self.status, "v{version} · Not checked yet", version=current_version)
         ttk.Label(self.frame, textvariable=self.status, foreground=muted,
                   wraplength=450, justify="left").grid(row=0, column=1, sticky="w", padx=(0, 8))
         self.button = ttk.Button(self.frame, text="Check for updates", command=self._clicked)
         self.button.grid(row=0, column=2, sticky="ne")
+        localize_tree(self.frame)
         self._schedule()
 
     def settings_shown(self):
@@ -58,7 +61,7 @@ class UpdateControls:
             return
         self._release = None
         self._can_install = False
-        generation = self._begin("check", "Checking…", f"v{self.current_version} · Checking for updates…")
+        generation = self._begin("check", "Checking…", "v{version} · Checking for updates…", version=self.current_version)
 
         def work():
             try:
@@ -82,7 +85,7 @@ class UpdateControls:
         release = self._release
         if self._closed or self.busy or release is None:
             return
-        generation = self._begin("prepare", "Downloading…", f"Downloading v{release.version}…")
+        generation = self._begin("prepare", "Downloading…", "Downloading v{version}…", version=release.version)
 
         def work():
             last_percent = None
@@ -107,12 +110,12 @@ class UpdateControls:
 
         self._start_worker(work, generation)
 
-    def _begin(self, operation, button_text, status):
+    def _begin(self, operation, button_text, status, **values):
         self._generation += 1
         self.busy = True
         self._operation = operation
-        self.button.configure(text=button_text, state="disabled", style="TButton")
-        self.status.set(status)
+        self.button.configure(text=tr(button_text), state="disabled", style="TButton")
+        set_message(self.status, status, **values)
         return self._generation
 
     def _start_worker(self, work, generation):
@@ -144,14 +147,23 @@ class UpdateControls:
 
     @staticmethod
     def _error_message(value):
-        return " ".join(str(value).split())[:MAX_ERROR_MESSAGE_CHARS] or "Please try again."
+        return " ".join(tr(str(value)).split())[:MAX_ERROR_MESSAGE_CHARS] or tr("Please try again.")
 
     def _idle_button(self):
         if self._release is not None and self._can_install:
-            self.button.configure(text=f"Install v{self._release.version} & restart",
+            self.button.configure(text=tr("Install v{version} & restart", version=self._release.version),
                                   state="normal", style="Accent.TButton")
         else:
-            self.button.configure(text="Check for updates", state="normal", style="TButton")
+            self.button.configure(text=tr("Check for updates"), state="normal", style="TButton")
+
+    def refresh_language(self):
+        localize_tree(self.frame)
+        self.status.refresh_language()
+        if self.busy:
+            key = {"check": "Checking…", "prepare": "Downloading…", "handoff": "Installing…"}.get(self._operation, "Checking…")
+            self.button.configure(text=tr(key))
+        else:
+            self._idle_button()
 
     def _schedule(self):
         if not self._closed:
@@ -179,24 +191,27 @@ class UpdateControls:
                 self._operation = None
                 self._last_success = time.monotonic()
                 if self._release is None:
-                    self.status.set(f"v{self.current_version} · Up to date")
+                    set_message(self.status, "v{version} · Up to date", version=self.current_version)
                 elif self._can_install:
-                    self.status.set(f"v{self.current_version} · Update v{self._release.version} available. Models and settings will be kept.")
+                    set_message(self.status, "v{version} · Update v{release} available. Models and settings will be kept.",
+                                version=self.current_version, release=self._release.version)
                 else:
-                    self.status.set(f"v{self.current_version} · Update v{self._release.version} available. "
-                                    + self._error_message(reason or "Install the packaged app to use automatic updates."))
+                    set_message(self.status, "v{version} · Update v{release} available. {reason}",
+                                version=self.current_version, release=self._release.version,
+                                reason=self._error_message(reason or tr("Install the packaged app to use automatic updates.")))
                 self._idle_button()
             elif kind == "progress" and self._operation == "prepare":
                 version = self._release.version
-                self.status.set(f"Downloading v{version}…" + (f" {value}%" if value is not None else ""))
+                set_message(self.status, "Downloading v{version}… {progress}", version=version,
+                            progress=f"{value}%" if value is not None else "")
             elif kind == "error" and self._operation == value[0]:
                 operation, message = value
                 self.busy = False
                 self._operation = None
                 if operation == "check":
                     self._last_success = None
-                self.status.set(("Could not check for updates: " if operation == "check" else "Update was not installed: ")
-                                + self._error_message(message))
+                set_message(self.status, "Could not check for updates: {error}" if operation == "check" else "Update was not installed: {error}",
+                            error=self._error_message(message))
                 self._idle_button()
             elif kind == "prepared":
                 if self._operation != "prepare":
@@ -205,7 +220,7 @@ class UpdateControls:
                 self._operation = "handoff"
                 self._handed_off = value
                 self.status.set("Update verified. Closing the translator to install and restart…")
-                self.button.configure(text="Installing…", state="disabled", style="TButton")
+                self.button.configure(text=tr("Installing…"), state="disabled", style="TButton")
                 try:
                     self.on_ready(value)
                 except Exception as exc:
@@ -214,7 +229,7 @@ class UpdateControls:
                     if not self._closed:
                         self.busy = False
                         self._operation = None
-                        self.status.set("Update was not installed: " + self._error_message(exc))
+                        set_message(self.status, "Update was not installed: {error}", error=self._error_message(exc))
                         self._idle_button()
         self._schedule()
 

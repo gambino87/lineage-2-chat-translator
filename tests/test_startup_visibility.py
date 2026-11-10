@@ -19,10 +19,11 @@ class StartupVisibilityTests(unittest.TestCase):
         setup.write_json(self.location, {"data_root": str(Path(folder) / "models")})
         self.enterContext(patch.object(setup, "SETTINGS_PATH", self.settings))
         self.enterContext(patch.object(setup, "RUNTIME_PATH", self.location))
-        def variable(value=""):
+        def variable(value="", master=None):
             return Mock(get=Mock(return_value=value))
         self.enterContext(patch.object(setup.tk, "StringVar", side_effect=variable))
         self.enterContext(patch.object(setup.tk, "BooleanVar", side_effect=variable))
+        self.enterContext(patch.object(setup, "LocalizedStringVar", side_effect=variable))
         self.build = self.enterContext(patch.object(setup.SetupWindow, "_build"))
         self.start_frame = self.enterContext(patch.object(setup.tk, "Frame"))
         self.start_frame.return_value.winfo_reqwidth.return_value = 440
@@ -117,7 +118,7 @@ class StartupVisibilityTests(unittest.TestCase):
         window._setup_frame.pack.assert_called_once_with(fill="both", expand=True)
         self.start_progress.return_value.stop.assert_called_once()
         window.root.resizable.assert_called_with(True, True)
-        window.root.geometry.assert_called_with("740x640")
+        window.root.geometry.assert_called_with("740x700")
         window.root.destroy.assert_not_called()
         self.assertFalse(window.launch_requested)
         self.runtime.return_value.ensure_runtime.assert_not_called()

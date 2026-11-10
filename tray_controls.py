@@ -12,6 +12,7 @@ import tkinter as tk
 
 from app_icon import ICON
 from windows_tray import NativeTray
+from ui_i18n import tr
 
 TRAY_POLL_INTERVAL_MS = 100
 TRAY_SHUTDOWN_SECONDS = 5.0
@@ -159,7 +160,7 @@ class TrayControls:
         try:
             self.restore()
         finally:
-            self.on_error("Minimize to tray unavailable: " + message)
+            self.on_error(tr("Minimize to tray unavailable: {error}", error=tr(message)))
 
     def close(self):
         """Stop accepting events; native cleanup completes on its owner thread."""

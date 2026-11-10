@@ -33,6 +33,8 @@ SOURCES = (
     "app_updater.py", "update_trust.py", "update_controls.py", "installation_cleanup.py",
     "local_service.py", "runtime_integrity.py", "secure_storage.py", "update_network.py",
     "windows_tray.py", "tray_controls.py",
+    "ui_i18n.py", "ui_strings_installer.py", "ui_strings_client.py", "ui_strings_overlay.py",
+    "ui_strings_runtime.py",
 )
 ASSETS = ("assets/L2CT.ico", "assets/L2CT.png", "assets/item_catalog.json", "assets/ITEM-CATALOG-NOTICE.txt",
           "assets/apply-update.ps1", "assets/cleanup-program-files.ps1", "assets/protect-install-directory.ps1",

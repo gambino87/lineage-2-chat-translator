@@ -275,7 +275,7 @@ class InstallerConfigurationTests(unittest.TestCase):
                 window.root.destroy.assert_not_called()
 
     def test_constructor_normalizes_invalid_saved_logs_before_folder_initialization(self):
-        def variable(value=""):
+        def variable(value="", master=None):
             result = Mock()
             result.get.return_value = value
             return result
@@ -284,6 +284,7 @@ class InstallerConfigurationTests(unittest.TestCase):
                 setup.write_json(self.settings, {"model": DEFAULT_MODEL, "log_path": log})
                 with patch.object(setup, "SETTINGS_PATH", self.settings), patch.object(setup, "RUNTIME_PATH", self.location), \
                      patch.object(setup.tk, "StringVar", side_effect=variable), patch.object(setup.tk, "BooleanVar", side_effect=variable), \
+                     patch.object(setup, "LocalizedStringVar", side_effect=variable), \
                      patch.object(setup.SetupWindow, "_build"), patch.object(setup.threading, "Thread") as worker, \
                      patch.object(setup.messagebox, "showerror") as error:
                     window = setup.SetupWindow(Mock(), automatic=True)

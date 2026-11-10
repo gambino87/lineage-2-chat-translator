@@ -1,0 +1,9 @@
+﻿LINEAGE 2 CHAT TRANSLATOR
+
+Windows 10/11 de 64 bits. No necesitas instalar Python por separado.
+
+La configuración descarga el entorno local y el modelo elegido. Lee y acepta su licencia antes de descargar. Elige una carpeta de modelos y la carpeta system de Lineage II.
+
+La traducción del chat se realiza localmente. El idioma de la interfaz es independiente del idioma de traducción y se cambia en la parte superior del lanzador.
+
+La desinstalación elimina los modelos registrados, el entorno, los ajustes y los registros de esta aplicación. Se conservan los archivos del juego Lineage II.

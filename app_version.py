@@ -1,3 +1,3 @@
 """Version shared by the application and distribution tooling."""
 
-VERSION = "1.7.16"
+VERSION = "1.8.0"

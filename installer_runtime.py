@@ -27,6 +27,8 @@ from typing import Callable
 from urllib import error, request
 import zipfile
 
+from ui_i18n import tr
+
 from local_service import ServiceIdentityError, get_session, register_session, forget_session
 from secure_storage import StorageError, guard_private_tree, safe_remove_tree
 from runtime_integrity import (BACKEND_VERSION, pin_runtime, verified_runtime,
@@ -112,7 +114,7 @@ MODEL_CATALOG = {
 def required_disk_bytes(tag: str, *, include_runtime: bool = True) -> int:
     """Conservative fresh-setup free-space estimate; model downloads vary."""
     if tag not in MODEL_CATALOG:
-        raise SetupError("Choose a supported model from the model list.")
+        raise SetupError(tr('Choose a supported model from the model list.'))
     model_with_margin = MODEL_CATALOG[tag]["download_bytes"] + MODEL_FREE_SPACE_MARGIN_BYTES
     return max(RUNTIME_PEAK_BYTES, model_with_margin + RUNTIME_INSTALLED_ALLOWANCE_BYTES) if include_runtime else model_with_margin
 
@@ -147,9 +149,9 @@ class _NetworkOperation:
 
     def check(self):
         if self.cancel_event is not None and self.cancel_event.is_set():
-            raise SetupCancelled("Setup cancelled. Downloaded model layers are kept for a later retry.")
+            raise SetupCancelled(tr("Setup cancelled. Downloaded model layers are kept for a later retry."))
         if time.monotonic() >= self.deadline:
-            raise SetupError(self.description + " exceeded its time budget. Retry setup to resume downloaded model layers.")
+            raise SetupError(tr(self.description) + tr(' exceeded its time budget. Retry setup to resume downloaded model layers.'))
 
     def remaining(self):
         self.check()
@@ -277,13 +279,13 @@ class _ControlledHTTPSHandler(request.HTTPSHandler):
 
 class _NoRedirect(request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise SetupError("The local service tried to redirect a request. Setup stopped.")
+        raise SetupError(tr('The local service tried to redirect a request. Setup stopped.'))
 
 
 class _HttpsRedirect(request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         if not newurl.lower().startswith("https://"):
-            raise SetupError("The runtime download tried to leave HTTPS. Setup stopped.")
+            raise SetupError(tr('The runtime download tried to leave HTTPS. Setup stopped.'))
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
@@ -309,7 +311,7 @@ def _service_environment(models_dir: Path, service_home: Path, credential: str) 
         buffer = ctypes.create_unicode_buffer(WINDOWS_PATH_BUFFER_CHARS)
         length = function(buffer, len(buffer))
         if not 0 < length < len(buffer):
-            raise SetupError("Windows could not provide the protected service search paths.")
+            raise SetupError(tr('Windows could not provide the protected service search paths.'))
         directories.append(buffer.value)
     environment = {key: value for key, value in os.environ.items()
                    if not key.upper().startswith(("OLLAMA_", "GGML_", "LLAMA_", "L2CT_"))
@@ -325,7 +327,7 @@ def _service_environment(models_dir: Path, service_home: Path, credential: str) 
 
 def _model_tag(tag: str) -> str:
     if not isinstance(tag, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*:[A-Za-z0-9][A-Za-z0-9_.-]*", tag) or "cloud" in tag.lower():
-        raise SetupError("Choose a downloaded local model from the model list.")
+        raise SetupError(tr('Choose a downloaded local model from the model list.'))
     return tag
 
 
@@ -357,13 +359,13 @@ def _extract_archive(archive: Path, destination: Path, check: Callable[[], None]
                     or stat.S_ISLNK(mode)
                     or any(PureWindowsPath(part).is_reserved() or part.endswith((".", " "))
                            for part in parts if part not in ("", "."))):
-                raise SetupError("The runtime archive contains an unsafe path; no runtime was installed.")
+                raise SetupError(tr('The runtime archive contains an unsafe path; no runtime was installed.'))
             key = str(target).casefold()
             if key in seen:
-                raise SetupError("The runtime archive contains duplicate paths.")
+                raise SetupError(tr('The runtime archive contains duplicate paths.'))
             seen.add(key)
         if sum(item.file_size for item in members) > MAX_EXTRACTED_RUNTIME_BYTES:
-            raise SetupError("The runtime archive is larger than the supported installation size.")
+            raise SetupError(tr('The runtime archive is larger than the supported installation size.'))
         for member in members:
             if check is not None:
                 check()
@@ -383,7 +385,7 @@ class RuntimeManager:
     def __init__(self, data_root: str | Path, progress: Callable[[str], None] | None = None,
                  *, cancel_event: threading.Event | None = None):
         if not str(data_root).strip():
-            raise SetupError("Choose a folder for the runtime and model files.")
+            raise SetupError(tr('Choose a folder for the runtime and model files.'))
         # Keep the lexical path until the no-follow storage guard checks every
         # component; resolve() here would hide a junction chosen by another user.
         self.data_root = Path(os.path.abspath(Path(data_root).expanduser()))
@@ -429,7 +431,7 @@ class RuntimeManager:
 
     def check_cancelled(self):
         if not self._ignore_cancel and self.cancel_event is not None and self.cancel_event.is_set():
-            raise SetupCancelled("Setup cancelled. Downloaded model layers are kept for a later retry.")
+            raise SetupCancelled(tr("Setup cancelled. Downloaded model layers are kept for a later retry."))
 
     @contextmanager
     def _network_scope(self, seconds, description):
@@ -453,7 +455,7 @@ class RuntimeManager:
             self.check_cancelled()
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise SetupError("Setup verification exceeded its time budget. Retry setup.")
+                raise SetupError(tr('Setup verification exceeded its time budget. Retry setup.'))
             return self._request_api(path, payload, timeout=min(timeout, remaining))
         client._request = local_request
         try:
@@ -486,7 +488,7 @@ class RuntimeManager:
                     output.write(block)
                     digest.update(block)
             if digest.hexdigest() != expected["sha256"] or temporary.stat().st_size != expected["bytes"]:
-                raise SetupError("The protected runtime copy failed verification.")
+                raise SetupError(tr('The protected runtime copy failed verification.'))
             temporary.replace(directory / "ollama.exe")
         finally:
             if temporary.exists():
@@ -497,13 +499,13 @@ class RuntimeManager:
         self.data_root.mkdir(parents=True, exist_ok=True)
         free = shutil.disk_usage(self.data_root).free
         if free < required:
-            raise SetupError(f"This storage drive has {free / GIB:.1f} GB free; setup needs approximately {required / GIB:.1f} GB free. Choose another storage folder or free space, then retry.")
+            raise SetupError(tr('This storage drive has {value0:.1f} GB free; setup needs approximately {value1:.1f} GB free. Choose another storage folder or free space, then retry.', value0=free / GIB, value1=required / GIB))
 
     def _check_setup_child(self, path: Path, *, tree: bool = False) -> None:
         """Verify this exact setup-owned child before a write or removal."""
         if (self.data_root.resolve() != self.data_root or _is_reparse_path(self.data_root)
                 or path.parent != self.data_root or path.resolve() != path or _is_reparse_path(path)):
-            raise SetupError("The setup temporary path changed or contains a link. No temporary files were removed.")
+            raise SetupError(tr('The setup temporary path changed or contains a link. No temporary files were removed.'))
         if tree and path.exists():
             # Preflight the whole current-invocation staging tree. Never follow
             # a junction into another folder while cleaning up a failed extract.
@@ -512,7 +514,7 @@ class RuntimeManager:
                 directory = pending.pop()
                 for child in directory.iterdir():
                     if _is_reparse_path(child) or not child.resolve().is_relative_to(path):
-                        raise SetupError("The setup staging folder contains a link. No staging files were removed.")
+                        raise SetupError(tr('The setup staging folder contains a link. No staging files were removed.'))
                     if child.is_dir():
                         pending.append(child)
 
@@ -523,9 +525,9 @@ class RuntimeManager:
         if not archive.exists():
             return {"removed": [], "bytes_reclaimed": 0}
         if not self._verified_runtime():
-            raise SetupError("The installed runtime could not be verified before cleaning up its download.")
+            raise SetupError(tr('The installed runtime could not be verified before cleaning up its download.'))
         if not archive.is_file() or _sha256(archive, self.check_cancelled) != ARCHIVE_SHA256:
-            self.progress("Preserved an unverified file at the runtime archive path; it was not treated as a setup download.")
+            self.progress(tr('Preserved an unverified file at the runtime archive path; it was not treated as a setup download.'))
             return {"removed": [], "bytes_reclaimed": 0}
         size = archive.stat().st_size
         try:
@@ -533,8 +535,8 @@ class RuntimeManager:
             self._check_setup_child(archive)
             archive.unlink()
         except OSError as exc:
-            raise SetupError("The runtime is installed, but its temporary download could not be removed. Retry setup to finish cleanup.") from exc
-        self.progress("Removed the verified runtime download archive.")
+            raise SetupError(tr('The runtime is installed, but its temporary download could not be removed. Retry setup to finish cleanup.')) from exc
+        self.progress(tr('Removed the verified runtime download archive.'))
         return {"removed": [archive.name], "bytes_reclaimed": size}
 
     @contextmanager
@@ -552,7 +554,7 @@ class RuntimeManager:
         self._check_setup_child(archive)
         self._check_setup_child(part)
         part_opened = False
-        self.progress("Downloading the official portable Ollama runtime (about 1.6 GB)…")
+        self.progress(tr('Downloading the official portable Ollama runtime (about 1.6 GB)…'))
         deadline = time.monotonic() + RUNTIME_DOWNLOAD_BUDGET_SECONDS
         try:
             req = request.Request(ARCHIVE_URL, headers={"User-Agent": "L2ChatTranslator-Setup/1"})
@@ -561,7 +563,7 @@ class RuntimeManager:
                 length = source.headers.get("Content-Length")
                 if length is not None and (len(length) > 20 or not length.isdecimal()
                                            or not 0 < int(length) <= MAX_RUNTIME_ARCHIVE_BYTES):
-                    raise SetupError("The runtime download declared an invalid or oversized length. No runtime was installed.")
+                    raise SetupError(tr('The runtime download declared an invalid or oversized length. No runtime was installed.'))
                 total = int(length) if length is not None else 0
                 downloaded = 0
                 last_bucket = -1
@@ -569,7 +571,7 @@ class RuntimeManager:
                 while True:
                     self.check_cancelled()
                     if time.monotonic() >= deadline:
-                        raise SetupError("The runtime download exceeded its time budget. Retry setup on a faster connection.")
+                        raise SetupError(tr('The runtime download exceeded its time budget. Retry setup on a faster connection.'))
                     # read1 returns after an underlying read so a slow drip of
                     # bytes cannot hide the overall budget inside read(n).
                     block = getattr(source, "read1", source.read)(TRANSFER_CHUNK_BYTES)
@@ -577,21 +579,21 @@ class RuntimeManager:
                         break
                     downloaded += len(block)
                     if downloaded > MAX_RUNTIME_ARCHIVE_BYTES or (total and downloaded > total):
-                        raise SetupError("The runtime download exceeded its supported size. No runtime was installed.")
+                        raise SetupError(tr('The runtime download exceeded its supported size. No runtime was installed.'))
                     output.write(block)
                     digest.update(block)
                     bucket = int(100 * downloaded / total) // DOWNLOAD_PROGRESS_PERCENT_STEP if total else downloaded // DOWNLOAD_PROGRESS_BYTES
                     if bucket != last_bucket:
-                        self.progress(f"Runtime download: {downloaded / DECIMAL_MB:.0f} MB" + (f" / {total / DECIMAL_MB:.0f} MB" if total else ""))
+                        self.progress(tr('Runtime download: {value0:.0f} MB', value0=downloaded / DECIMAL_MB) + (tr(' / {value0:.0f} MB', value0=total / DECIMAL_MB) if total else ""))
                         last_bucket = bucket
                 if total and downloaded != total:
-                    raise SetupError("The runtime download was incomplete. Retry setup.")
+                    raise SetupError(tr('The runtime download was incomplete. Retry setup.'))
                 if digest.hexdigest() != ARCHIVE_SHA256:
-                    raise SetupError("The runtime download failed SHA-256 verification. No runtime was installed; retry setup.")
+                    raise SetupError(tr('The runtime download failed SHA-256 verification. No runtime was installed; retry setup.'))
             self.check_cancelled()
             part.replace(archive)
         except (error.URLError, TimeoutError, OSError, HTTPException) as exc:
-            raise SetupError(f"Could not download the runtime: {exc}. Check your connection and retry setup.") from exc
+            raise SetupError(tr('Could not download the runtime: {exc}. Check your connection and retry setup.', exc=exc)) from exc
         finally:
             # Only a partial file opened by this invocation belongs to it.
             # A connection failure before opening must not remove an old file.
@@ -604,15 +606,15 @@ class RuntimeManager:
         self.check_cancelled()
         self._protect_storage()
         if self._verified_runtime():
-            self.progress(f"Verified protected Ollama {BACKEND_VERSION} is already installed.")
+            self.progress(tr('Verified protected Ollama {BACKEND_VERSION} is already installed.', BACKEND_VERSION=BACKEND_VERSION))
             if self._runtime_locks is None:
                 self._runtime_locks = pin_runtime(self.runtime_dir, check=self.check_cancelled)
             self.cleanup_installation()
             return self.executable
         if self.runtime_dir.exists():
             if not self._verified_legacy_runtime():
-                raise SetupError(f"An existing runtime at {self.runtime_dir} could not be verified against the trusted file inventory. Choose a new empty storage folder or restore the official runtime files. Setup will not overwrite unknown changes.")
-            self.progress("Upgrading the verified local runtime's connection security; your models are retained…")
+                raise SetupError(tr('An existing runtime at {value0} could not be verified against the trusted file inventory. Choose a new empty storage folder or restore the official runtime files. Setup will not overwrite unknown changes.', value0=self.runtime_dir))
+            self.progress(tr("Upgrading the verified local runtime's connection security; your models are retained…"))
             self._copy_protected_frontend(self.runtime_dir)
             self._runtime_locks = pin_runtime(self.runtime_dir, check=self.check_cancelled)
             self.cleanup_installation()
@@ -622,16 +624,16 @@ class RuntimeManager:
         self._check_setup_child(archive)
         if not archive.is_file() or _sha256(archive, self.check_cancelled) != ARCHIVE_SHA256:
             self._download_runtime(archive)
-        self.progress("Verifying and extracting the runtime and GPU libraries…")
+        self.progress(tr('Verifying and extracting the runtime and GPU libraries…'))
         if _sha256(archive, self.check_cancelled) != ARCHIVE_SHA256:
-            raise SetupError("The runtime archive failed SHA-256 verification.")
+            raise SetupError(tr('The runtime archive failed SHA-256 verification.'))
         staging = Path(tempfile.mkdtemp(prefix=".ollama-stage-", dir=self.data_root)).resolve()
         try:
             self._check_setup_child(staging, tree=True)
             _extract_archive(archive, staging, self.check_cancelled)
             executable = staging / "ollama.exe"
             if not executable.is_file():
-                raise SetupError("The verified archive did not contain ollama.exe.")
+                raise SetupError(tr('The verified archive did not contain ollama.exe.'))
             with pin_runtime(staging, legacy=True, check=self.check_cancelled):
                 pass
             self._copy_protected_frontend(staging)
@@ -642,9 +644,9 @@ class RuntimeManager:
             }
             (staging / "verified-install.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
             if self.runtime_dir.exists():
-                raise SetupError("Another setup created the runtime folder. Retry setup.")
+                raise SetupError(tr('Another setup created the runtime folder. Retry setup.'))
             if staging.parent != self.data_root or self.runtime_dir.parent != self.data_root:
-                raise SetupError("The runtime staging location is invalid.")
+                raise SetupError(tr('The runtime staging location is invalid.'))
             self.check_cancelled()
             staging.rename(self.runtime_dir)
             self._runtime_locks = pin_runtime(self.runtime_dir, check=self.check_cancelled)
@@ -666,7 +668,7 @@ class RuntimeManager:
         """Correlate a held probe socket with its server owner and bind address."""
         self.check_cancelled()
         if os.name != "nt":
-            raise SetupError("Portable runtime setup requires Windows 10 or later (64-bit).")
+            raise SetupError(tr('Portable runtime setup requires Windows 10 or later (64-bit).'))
         deadline = time.monotonic() + timeout
         try:
             with socket.create_connection(("127.0.0.1", PORT), timeout=min(OWNER_PROBE_SECONDS, timeout)) as probe:
@@ -685,11 +687,11 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
                 powershell = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/WindowsPowerShell/v1.0/powershell.exe"
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    raise SetupError("The local service owner check timed out.")
+                    raise SetupError(tr('The local service owner check timed out.'))
                 result = subprocess.run([str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True, encoding="utf-8", timeout=remaining, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
                 self.check_cancelled()
                 if result.returncode != 0:
-                    raise SetupError("Windows could not verify the dedicated local service. Close any other translator instance using this port, then retry.")
+                    raise SetupError(tr('Windows could not verify the dedicated local service. Close any other translator instance using this port, then retry.'))
                 owner = json.loads(result.stdout.lstrip("\ufeff"))
                 # Missing identity is not evidence that the service is unrelated.
                 # Keep it a verification failure so uninstall cannot delete data
@@ -700,16 +702,16 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
                         or not Path(owner["executable"]).is_absolute()
                         or owner.get("address") != "127.0.0.1"
                         or type(owner.get("pid")) is not int or owner["pid"] <= 0):
-                    raise SetupError("Windows returned incomplete or unsafe local service ownership information. No data was deleted.")
+                    raise SetupError(tr('Windows returned incomplete or unsafe local service ownership information. No data was deleted.'))
                 actual = os.path.normcase(str(Path(owner["executable"]).resolve()))
                 expected = os.path.normcase(str(self.executable.resolve()))
                 if actual != expected:
-                    raise ServiceOwnershipMismatch(f"Port {PORT} is occupied by a different service or storage installation. Close that service before selecting this storage folder. No other process was stopped.")
+                    raise ServiceOwnershipMismatch(tr("Port {PORT} is occupied by a different service or storage installation. Close that service before selecting this storage folder. No other process was stopped.", PORT=PORT))
                 return owner
         except SetupError:
             raise
         except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
-            raise SetupError("Could not verify the local Ollama process. Retry setup after closing other translator instances.") from exc
+            raise SetupError(tr('Could not verify the local Ollama process. Retry setup after closing other translator instances.')) from exc
 
     @contextmanager
     def _open_api(self, path: str, payload: dict | None = None, *, method: str | None = None,
@@ -720,7 +722,7 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
         with self._network_scope(budget, "The local service request") as operation:
             session = get_session(ENDPOINT)
             if expected_pid is not None and session.identity.pid != expected_pid:
-                raise SetupError("The dedicated service changed during shutdown. No replacement service was stopped.")
+                raise SetupError(tr('The dedicated service changed during shutdown. No replacement service was stopped.'))
             body = None if payload is None else json.dumps(payload).encode("utf-8")
             req = request.Request(ENDPOINT + path, data=body, method=method, headers={"Content-Type": "application/json"})
             try:
@@ -728,7 +730,7 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
                     yield response
             except (error.URLError, OSError, TimeoutError) as exc:
                 operation.check()
-                raise SetupError(f"The dedicated local service could not complete {path}: {exc}") from exc
+                raise SetupError(tr('The dedicated local service could not complete {path}: {exc}', path=path, exc=exc)) from exc
 
     def _request_api(self, path: str, payload: dict | None = None, *, method: str | None = None,
                      timeout: float = API_TIMEOUT_SECONDS, expected_pid: int | None = None) -> dict:
@@ -737,14 +739,14 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
             with self._open_api(path, payload, method=method, timeout=timeout, expected_pid=expected_pid) as response:
                 data = response.read(MAX_API_RESPONSE_BYTES + 1)
                 if len(data) > MAX_API_RESPONSE_BYTES:
-                    raise SetupError("The local service returned an oversized response.")
+                    raise SetupError(tr('The local service returned an oversized response.'))
                 result = json.loads(data) if data.strip() else {}
         except (ValueError, UnicodeError) as exc:
-            raise SetupError("The local service returned an unreadable response.") from exc
+            raise SetupError(tr('The local service returned an unreadable response.')) from exc
         except (OSError, HTTPException) as exc:
-            raise SetupError(f"The dedicated local service response was interrupted during {path}: {exc}") from exc
+            raise SetupError(tr('The dedicated local service response was interrupted during {path}: {exc}', path=path, exc=exc)) from exc
         if not isinstance(result, dict) or result.get("error"):
-            raise SetupError("The local service reported an error: " + str(result.get("error", "invalid response") if isinstance(result, dict) else "invalid response"))
+            raise SetupError(tr('The local service reported an error: ') + str(result.get("error", "invalid response") if isinstance(result, dict) else "invalid response"))
         return result
 
     def ensure_service(self) -> None:
@@ -756,7 +758,7 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
             elif not self._port_open():
                 # Do not replace the only reference to a partially started
                 # child. Its owner must finish cleanup before another start.
-                raise SetupError("The previous local service is still starting or stopping. Finish local service cleanup before retrying.")
+                raise SetupError(tr('The previous local service is still starting or stopping. Finish local service cleanup before retrying.'))
         # Detect another storage installation before downloading a new runtime.
         # A second check below handles a listener appearing during installation.
         if self._port_open():
@@ -764,19 +766,19 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
             try:
                 get_session(ENDPOINT)
             except ServiceIdentityError as exc:
-                raise SetupError("A previous local service is still running without this launcher's authentication. Close the old translator, or use Stop local service in Configure, then retry.") from exc
+                raise SetupError(tr("A previous local service is still running without this launcher's authentication. Close the old translator, or use Stop local service in Configure, then retry.")) from exc
         self.ensure_runtime()
         if not self._port_open():
             # The listener can disappear while the runtime is being checked.
             # Recheck ownership here too, before replacing the retained handle.
             if self._owned_service is not None:
                 if self._owned_service.poll() is None:
-                    raise SetupError("The previous local service is still starting or stopping. Finish local service cleanup before retrying.")
+                    raise SetupError(tr('The previous local service is still starting or stopping. Finish local service cleanup before retrying.'))
                 self._owned_service = None
             self.logs_dir.mkdir(parents=True, exist_ok=True)
             self.models_dir.mkdir(parents=True, exist_ok=True)
             self.service_home.mkdir(parents=True, exist_ok=True)
-            self.progress("Starting the dedicated local translation service…")
+            self.progress(tr('Starting the dedicated local translation service…'))
             credential = secrets.token_hex(32)
             # Ambient developer settings must not persist chat request bodies or
             # grant arbitrary websites access to the local model. Empty origins
@@ -792,7 +794,7 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
             for _ in range(int(SERVICE_STARTUP_SECONDS / SERVICE_STARTUP_POLL_SECONDS)):
                 self.check_cancelled()
                 if process.poll() is not None:
-                    raise SetupError(f"The local translation service stopped during startup. See {self.logs_dir}.")
+                    raise SetupError(tr('The local translation service stopped during startup. See {value0}.', value0=self.logs_dir))
                 if self._port_open():
                     break
                 if self.cancel_event is None:
@@ -801,10 +803,10 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
                     self.cancel_event.wait(SERVICE_STARTUP_POLL_SECONDS)
             else:
                 process.terminate()
-                raise SetupError(f"The local service did not start within one minute. See {self.logs_dir}.")
+                raise SetupError(tr('The local service did not start within one minute. See {value0}.', value0=self.logs_dir))
         version = self._request_api("/api/version", timeout=10).get("version")
         if version != BACKEND_VERSION:
-            raise SetupError(f"The dedicated service reports version {version}; expected {BACKEND_VERSION}. Close the old service and retry.")
+            raise SetupError(tr('The dedicated service reports version {version}; expected {BACKEND_VERSION}. Close the old service and retry.', version=version, BACKEND_VERSION=BACKEND_VERSION))
 
     def stop_owned_service(self) -> None:
         # Cancellation must never prevent teardown of the child it interrupted.
@@ -832,7 +834,7 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
         if process.poll() is not None:
             self._owned_service = None
             return
-        self.progress("Stopping the local service started by this window…")
+        self.progress(tr('Stopping the local service started by this window…'))
         try:
             if self._port_open():
                 owner = self._verify_owner(timeout=SHUTDOWN_OWNER_CHECK_SECONDS)
@@ -842,16 +844,16 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
             # Unloading is best-effort, including a failed readiness check.
             # The retained child handle remains safe even if the listener is
             # missing, replaced, or cannot be verified for API requests.
-            self.progress("Model unloading did not finish; stopping only the service started by this window.")
+            self.progress(tr('Model unloading did not finish; stopping only the service started by this window.'))
         try:
             if process.poll() is None:
                 process.terminate()
             process.wait(timeout=SERVICE_STOP_SECONDS)
         except (OSError, subprocess.TimeoutExpired) as exc:
             # Keep the handle so closing/retrying can finish the same cleanup.
-            raise SetupError("The local service started by this window has not stopped. Retry local service cleanup.") from exc
+            raise SetupError(tr('The local service started by this window has not stopped. Retry local service cleanup.')) from exc
         self._owned_service = None
-        self.progress("The local service started by this window is stopped.")
+        self.progress(tr('The local service started by this window is stopped.'))
 
     def _terminate_verified_process(self, process_id: int) -> None:
         """Pin a Windows process handle, recheck its image, then terminate it.
@@ -860,7 +862,7 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
         from redirecting the stop operation to a different executable.
         """
         if os.name != "nt":
-            raise SetupError("Stopping the portable local service requires Windows.")
+            raise SetupError(tr('Stopping the portable local service requires Windows.'))
         import ctypes
         from ctypes import wintypes
 
@@ -877,31 +879,31 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
         kernel.CloseHandle.restype = wintypes.BOOL
         handle = kernel.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE | SYNCHRONIZE, False, process_id)
         if not handle:
-            raise SetupError("Windows could not open the verified local service for stopping. Retry after closing the translator.")
+            raise SetupError(tr('Windows could not open the verified local service for stopping. Retry after closing the translator.'))
         try:
             # Explicit stop/uninstall may encounter a legacy service not started
             # by this invocation. Its path alone is insufficient on shared PCs.
             from local_service import _user_sid
             current = kernel.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, os.getpid())
             if not current:
-                raise SetupError("Windows could not verify this account. No process was stopped.")
+                raise SetupError(tr('Windows could not verify this account. No process was stopped.'))
             try:
                 if _user_sid(handle) != _user_sid(current):
-                    raise ServiceOwnershipMismatch("The local service belongs to another Windows account. No process was stopped.")
+                    raise ServiceOwnershipMismatch(tr("The local service belongs to another Windows account. No process was stopped."))
             finally:
                 kernel.CloseHandle(current)
             path = ctypes.create_unicode_buffer(WINDOWS_PATH_BUFFER_CHARS)
             length = wintypes.DWORD(len(path))
             if not kernel.QueryFullProcessImageNameW(handle, 0, path, ctypes.byref(length)):
-                raise SetupError("Windows could not recheck the local service executable. No process was stopped.")
+                raise SetupError(tr('Windows could not recheck the local service executable. No process was stopped.'))
             actual = os.path.normcase(str(Path(path.value).resolve()))
             expected = os.path.normcase(str(self.executable.resolve()))
             if actual != expected:
-                raise SetupError("The service process changed before it could be stopped. No process was stopped; retry.")
+                raise SetupError(tr('The service process changed before it could be stopped. No process was stopped; retry.'))
             if not kernel.TerminateProcess(handle, 0):
-                raise SetupError("Windows could not stop the verified local service. Retry after closing the translator.")
+                raise SetupError(tr('Windows could not stop the verified local service. Retry after closing the translator.'))
             if kernel.WaitForSingleObject(handle, SERVICE_STOP_SECONDS * 1000) != WAIT_OBJECT_0:
-                raise SetupError("The verified local service has not exited yet. Wait a moment and retry.")
+                raise SetupError(tr('The verified local service has not exited yet. Wait a moment and retry.'))
         finally:
             kernel.CloseHandle(handle)
 
@@ -916,12 +918,12 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
         def api(path, payload=None):
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise SetupError("Model unloading exceeded its shutdown time budget.")
+                raise SetupError(tr('Model unloading exceeded its shutdown time budget.'))
             return self._request_api(path, payload, timeout=remaining, expected_pid=process_id)
 
         entries = api("/api/ps").get("models", [])
         if not isinstance(entries, list):
-            raise SetupError("The local service returned an invalid loaded-model list.")
+            raise SetupError(tr('The local service returned an invalid loaded-model list.'))
         names = []
         for entry in entries:
             if not isinstance(entry, dict) or entry.get("remote_host") or entry.get("remote_model"):
@@ -935,7 +937,7 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
         # The dedicated server is configured for one loaded model. Keep the
         # shutdown bounded even if a different local caller changed that limit.
         if len(names) > MAX_MODELS_TO_UNLOAD:
-            raise SetupError("Too many models were loaded for a bounded shutdown.")
+            raise SetupError(tr('Too many models were loaded for a bounded shutdown.'))
         for tag in names:
             api("/api/generate", {"model": tag, "prompt": "", "keep_alive": 0, "stream": False})
 
@@ -954,38 +956,38 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
         starts, deletes models, or kills other Ollama installations by name.
         """
         if not self._port_open():
-            self.progress("The dedicated local service is already stopped.")
+            self.progress(tr('The dedicated local service is already stopped.'))
             return
         if not self._verified_runtime() and not self._verified_legacy_runtime():
-            raise SetupError("The saved runtime could not be verified. No process was stopped.")
+            raise SetupError(tr('The saved runtime could not be verified. No process was stopped.'))
         owner = self._verify_owner(timeout=SHUTDOWN_OWNER_CHECK_SECONDS)
         process_id = owner.get("pid")
         if isinstance(process_id, bool) or not isinstance(process_id, int) or process_id <= 0:
-            raise SetupError("Windows returned an invalid service process identity. No process was stopped.")
-        self.progress("Stopping this installation's dedicated local service…")
+            raise SetupError(tr('Windows returned an invalid service process identity. No process was stopped.'))
+        self.progress(tr("Stopping this installation's dedicated local service…"))
         try:
             self._unload_running_models(process_id)
         except SetupError:
-            self.progress("Model unloading did not finish; stopping the verified service. GPU memory release could not be confirmed.")
+            self.progress(tr('Model unloading did not finish; stopping the verified service. GPU memory release could not be confirmed.'))
         if not self._port_open():
-            self.progress("The dedicated local service is already stopped.")
+            self.progress(tr('The dedicated local service is already stopped.'))
             return
         current = self._verify_owner(timeout=SHUTDOWN_OWNER_CHECK_SECONDS)
         if current.get("pid") != process_id:
-            raise SetupError("The dedicated service changed during shutdown. No replacement service was stopped.")
+            raise SetupError(tr('The dedicated service changed during shutdown. No replacement service was stopped.'))
         self._terminate_verified_process(process_id)
         for _ in range(int(SERVICE_STOP_SECONDS / SERVICE_STOP_POLL_SECONDS)):
             if not self._port_open():
-                self.progress("The dedicated local service is stopped. You can choose another storage folder.")
+                self.progress(tr('The dedicated local service is stopped. You can choose another storage folder.'))
                 return
             time.sleep(SERVICE_STOP_POLL_SECONDS)
-        raise SetupError(f"Port {PORT} is still occupied after stopping this service. No additional process was stopped; close the other service before changing storage.")
+        raise SetupError(tr('Port {PORT} is still occupied after stopping this service. No additional process was stopped; close the other service before changing storage.', PORT=PORT))
 
     def installed_models(self) -> list[dict]:
         """List valid local tags, excluding remote aliases and malformed entries."""
         entries = self._request_api("/api/tags").get("models", [])
         if not isinstance(entries, list):
-            raise SetupError("The local service returned an invalid model list.")
+            raise SetupError(tr('The local service returned an invalid model list.'))
         result = []
         for entry in entries:
             if not isinstance(entry, dict) or entry.get("remote_host") or entry.get("remote_model"):
@@ -1007,13 +1009,13 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
         self.check_cancelled()
         deadline = time.monotonic() + MODEL_PULL_BUDGET_SECONDS
         if tag not in MODEL_CATALOG:
-            raise SetupError("Choose a supported model from the model list.")
+            raise SetupError(tr('Choose a supported model from the model list.'))
         if any(entry["name"] == tag for entry in self.installed_models()):
-            self.progress(f"{tag} is already installed.")
+            self.progress(tr('{tag} is already installed.', tag=tag))
             self._verify_local_model(tag)
             return
         self._check_disk(MODEL_CATALOG[tag]["download_bytes"] + MODEL_FREE_SPACE_MARGIN_BYTES)
-        self.progress(f"Downloading {tag} (about {MODEL_CATALOG[tag]['download_gb']:.1f} GB)…")
+        self.progress(tr('Downloading {tag} (about {value1:.1f} GB)…', tag=tag, value1=MODEL_CATALOG[tag]['download_gb']))
         success = False
         last_update = None
         try:
@@ -1022,59 +1024,59 @@ $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $owners[0]) -
                 while True:
                     self.check_cancelled()
                     if time.monotonic() >= deadline:
-                        raise SetupError("The model download exceeded its time budget. Retry setup to resume downloaded model layers.")
+                        raise SetupError(tr('The model download exceeded its time budget. Retry setup to resume downloaded model layers.'))
                     line = response.readline(MAX_PULL_STATUS_BYTES + 1)
                     self.check_cancelled()
                     if not line:
                         break
                     if len(line) > MAX_PULL_STATUS_BYTES:
-                        raise SetupError("The local model download returned an oversized status response.")
+                        raise SetupError(tr('The local model download returned an oversized status response.'))
                     update = json.loads(line)
                     if not isinstance(update, dict) or update.get("error"):
-                        raise SetupError("Model download failed: " + str(update.get("error", "invalid response") if isinstance(update, dict) else "invalid response"))
+                        raise SetupError(tr('Model download failed: ') + str(update.get("error", "invalid response") if isinstance(update, dict) else "invalid response"))
                     if update.get("total", 0) > 0:
                         percent = min(100, max(0, int(100 * update.get("completed", 0) / update["total"])))
                         status = (update.get("digest"), percent)
                         if status != last_update:
-                            self.progress(f"Model download: {percent}% ({update.get('completed', 0) / DECIMAL_MB:.0f}/{update['total'] / DECIMAL_MB:.0f} MB)")
+                            self.progress(tr('Model download: {percent}% ({value1:.0f}/{value2:.0f} MB)', percent=percent, value1=update.get('completed', 0) / DECIMAL_MB, value2=update['total'] / DECIMAL_MB))
                             last_update = status
                     elif update.get("status"):
                         if update["status"] != last_update:
-                            self.progress(str(update["status"]))
+                            self.progress(tr(str(update["status"])))
                             last_update = update["status"]
                     success = success or update.get("status") == "success"
         except (ValueError, UnicodeError, OSError, TimeoutError) as exc:
-            raise SetupError(f"Model download was interrupted: {exc}. Retry setup to resume the download.") from exc
+            raise SetupError(tr('Model download was interrupted: {exc}. Retry setup to resume the download.', exc=exc)) from exc
         if not success:
-            raise SetupError("Model download ended before completion. Retry setup to resume it.")
+            raise SetupError(tr('Model download ended before completion. Retry setup to resume it.'))
         if not any(entry["name"] == tag for entry in self.installed_models()):
-            raise SetupError("The selected model was not found after download. Retry setup.")
+            raise SetupError(tr('The selected model was not found after download. Retry setup.'))
         self._verify_local_model(tag)
         self.check_cancelled()
 
     def _verify_local_model(self, tag: str) -> None:
         details = self._request_api("/api/show", {"model": _model_tag(tag)}, timeout=30)
         if details.get("remote_host") or details.get("remote_model"):
-            raise SetupError("The selected model routes to a remote service. Choose a downloaded local model.")
+            raise SetupError(tr('The selected model routes to a remote service. Choose a downloaded local model.'))
 
     def remove_model(self, tag: str) -> None:
         """Delete only the selected installed tag through the verified local API."""
         self.check_cancelled()
         _model_tag(tag)
         if not any(entry["name"] == tag for entry in self.installed_models()):
-            raise SetupError("That model is not installed in this storage folder.")
-        self.progress(f"Removing {tag} from this installation…")
+            raise SetupError(tr('That model is not installed in this storage folder.'))
+        self.progress(tr('Removing {tag} from this installation…', tag=tag))
         self._request_api("/api/delete", {"model": tag}, method="DELETE", timeout=60)
         if any(entry["name"] == tag for entry in self.installed_models()):
-            raise SetupError("The model is still listed after removal. Retry the removal.")
+            raise SetupError(tr('The model is still listed after removal. Retry the removal.'))
 
     def prepare(self, tag: str = DEFAULT_MODEL) -> None:
         self.check_cancelled()
         if tag not in MODEL_CATALOG:
-            raise SetupError("Choose a supported model from the model list.")
+            raise SetupError(tr('Choose a supported model from the model list.'))
         self._protect_storage()
         if not self._verified_runtime():
             self._check_disk(required_disk_bytes(tag))
         self.ensure_service()
         self.install_model(tag)
-        self.progress(f"Ready: {tag}. Translation stays on this computer.")
+        self.progress(tr('Ready: {tag}. Translation stays on this computer.', tag=tag))

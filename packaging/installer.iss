@@ -1,5 +1,5 @@
-#ifndef AppVersion
-  #define AppVersion "1.7.15"
+﻿#ifndef AppVersion
+  #define AppVersion "1.8.0"
 #endif
 #ifndef AppSource
   #error AppSource must point to the verified PyInstaller application folder
@@ -47,10 +47,27 @@ SetupLogging=yes
 VersionInfoVersion={#AppVersion}.0
 VersionInfoDescription=Lineage 2 Chat Translator Setup
 VersionInfoCompany=Lineage 2 Chat Translator
-InfoBeforeFile=USER-README.txt
+ShowLanguageDialog=yes
+LanguageDetectionMethod=uilanguage
+UsePreviousLanguage=yes
+
+[Languages]
+Name: "en"; MessagesFile: "compiler:Default.isl"; InfoBeforeFile: "languages\info-en.txt"
+Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"; InfoBeforeFile: "languages\info-es.txt"
+Name: "ptbr"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"; InfoBeforeFile: "languages\info-pt-BR.txt"
+Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl"; InfoBeforeFile: "languages\info-ru.txt"
+Name: "pl"; MessagesFile: "compiler:Languages\Polish.isl"; InfoBeforeFile: "languages\info-pl.txt"
+Name: "de"; MessagesFile: "compiler:Languages\German.isl"; InfoBeforeFile: "languages\info-de.txt"
+Name: "fr"; MessagesFile: "compiler:Languages\French.isl"; InfoBeforeFile: "languages\info-fr.txt"
+Name: "tr"; MessagesFile: "compiler:Languages\Turkish.isl"; InfoBeforeFile: "languages\info-tr.txt"
+Name: "ko"; MessagesFile: "compiler:Languages\Korean.isl"; InfoBeforeFile: "languages\info-ko.txt"
+Name: "ja"; MessagesFile: "compiler:Languages\Japanese.isl"; InfoBeforeFile: "languages\info-ja.txt"
+Name: "zhcn"; MessagesFile: "languages\ChineseSimplified.isl"; InfoBeforeFile: "languages\info-zh-CN.txt"
+
+#include "languages\CustomMessages.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Dirs]
 ; The security helper creates this folder before Inno records installation.
@@ -66,15 +83,12 @@ Source: "{#AppSource}\_internal\assets\cleanup-program-files.ps1"; DestName: "l2
 
 [Icons]
 Name: "{group}\Lineage 2 Chat Translator"; Filename: "{app}\Lineage2ChatTranslator.exe"; WorkingDir: "{app}"; IconFilename: "{app}\_internal\assets\L2CT.ico"; IconIndex: 0
-Name: "{group}\Configure Lineage 2 Chat Translator"; Filename: "{app}\Lineage2ChatTranslator.exe"; Parameters: "--configure"; WorkingDir: "{app}"; IconFilename: "{app}\_internal\assets\L2CT.ico"; IconIndex: 0
-Name: "{group}\Uninstall Lineage 2 Chat Translator"; Filename: "{uninstallexe}"; IconFilename: "{app}\_internal\assets\L2CT.ico"; IconIndex: 0
+Name: "{group}\{cm:ConfigureProgram}"; Filename: "{app}\Lineage2ChatTranslator.exe"; Parameters: "--configure"; WorkingDir: "{app}"; IconFilename: "{app}\_internal\assets\L2CT.ico"; IconIndex: 0
+Name: "{group}\{cm:UninstallProgram,Lineage 2 Chat Translator}"; Filename: "{uninstallexe}"; IconFilename: "{app}\_internal\assets\L2CT.ico"; IconIndex: 0
 Name: "{autodesktop}\Lineage 2 Chat Translator"; Filename: "{app}\Lineage2ChatTranslator.exe"; WorkingDir: "{app}"; Tasks: desktopicon; IconFilename: "{app}\_internal\assets\L2CT.ico"; IconIndex: 0
 
 [Run]
-Filename: "{app}\Lineage2ChatTranslator.exe"; Description: "Open Lineage 2 Chat Translator"; Flags: postinstall nowait skipifsilent; Check: ModelIsReady
-
-[Messages]
-ConfirmUninstall=Remove %1 and all of its downloaded models, local runtime, saved settings and logs?%n%nThis cannot be undone. Your Lineage II game files will not be removed.
+Filename: "{app}\Lineage2ChatTranslator.exe"; Description: "{cm:LaunchProgram,Lineage 2 Chat Translator}"; Flags: postinstall nowait skipifsilent; Check: ModelIsReady
 
 [Code]
 function SetDllDirectory(PathName: String): BOOL;
@@ -100,7 +114,7 @@ begin
   ResultPath := ExpandConstant('{tmp}\l2-install-security-result.json');
   HelperPath := ExpandConstant('{tmp}\l2-protect-install-directory.ps1');
   PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
-  WizardForm.StatusLabel.Caption := 'Checking the program folder permissions...';
+  WizardForm.StatusLabel.Caption := CustomMessage('CheckingPermissions');
   Result := False;
   try
     ExtractTemporaryFile('l2-protect-install-directory.ps1');
@@ -133,7 +147,7 @@ begin
   ResultPath := ExpandConstant('{tmp}\l2-program-cleanup-result.json');
   HelperPath := ExpandConstant('{tmp}\l2-program-cleanup.ps1');
   PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
-  WizardForm.StatusLabel.Caption := 'Cleaning up obsolete program files...';
+  WizardForm.StatusLabel.Caption := CustomMessage('CleaningProgram');
   try
     ExtractTemporaryFile('l2-program-cleanup.ps1');
     ExitCode := -1;
@@ -149,9 +163,7 @@ begin
         Details := Details + Lines[I] + #13#10;
     Log('Program file cleanup: ' + Details);
     if not Result then
-      SuppressibleMsgBox('The new version is installed, but obsolete program files could not be cleaned up.' + #13#10#13#10 +
-        Details + #13#10 +
-        'Close the translator and run this installer again to retry cleanup. Models and settings are kept.',
+      SuppressibleMsgBox(CustomMessage('CleanupFailed') + #13#10#13#10 + Details,
         mbError, MB_OK, IDOK);
   finally
     DeleteFile(ResultPath);
@@ -166,7 +178,7 @@ begin
   { Updates started by older frozen launchers can inherit their _internal DLL
     search directory. Drop it before starting any installer child process. }
   if not SetDllDirectory('') then begin
-    SuppressibleMsgBox('Windows could not prepare the installer environment. Close the translator and retry this installer.',
+    SuppressibleMsgBox(CustomMessage('EnvironmentFailed'),
       mbError, MB_OK, IDOK);
     Result := False;
     Exit;
@@ -177,10 +189,10 @@ begin
       AutomaticUpdate := True;
   Result := True;
   if AutomaticUpdate and not WizardSilent then begin
-    SuppressibleMsgBox('Automatic updates must be started from the translator Settings.', mbError, MB_OK, IDOK);
+    SuppressibleMsgBox(CustomMessage('AutomaticUpdateOnly'), mbError, MB_OK, IDOK);
     Result := False;
   end else if CheckForMutexes('Local\Lineage2ChatTranslatorUpdate') and not AutomaticUpdate then begin
-    SuppressibleMsgBox('An update is already in progress. Wait for it to finish before running another installer.', mbError, MB_OK, IDOK);
+    SuppressibleMsgBox(CustomMessage('UpdateBusy'), mbError, MB_OK, IDOK);
     Result := False;
   end;
 end;
@@ -189,7 +201,7 @@ function InitializeUninstall: Boolean;
 begin
   Result := not CheckForMutexes('Local\Lineage2ChatTranslatorUpdate');
   if not Result then
-    SuppressibleMsgBox('An update is in progress. Wait for it to finish before uninstalling.', mbError, MB_OK, IDOK);
+    SuppressibleMsgBox(CustomMessage('UninstallUpdateBusy'), mbError, MB_OK, IDOK);
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -197,20 +209,18 @@ begin
   Result := '';
   if AutomaticUpdate and (not FileExists(ExpandConstant('{app}\Lineage2ChatTranslator.exe')) or
                          not FileExists(ExpandConstant('{app}\unins000.exe'))) then
-    Result := 'The existing translator installation could not be found. Run the normal installer to repair it.';
+    Result := CustomMessage('InstallationMissing');
   if Result <> '' then Exit;
   { Windows may not have created this standard per-user Programs folder yet.
     Do not create arbitrary custom parents or alter an existing parent's ACL. }
   if CompareText(ExtractFileDir(ExpandConstant('{app}')), ExpandConstant('{autopf}')) = 0 then
     if not DirExists(ExpandConstant('{autopf}')) then
       if not ForceDirectories(ExpandConstant('{autopf}')) then begin
-        Result := 'Windows could not create your personal Programs folder. Choose an existing private parent folder and retry.';
+        Result := CustomMessage('ProgramsFolderFailed');
         Exit;
       end;
   if not ProtectInstallationDirectory(False) then
-    Result := 'Windows could not safely protect this program folder from changes by other accounts.' + #13#10#13#10 +
-      'Choose a private folder for a new installation, or have the existing folder permissions repaired, then retry.' + #13#10 +
-      'Existing installations must be upgraded in their current folder. See the setup log for details.';
+    Result := CustomMessage('PermissionFailed');
 end;
 
 function ModelIsReady: Boolean;
@@ -227,7 +237,7 @@ begin
     { Check all newly installed files before cleanup, model setup or [Run]. }
     ProgramSecurityComplete := ProtectInstallationDirectory(True);
     if not ProgramSecurityComplete then begin
-      SuppressibleMsgBox('The installed program folder did not pass its Windows permission checks. The translator will not be started. Correct the folder permissions and rerun this installer.',
+      SuppressibleMsgBox(CustomMessage('InstalledPermissionFailed'),
         mbError, MB_OK, IDOK);
       Exit;
     end;
@@ -237,14 +247,13 @@ begin
   if (CurStep = ssPostInstall) and not WizardSilent then begin
     ModelSetupAttempted := True;
     repeat
-      WizardForm.StatusLabel.Caption := 'Setting up the local translation model...';
+      WizardForm.StatusLabel.Caption := CustomMessage('SettingUpModel');
       Started := Exec(ExpandConstant('{app}\Lineage2ChatTranslator.exe'),
-        '--install-model', '', SW_SHOWNORMAL, ewWaitUntilTerminated, ExitCode);
+        '--install-model --ui-language ' + CustomMessage('UiLanguageCode'), '', SW_SHOWNORMAL, ewWaitUntilTerminated, ExitCode);
       ModelSetupComplete := Started and (ExitCode = 0);
       Retry := False;
       if not ModelSetupComplete then
-        Retry := MsgBox('Model setup was not completed. Retry now?' + #13#10#13#10 +
-          'The launcher is installed. If you cancel, use Configure Lineage 2 Chat Translator from the Start menu to finish later.',
+        Retry := MsgBox(CustomMessage('RetryModelSetup'),
           mbError, MB_RETRYCANCEL) = IDRETRY;
     until ModelSetupComplete or not Retry;
   end;
@@ -253,11 +262,11 @@ end;
 procedure CurPageChanged(CurPageID: Integer);
 begin
   if (CurPageID = wpFinished) and not ProgramSecurityComplete then
-    WizardForm.FinishedLabel.Caption := 'Program folder permissions need attention. The translator has not been started. Correct the permissions and rerun this installer.'
+    WizardForm.FinishedLabel.Caption := CustomMessage('InstalledPermissionFailed')
   else if (CurPageID = wpFinished) and not ProgramCleanupComplete then
-    WizardForm.FinishedLabel.Caption := 'The new version is installed, but program-file cleanup needs a retry. Close the translator and run this installer again.'
+    WizardForm.FinishedLabel.Caption := CustomMessage('CleanupFailed')
   else if (CurPageID = wpFinished) and ModelSetupAttempted and not ModelSetupComplete then
-    WizardForm.FinishedLabel.Caption := 'The launcher is installed, but model setup was not completed. Open Configure Lineage 2 Chat Translator from the Start menu to finish setup before translating.';
+    WizardForm.FinishedLabel.Caption := CustomMessage('FinishModelSetup');
 end;
 
 function GetCustomSetupExitCode: Integer;
@@ -278,12 +287,12 @@ begin
   if CurUninstallStep = usUninstall then begin
     { Retained by Inno until exit, including after the cleanup helper exits. }
     CreateMutex('Local\Lineage2ChatTranslatorUninstall');
-    UninstallProgressForm.StatusLabel.Caption := 'Removing the local model, runtime, settings and logs...';
+    UninstallProgressForm.StatusLabel.Caption := CustomMessage('RemovingData');
     { Inno provides a private temporary directory for this uninstall run. }
     ResultPath := ExpandConstant('{tmp}\l2-uninstall-result.txt');
     try
       Started := Exec(ExpandConstant('{app}\Lineage2ChatTranslator.exe'),
-        '--uninstall-cleanup --cleanup-result "' + ResultPath + '"',
+        '--uninstall-cleanup --ui-language ' + CustomMessage('UiLanguageCode') + ' --cleanup-result "' + ResultPath + '"',
         '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
       { Code 2 means managed cleanup succeeded but unconfirmed history remains. }
       if not Started or ((ExitCode <> 0) and (ExitCode <> 2)) then begin
@@ -291,8 +300,7 @@ begin
         if LoadStringsFromFile(ResultPath, Lines) then
           for I := 0 to GetArrayLength(Lines) - 1 do
             Details := Details + Lines[I] + #13#10;
-        MsgBox('Uninstall could not finish cleaning up the local data.' + #13#10#13#10 +
-          Details + #13#10 + 'The launcher has been kept so you can resolve the issue and retry uninstalling.',
+        MsgBox(CustomMessage('UninstallCleanupFailed') + #13#10#13#10 + Details,
           mbError, MB_OK);
         Abort;
       end;

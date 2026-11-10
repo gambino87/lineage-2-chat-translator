@@ -7,6 +7,8 @@ import queue
 import sys
 import threading
 import time
+import tempfile
+import os
 import tkinter as tk
 import webbrowser
 from collections import OrderedDict, deque
@@ -27,6 +29,9 @@ from installer_runtime import DEFAULT_MODEL, ENDPOINT, RuntimeManager
 from update_controls import UpdateControls
 from app_updater import discard_update, launch_update
 from tray_controls import TrayControls
+from ui_i18n import (LANGUAGE_NAMES, LocalizedStringVar, get_language, language_choices,
+                     language_code, localize_tree, normalize_language, set_language,
+                     set_message, source_text, tr)
 
 PROJECT = Path(__file__).resolve().parent
 SETTINGS = settings_file()
@@ -35,6 +40,7 @@ DEFAULTS = {
     "ollama_url": ENDPOINT,
     "model": DEFAULT_MODEL,
     "target_language": "English",
+    "ui_language": "en",
     "include_notices": False,
     "show_original": False,
     "minimize_to_tray": False,
@@ -75,12 +81,35 @@ def load_settings(*, migrate_legacy_models: bool = True) -> dict:
     settings["include_notices"] = settings["include_notices"] is True
     settings["show_original"] = settings["show_original"] is True
     settings["minimize_to_tray"] = settings["minimize_to_tray"] is True
+    settings["ui_language"] = normalize_language(settings.get("ui_language"))
     # An earlier open window may save its old model when it closes.
     # Migrate the removed 3B model and initial trials to the selected 9B model.
     if migrate_legacy_models and not getattr(sys, "frozen", False) and settings["model"] in ("qwen2.5:3b", "qwen3:4b", "l2-translator:4b"):
         settings["model"] = DEFAULTS["model"]
     settings["overlay"] = normalize_overlay_settings(settings.get("overlay"))
     return settings
+
+
+def persist_ui_language(language: str, path: Path | None = None) -> None:
+    """Save only the interface choice; leave uncommitted controls untouched."""
+    path = SETTINGS if path is None else path
+    try:
+        saved = json.loads(path.read_text(encoding="utf-8-sig"))
+    except FileNotFoundError:
+        saved = {}
+    if not isinstance(saved, dict):
+        raise ValueError("Preferences must contain a JSON object.")
+    saved["ui_language"] = normalize_language(language)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, filename = tempfile.mkstemp(prefix="settings-language-", suffix=".tmp", dir=path.parent)
+    temporary = Path(filename)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            json.dump(saved, output, ensure_ascii=False, indent=2)
+            output.write("\n")
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def service_shutdown_callback(config: dict, runtime_root: Path | None = None):
@@ -135,6 +164,7 @@ class TranslatorApp:
         self._reply_focus_timer = None
         self._reply_focus_request = 0
         self.config = load_settings(migrate_legacy_models=migrate_legacy_models)
+        set_language(self.config["ui_language"])
         self.jobs: queue.Queue = queue.Queue(maxsize=MAX_QUEUED_TRANSLATIONS)
         self.events: queue.Queue = queue.Queue()
         self.stop = threading.Event()
@@ -151,20 +181,23 @@ class TranslatorApp:
         self._reply_records = {}
         self._row_sequence = 0
         self.target = tk.StringVar(value=self.config["target_language"])
+        self.target_display = tk.StringVar(value=tr(self.config["target_language"]))
+        self.ui_language = tk.StringVar(value=LANGUAGE_NAMES[get_language()])
         self.log_path = tk.StringVar(value=self.config["log_path"])
         self.notices = tk.BooleanVar(value=self.config["include_notices"])
         self.show_original = tk.BooleanVar(value=self.config["show_original"])
         self.minimize_to_tray = tk.BooleanVar(value=self.config["minimize_to_tray"])
         self.on_top = tk.BooleanVar(value=False)
-        self.status = tk.StringVar(value="Connecting to local Ollama…")
-        self.counter = tk.StringVar(value="No messages translated yet")
-        self.connection = tk.StringVar(value="CONNECTING")
+        self.status = LocalizedStringVar(value="Connecting to local Ollama…")
+        self.counter = LocalizedStringVar(value="No messages translated yet")
+        self.connection = LocalizedStringVar(value="CONNECTING")
         self._build()
         self.overlay = ChatOverlay(self.root, self.config["overlay"], on_change=self._overlay_changed,
                                    on_reply=self.select_reply, model=self.config["model"])
-        self.overlay_button.configure(text="Hide overlay" if self.overlay.settings["enabled"] else "Show overlay")
+        self.overlay_button.configure(text=tr("Hide overlay" if self.overlay.settings["enabled"] else "Show overlay"))
         self.tray = TrayControls(self.root, enabled=self.minimize_to_tray.get,
                                  on_exit=self.close, on_error=self.status.set)
+        self.refresh_language()
         threading.Thread(target=self._worker, daemon=True, name="local-translator").start()
         self.check_connection()
         self.root.after(UI_POLL_INTERVAL_MS, self._drain_events)
@@ -173,7 +206,7 @@ class TranslatorApp:
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
     def _build(self):
-        self.root.title(f"Lineage 2 Chat Translator v{VERSION} — Local Ollama")
+        self.root.title(tr("Lineage 2 Chat Translator v{version} — Local Ollama", version=VERSION))
         self.root.geometry("940x700")
         self.root.minsize(760, 540)
         self.root.configure(bg=BG)
@@ -202,9 +235,17 @@ class TranslatorApp:
         self._content = outer
         outer.pack(fill="both", expand=True)
         outer.columnconfigure(0, weight=1)
-        outer.rowconfigure(3, weight=1, minsize=130)
+        outer.rowconfigure(4, weight=1, minsize=130)
+        language_bar = ttk.Frame(outer)
+        language_bar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        ttk.Label(language_bar, text="Interface language").pack(side="left", padx=(0, 8))
+        self.ui_language_box = ttk.Combobox(language_bar, textvariable=self.ui_language,
+                                           values=language_choices(), state="readonly", width=24,
+                                           height=len(LANGUAGE_NAMES))
+        self.ui_language_box.pack(side="left")
+        self.ui_language_box.bind("<<ComboboxSelected>>", self._ui_language_changed)
         header = ttk.Frame(outer)
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        header.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         tk.Label(header, text="Lineage 2 Chat Translator", bg=BG, fg=FG,
                  font=("Segoe UI", 15, "bold")).pack(side="left")
         self.settings_button = ttk.Button(header, text="Settings", command=self.toggle_settings)
@@ -215,28 +256,34 @@ class TranslatorApp:
                  font=("Segoe UI", 9), anchor="w").pack(side="left", fill="x", expand=True, padx=(12, 0))
 
         toolbar = ttk.Frame(outer)
-        toolbar.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        toolbar.grid(row=2, column=0, sticky="ew", pady=(0, 8))
+        for column in range(3):
+            toolbar.columnconfigure(column, weight=1)
         self.read_button = ttk.Button(toolbar, text="Start reading", style="Accent.TButton", command=self.toggle_reading)
-        self.read_button.pack(side="left", padx=(0, 6))
+        self.read_button.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=(0, 5))
         self.recent_button = ttk.Button(toolbar, text="Translate recent chat", command=self.translate_recent)
-        self.recent_button.pack(side="left", padx=(0, 6))
-        ttk.Button(toolbar, text="Clear", command=self.clear).pack(side="left", padx=(0, 6))
+        self.recent_button.grid(row=0, column=1, sticky="ew", padx=(0, 6), pady=(0, 5))
+        ttk.Button(toolbar, text="Clear", command=self.clear).grid(row=0, column=2, sticky="ew", pady=(0, 5))
         self.overlay_button = ttk.Button(toolbar, text="Show overlay", command=lambda: self.overlay.toggle())
-        self.overlay_button.pack(side="left", padx=(0, 6))
-        ttk.Button(toolbar, text="Overlay settings…", command=lambda: self.overlay.open_settings()).pack(side="left")
+        self.overlay_button.grid(row=1, column=0, sticky="ew", padx=(0, 6))
+        ttk.Button(toolbar, text="Overlay settings…", command=lambda: self.overlay.open_settings()).grid(
+            row=1, column=1, columnspan=2, sticky="ew")
 
         self.settings_panel = ttk.Frame(outer)
-        self.settings_panel.grid(row=2, column=0, sticky="ew", pady=(0, 8))
+        self.settings_panel.grid(row=3, column=0, sticky="ew", pady=(0, 8))
         controls = ttk.Frame(self.settings_panel)
         controls.pack(fill="x", pady=(0, 6))
-        ttk.Label(controls, text="Translate to").pack(side="left", padx=(0, 6))
-        ttk.Combobox(controls, textvariable=self.target, state="readonly", width=12,
-            values=("English", "Russian", "Spanish", "Portuguese", "German", "French", "Polish", "Greek", "Korean", "Japanese", "Chinese")).pack(side="left")
+        ttk.Label(controls, text="Translate to").grid(row=0, column=0, sticky="w", padx=(0, 6), pady=(0, 5))
+        self.target_languages = ("English", "Russian", "Spanish", "Portuguese", "German", "French", "Polish", "Greek", "Korean", "Japanese", "Chinese")
+        self.target_box = ttk.Combobox(controls, textvariable=self.target_display, state="readonly", width=15,
+            values=tuple(tr(name) for name in self.target_languages))
+        self.target_box.grid(row=0, column=1, sticky="w", pady=(0, 5))
+        self.target_box.bind("<<ComboboxSelected>>", self._target_changed)
         ttk.Checkbutton(controls, text="Original text", variable=self.show_original,
-                        command=self._render_rows).pack(side="left", padx=8)
-        ttk.Checkbutton(controls, text="Include notices", variable=self.notices).pack(side="left")
+                        command=self._render_rows).grid(row=1, column=0, columnspan=2, sticky="w")
+        ttk.Checkbutton(controls, text="Include notices", variable=self.notices).grid(row=1, column=2, sticky="w", padx=12)
         ttk.Checkbutton(controls, text="Main window on top", variable=self.on_top,
-                        command=lambda: self.root.attributes("-topmost", self.on_top.get())).pack(side="right")
+                        command=lambda: self.root.attributes("-topmost", self.on_top.get())).grid(row=0, column=2, sticky="w", padx=12)
         ttk.Checkbutton(self.settings_panel, text="Minimize to system tray", variable=self.minimize_to_tray,
                         command=self._tray_setting_changed).pack(anchor="w", pady=(0, 6))
         source = ttk.Frame(self.settings_panel)
@@ -254,7 +301,7 @@ class TranslatorApp:
         self.settings_panel.grid_remove()
 
         display = ttk.Frame(outer)
-        display.grid(row=3, column=0, sticky="nsew")
+        display.grid(row=4, column=0, sticky="nsew")
         self.transcript = tk.Text(display, bg=PANEL, fg=FG, relief="flat", borderwidth=0,
             padx=8, pady=6, height=12, wrap="word", state="disabled", font=("Segoe UI", 10),
             insertbackground=FG, selectbackground="#375869", spacing1=0, spacing3=2)
@@ -277,14 +324,47 @@ class TranslatorApp:
         self._note("Waiting for new chat. Use Translate recent chat to read saved messages.")
 
         footer = ttk.Frame(outer)
-        footer.grid(row=4, column=0, sticky="ew", pady=(5, 8))
+        footer.grid(row=5, column=0, sticky="ew", pady=(5, 8))
         ttk.Label(footer, textvariable=self.status, foreground=MUTED, font=("Segoe UI", 9), wraplength=500).pack(side="left")
         ttk.Label(footer, textvariable=self.counter, foreground=MUTED, font=("Segoe UI", 9)).pack(side="right")
         self.reply = ReplyComposer(outer, self.config)
-        self.reply.frame.grid(row=5, column=0, sticky="ew")
+        self.reply.frame.grid(row=6, column=0, sticky="ew")
         ttk.Button(outer, text="Discord — feedback and bug reports", style="Link.TButton",
                    cursor="hand2", command=self._open_discord).grid(
-                       row=6, column=0, sticky="e", pady=(5, 0))
+                       row=7, column=0, sticky="e", pady=(5, 0))
+
+    def _target_changed(self, _event=None):
+        canonical = source_text(self.target_display.get())
+        if canonical in self.target_languages:
+            self.target.set(canonical)
+
+    def _ui_language_changed(self, _event=None):
+        language = language_code(self.ui_language.get())
+        set_language(language)
+        self.config["ui_language"] = language
+        self.refresh_language()
+        try:
+            persist_ui_language(language)
+        except (OSError, ValueError):
+            self.status.set("Could not save preferences. Check that the project folder is writable.")
+
+    def refresh_language(self):
+        """Relabel in place without discarding active work, replies or history."""
+        localize_tree(self.root)
+        self.root.title(tr("Lineage 2 Chat Translator v{version} — Local Ollama", version=VERSION))
+        self.ui_language.set(LANGUAGE_NAMES[get_language()])
+        self.target_box.configure(values=tuple(tr(name) for name in self.target_languages))
+        self.target_display.set(tr(self.target.get()))
+        self.settings_button.configure(text=tr("Hide settings" if self.settings_panel.winfo_ismapped() else "Settings"))
+        self.read_button.configure(text=tr("Pause reading" if self.reading else "Start reading" if self.connected else "Retry connection"))
+        self.overlay_button.configure(text=tr("Hide overlay" if self.overlay.settings["enabled"] else "Show overlay"))
+        for variable in (self.status, self.counter, self.connection):
+            variable.refresh_language()
+        self.overlay.refresh_language()
+        self.reply.refresh_language()
+        self.updates.refresh_language()
+        if self._rows:
+            self._render_rows()
 
     def _open_discord(self):
         """Open the fixed community invite only on a user's click; send no chat data."""
@@ -293,15 +373,15 @@ class TranslatorApp:
                 return
         except (OSError, webbrowser.Error):
             pass
-        self.status.set(f"Could not open Discord. Visit {DISCORD_URL}")
+        set_message(self.status, "Could not open Discord. Visit {url}", url=DISCORD_URL)
 
     def toggle_settings(self):
         if self.settings_panel.winfo_ismapped():
             self.settings_panel.grid_remove()
-            self.settings_button.configure(text="Settings")
+            self.settings_button.configure(text=tr("Settings"))
         else:
             self.settings_panel.grid()
-            self.settings_button.configure(text="Hide settings")
+            self.settings_button.configure(text=tr("Hide settings"))
             if hasattr(self, "updates"):
                 self.updates.settings_shown()
 
@@ -316,7 +396,7 @@ class TranslatorApp:
         if not self.save_settings():
             # The controls retain cleanup ownership when this callback rejects
             # a job, and restore the Install button so the user can retry.
-            raise ValueError("Your preferences could not be saved. Check the folder permissions and try again.")
+            raise ValueError(tr("Your preferences could not be saved. Check the folder permissions and try again."))
         self._pending_update = prepared
         self.close()
 
@@ -373,7 +453,7 @@ class TranslatorApp:
 
     def _note(self, text: str, error: bool = False):
         self.transcript.configure(state="normal")
-        self.transcript.insert("end", text + "\n", "error" if error else "note")
+        self.transcript.insert("end", tr(text) + "\n", "error" if error else "note")
         self.transcript.configure(state="disabled")
         self.transcript.see("end")
 
@@ -397,12 +477,12 @@ class TranslatorApp:
         self._reply_records[tag] = record
         color = f"channel{record.channel}" if record.channel in CHANNEL_COLORS else "translation"
         self.transcript.insert("end", f"{record.timestamp}  ", "meta")
-        self.transcript.insert("end", one_line(record.sender or "Notice") + ": ", (color, "sender"))
+        self.transcript.insert("end", one_line(record.sender or tr("Notice")) + ": ", (color, "sender"))
         self.transcript.insert("end", one_line(record.message if error else translated), color)
-        self.transcript.insert("end", "  Reply", ("reply", tag))
+        self.transcript.insert("end", "  " + tr("Reply"), ("reply", tag))
         self.transcript.insert("end", "\n", "translation")
         if error:
-            self.transcript.insert("end", "  Translation unavailable: " + one_line(translated) + "\n", "error")
+            self.transcript.insert("end", "  " + tr("Translation unavailable: {error}", error=one_line(translated)) + "\n", "error")
         elif self.show_original.get() and record.message.strip() != translated.strip():
             self.transcript.insert("end", "  " + one_line(record.message) + "\n", "original")
 
@@ -438,7 +518,7 @@ class TranslatorApp:
         self.overlay.add_message(record, translated, source=source, error=error)
         if not error:
             self.completed += 1
-            self.counter.set(f"{self.completed} translated · {seconds:.1f}s last")
+            set_message(self.counter, "{count} translated · {seconds:.1f}s last", count=self.completed, seconds=seconds)
 
     def check_connection(self):
         # Capture Tk values on the UI thread; worker threads never access Tk.
@@ -448,7 +528,7 @@ class TranslatorApp:
                 client = OllamaClient(self.config["ollama_url"], self.config["model"], target_language)
                 models = client.list_models()
                 if self.config["model"] not in models:
-                    raise RuntimeError(f"Model {self.config['model']} is not installed. Run Setup Ollama.ps1.")
+                    raise RuntimeError(tr("Model {model} is not installed. Run setup again.", model=self.config["model"]))
                 self.events.put(("connected", None))
             except Exception as exc:
                 self.events.put(("connection_error", str(exc)))
@@ -460,7 +540,7 @@ class TranslatorApp:
             if self.tail:
                 self.tail.close()
                 self.tail = None
-            self.read_button.configure(text="Start reading")
+            self.read_button.configure(text=tr("Start reading"))
             self.status.set("Reading paused. Queued translations will finish.")
         elif not self.log_path.get().strip():
             self.choose_system_folder()
@@ -477,10 +557,10 @@ class TranslatorApp:
             except (OSError, ValueError) as exc:
                 self.tail.close()
                 self.tail = None
-                self._note("Could not read chat log: " + str(exc), error=True)
+                self._note(tr("Could not read chat log: {error}", error=str(exc)), error=True)
                 return
             self.reading = True
-            self.read_button.configure(text="Pause reading")
+            self.read_button.configure(text=tr("Pause reading"))
             self.status.set("Watching for new chat…")
 
     def _poll_log(self):
@@ -500,7 +580,7 @@ class TranslatorApp:
             except (OSError, ValueError) as exc:
                 detail = str(exc)
                 if detail != self.last_file_error:
-                    self._note("Could not read chat log: " + detail, error=True)
+                    self._note(tr("Could not read chat log: {error}", error=detail), error=True)
                     self.last_file_error = detail
                 self.status.set("Chat log unavailable; retrying…")
         self.root.after(LOG_POLL_INTERVAL_MS, self._poll_log)
@@ -510,13 +590,13 @@ class TranslatorApp:
         if not record.message.strip():
             return
         if len(record.message) > MAX_CHAT_CHARACTERS:
-            self._note(f"Skipped an unusually long chat entry (over {MAX_CHAT_CHARACTERS:,} characters).", error=True)
+            self._note(tr("Skipped an unusually long chat entry (over {count:,} characters).", count=MAX_CHAT_CHARACTERS), error=True)
             return
         try:
             self.jobs.put_nowait((record, self.target.get(), source, self.screen_generation))
-            self.status.set(f"Translating locally · {self.jobs.qsize()} queued")
+            set_message(self.status, "Translating locally · {count} queued", count=self.jobs.qsize())
         except queue.Full:
-            self._append(record, "The queue is full. This message was not translated.", self.target.get(), source, 0, error=True)
+            self._append(record, tr("The queue is full. This message was not translated."), self.target.get(), source, 0, error=True)
 
     def translate_recent(self):
         if not self.log_path.get().strip():
@@ -531,7 +611,7 @@ class TranslatorApp:
             for record in records[-RECENT_REPLAY_MESSAGES:]:
                 self.enqueue(record, "Saved chat")
         except (OSError, ValueError) as exc:
-            self._note("Could not read saved chat: " + str(exc), error=True)
+            self._note(tr("Could not read saved chat: {error}", error=str(exc)), error=True)
 
     def _worker(self):
         """Translate sequentially off Tk; keep only a bounded, memory-only cache."""
@@ -607,22 +687,24 @@ class TranslatorApp:
                 self.connected = False
                 self.connection.set("OLLAMA OFFLINE")
                 self.reply.set_connected(False)
-                self.read_button.configure(text="Retry connection")
+                self.read_button.configure(text=tr("Retry connection"))
                 self.recent_button.configure(state="disabled")
                 self.status.set("Start Ollama with Start Translator.cmd, then click Start reading.")
                 self._note(data, error=True)
             elif kind == "working":
                 self.busy = True
-                self.status.set(f"Translating locally · {self.jobs.qsize()} queued")
+                set_message(self.status, "Translating locally · {count} queued", count=self.jobs.qsize())
             elif kind == "result":
                 self.busy = False
                 if data[-1] == self.screen_generation:
                     self._append(*data[:-1])
                     self.translation_error = data[-2]
                     self.connection.set("TRANSLATION ERROR" if self.translation_error else "LOCAL · READY")
-                self.status.set(f"Translating locally · {self.jobs.qsize()} queued" if not self.jobs.empty()
-                                else "Translation failed · See the message above" if self.translation_error
-                                else "Watching for new chat…" if self.reading else "Ready · reading paused")
+                if not self.jobs.empty():
+                    set_message(self.status, "Translating locally · {count} queued", count=self.jobs.qsize())
+                else:
+                    self.status.set("Translation failed · See the message above" if self.translation_error
+                                    else "Watching for new chat…" if self.reading else "Ready · reading paused")
         self.root.after(UI_POLL_INTERVAL_MS, self._drain_events)
 
     def clear(self):
@@ -657,7 +739,7 @@ class TranslatorApp:
             # Older/source installations may still lack a path: explain the
             # choice inline instead of opening a modal picker on startup.
             self.settings_panel.grid()
-            self.settings_button.configure(text="Hide settings")
+            self.settings_button.configure(text=tr("Hide settings"))
             self.status.set("Choose your game folder with Settings → System folder… to read chat.")
 
     def choose_system_folder(self):
@@ -666,7 +748,7 @@ class TranslatorApp:
         self._choosing_system_folder = True
         try:
             selected = filedialog.askdirectory(parent=self.root,
-                title="Choose your Lineage II system folder", mustexist=True,
+                title=tr("Choose your Lineage II system folder"), mustexist=True,
                 initialdir=str(Path(self.log_path.get()).parent) if self.log_path.get().strip() else str(Path.home()))
         finally:
             self._choosing_system_folder = False
@@ -677,7 +759,7 @@ class TranslatorApp:
         try:
             log = resolve_system_log(selected)
         except (OSError, ValueError) as exc:
-            messagebox.showerror("Choose a Lineage II folder", str(exc), parent=self.root)
+            messagebox.showerror(tr("Choose a Lineage II folder"), str(exc), parent=self.root)
             if not self.log_path.get().strip():
                 self.status.set("Choose your Lineage II system folder under Settings → System folder…")
             return
@@ -691,9 +773,9 @@ class TranslatorApp:
             self._note("Chat log path selected. Start the game yourself; chat can appear here when the client creates Network.log and records messages.")
 
     def browse(self):
-        selected = filedialog.askopenfilename(parent=self.root, title="Choose the Lineage II chat log",
+        selected = filedialog.askopenfilename(parent=self.root, title=tr("Choose the Lineage II chat log"),
             initialdir=str(Path(self.log_path.get()).parent) if self.log_path.get().strip() else str(Path.home()),
-            filetypes=(("Log files", "*.log"), ("All files", "*.*")))
+            filetypes=((tr("Log files"), "*.log"), (tr("All files"), "*.*")))
         if selected:
             self.log_path.set(selected)
             self.restart_log()
@@ -706,7 +788,7 @@ class TranslatorApp:
 
     def _overlay_changed(self, settings):
         self.config["overlay"] = dict(settings)
-        self.overlay_button.configure(text="Hide overlay" if settings["enabled"] else "Show overlay")
+        self.overlay_button.configure(text=tr("Hide overlay" if settings["enabled"] else "Show overlay"))
         if not self.stop.is_set():
             self.save_settings()
 
@@ -783,14 +865,14 @@ class TranslatorApp:
                 if tray is not None:
                     try:
                         if not tray.wait_closed():
-                            raise RuntimeError("Windows could not finish system tray cleanup. Reopen the translator and retry.")
+                            raise RuntimeError(tr("Windows could not finish system tray cleanup. Reopen the translator and retry."))
                     except Exception as exc:
                         shutdown_errors.append(str(exc))
                 if shutdown_errors:
                     raise RuntimeError("\n".join(shutdown_errors))
                 if pending_update is not None:
                     if self._close_errors:
-                        raise RuntimeError("The update was canceled because shutdown could not finish cleanly.")
+                        raise RuntimeError(tr("The update was canceled because shutdown could not finish cleanly."))
                     launch_update(pending_update)
                     self._update_handed_off = True
             except Exception as exc:
@@ -811,7 +893,7 @@ class TranslatorApp:
         # Reader/reply callbacks are already stopped before destroying widgets.
         self._content.destroy()
         updating = getattr(self, "_pending_update", None) is not None
-        self.root.title("Lineage 2 Chat Translator — " + ("Updating…" if updating else "Closing…"))
+        self.root.title("Lineage 2 Chat Translator — " + tr("Updating…" if updating else "Closing…"))
         frame = ttk.Frame(self.root, padding=32)
         frame.pack(expand=True)
         ttk.Label(frame, text="Updating—please wait…" if updating else "Closing—please wait…", font=("Segoe UI", 16, "bold")).pack(pady=(0, 12))
@@ -822,6 +904,7 @@ class TranslatorApp:
         self._shutdown_progress = ttk.Progressbar(frame, mode="indeterminate", length=360)
         self._shutdown_progress.pack()
         self._shutdown_progress.start(20)
+        localize_tree(frame)
         self.root.deiconify()
         self.root.focus_set()
 
@@ -839,14 +922,14 @@ class TranslatorApp:
                     pass  # The progress widget may already have been destroyed.
             errors = list(self._close_errors)
             if failure is not None:
-                errors.append(("Update handoff failed: " if getattr(self, "_pending_update", None) is not None
-                               else "Could not confirm that the local Ollama service stopped: ") + failure)
+                errors.append(tr("Update handoff failed: {error}" if getattr(self, "_pending_update", None) is not None
+                               else "Could not confirm that the local Ollama service stopped: {error}", error=failure))
             if errors:
                 explanation = ("The update was not installed. The translator will close; reopen it and retry the update.\n\n"
                                if getattr(self, "_pending_update", None) is not None
                                else "The translator will close, but some shutdown steps could not be completed.\n\n")
-                messagebox.showwarning("Translator shutdown",
-                    explanation + "\n\n".join(errors), parent=self.root)
+                messagebox.showwarning(tr("Translator shutdown"),
+                    tr(explanation) + "\n\n".join(errors), parent=self.root)
         finally:
             self.root.destroy()
 
@@ -862,7 +945,7 @@ def main(*, migrate_legacy_models: bool = True, runtime_root: Path | None = None
         root.mainloop()
     except Exception as exc:
         if root is not None:
-            messagebox.showerror("Lineage 2 Chat Translator", str(exc), parent=root)
+            messagebox.showerror(tr("Lineage 2 Chat Translator"), str(exc), parent=root)
             root.destroy()
         raise
     finally:

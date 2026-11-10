@@ -1,0 +1,9 @@
+﻿LINEAGE 2 CHAT TRANSLATOR
+
+Windows 10/11, 64-bit. No separate Python installation is needed.
+
+Setup downloads the local runtime and your selected model. Review and accept the model license before downloading. Choose a model storage folder and your Lineage II system folder.
+
+Chat translation runs locally. The interface language is separate from the chat translation language and can be changed at the top of the launcher.
+
+Uninstall removes this app's registered models, runtime, settings and logs. Your Lineage II game files are kept.

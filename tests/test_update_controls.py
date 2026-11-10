@@ -20,7 +20,8 @@ class Value:
 
 class UpdateControlsTests(unittest.TestCase):
     def setUp(self):
-        self.enterContext(patch.object(updates.tk, "StringVar", Value))
+        self.enterContext(patch.object(updates, "LocalizedStringVar", Value))
+        self.enterContext(patch.object(updates, "localize_tree"))
         self.enterContext(patch.object(updates.ttk, "Frame"))
         self.enterContext(patch.object(updates.ttk, "Label"))
         self.enterContext(patch.object(updates.ttk, "Button"))

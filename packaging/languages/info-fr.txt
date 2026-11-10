@@ -1,0 +1,9 @@
+﻿LINEAGE 2 CHAT TRANSLATOR
+
+Windows 10/11, 64 bits. Aucune installation séparée de Python n’est nécessaire.
+
+La configuration télécharge le moteur local et le modèle choisi. Lisez et acceptez sa licence avant de télécharger. Choisissez un dossier pour les modèles et le dossier system de Lineage II.
+
+La traduction du chat est locale. La langue de l’interface est indépendante de la langue de traduction et se modifie en haut du lanceur.
+
+La désinstallation supprime les modèles enregistrés, le moteur, les paramètres et les journaux de l’application. Les fichiers du jeu Lineage II sont conservés.

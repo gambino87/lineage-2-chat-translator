@@ -18,6 +18,9 @@ import webbrowser
 
 from app_paths import default_data_directory, preferences_directory, runtime_file
 from app_version import VERSION
+from ui_i18n import (tr, set_language, get_language, normalize_language, LANGUAGE_NAMES,
+                     language_choices, language_code, localize_tree, LocalizedStringVar,
+                     set_message, catalog_issues)
 from app_icon import ICON, PNG, apply_window_icon
 from game_log_setup import resolve_system_log
 from installer_runtime import DEFAULT_MODEL, ENDPOINT, MODEL_CATALOG, RuntimeManager, SetupCancelled, SetupError, required_disk_bytes
@@ -72,9 +75,9 @@ def read_json(path: Path) -> dict:
     try:
         value = json.loads(path.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError) as exc:
-        raise ValueError(f"Cannot read {path}. Restore or rename this preferences file before retrying.") from exc
+        raise ValueError(tr('Cannot read {path}. Restore or rename this preferences file before retrying.', path=path)) from exc
     if not isinstance(value, dict):
-        raise ValueError(f"Expected an object in {path}.")
+        raise ValueError(tr('Expected an object in {path}.', path=path))
     return value
 
 
@@ -95,17 +98,17 @@ def write_json(path: Path, value: dict) -> None:
 def validate_selection(data_root: str, model: str, game_folder: str = "") -> tuple[Path, str]:
     """Validate installation choices and resolve a log path without editing the game."""
     if model not in MODEL_CATALOG:
-        raise ValueError("Choose one of the available local models.")
+        raise ValueError(tr('Choose one of the available local models.'))
     root = Path(data_root).expanduser()
     if not data_root.strip() or not root.is_absolute() or root == Path(root.anchor):
-        raise ValueError("Choose a dedicated runtime and model folder, such as D:\\L2TranslatorData.")
+        raise ValueError(tr('Choose a dedicated runtime and model folder, such as D:\\L2TranslatorData.'))
     # Preserve the chosen lexical path so the storage guard can reject junctions
     # instead of silently turning a redirected folder into another destination.
     root = Path(os.path.abspath(root))
     if root.exists() and not root.is_dir():
-        raise ValueError("The runtime and model folder is a file. Choose a folder.")
+        raise ValueError(tr('The runtime and model folder is a file. Choose a folder.'))
     if getattr(sys, "frozen", False) and (root.is_relative_to(Path(sys.executable).parent) or root in Path(sys.executable).parents):
-        raise ValueError("Choose a data folder separate from the installed program folder.")
+        raise ValueError(tr('Choose a data folder separate from the installed program folder.'))
     log_path = str(resolve_system_log(game_folder)) if game_folder.strip() else ""
     return root, log_path
 
@@ -120,6 +123,7 @@ def save_configuration(data_root: Path, model: str, log_path: str, settings_path
         settings["log_path"] = log_path
     else:
         settings.setdefault("log_path", "")
+    settings.setdefault("ui_language", get_language())
     settings.setdefault("target_language", "English")
     settings.setdefault("overlay", {})
     previous_location_exists = location_path.exists()
@@ -151,7 +155,7 @@ def hardware_summary(data_root: Path) -> str:
         memory = MemoryStatus()
         memory.length = ctypes.sizeof(memory)
         if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(memory)):
-            parts.append(f"{memory.total / 1024**3:.0f} GiB RAM")
+            parts.append(tr('{value0:.0f} GiB RAM', value0=memory.total / 1024**3))
         try:
             # Resolve the Windows binary explicitly, never via the install folder/PATH.
             result = subprocess.run([str(_system_powershell()), "-NoProfile", "-NonInteractive", "-Command",
@@ -159,17 +163,22 @@ def hardware_summary(data_root: Path) -> str:
                                     capture_output=True, text=True, timeout=HARDWARE_QUERY_TIMEOUT_SECONDS,
                                     creationflags=subprocess.CREATE_NO_WINDOW)
             if result.returncode == 0 and result.stdout.strip():
-                parts.append("GPU: " + ", ".join(result.stdout.strip().splitlines()))
+                parts.append(tr("GPU: {device}", device=", ".join(result.stdout.strip().splitlines())))
         except (OSError, RuntimeError, subprocess.TimeoutExpired):
             pass
     candidate = data_root
     while not candidate.exists() and candidate != candidate.parent:
         candidate = candidate.parent
     try:
-        parts.append(f"{shutil.disk_usage(candidate).free / 1024**3:.1f} GiB free on selected drive")
+        parts.append(tr('{value0:.1f} GiB free on selected drive', value0=shutil.disk_usage(candidate).free / 1024**3))
     except OSError:
         pass
-    return " · ".join(parts)
+    summary = parts[0]
+    for part in parts[1:]:
+        # Keep nested message metadata so changing language does not rerun a
+        # hardware process, replace the underlying facts, or leave stale labels.
+        summary = tr("{head} · {tail}", head=summary, tail=part)
+    return summary
 
 
 def self_test() -> dict:
@@ -229,6 +238,8 @@ def self_test() -> dict:
     import chat_overlay
     import reply_composer
     import translator_app
+    if catalog_issues() or tr("Settings", language="ja") == "Settings":
+        raise AssertionError("The bundled offline interface language catalogs are incomplete.")
     # Imports only: never create a tray icon/window or start its native thread.
     import windows_tray
     import tray_controls
@@ -282,7 +293,7 @@ def self_test() -> dict:
             "models": list(MODEL_CATALOG), "settings_path": str(SETTINGS_PATH),
             "app_settings_path": str(translator_app.SETTINGS),
             "item_catalog_version": catalog.version, "item_catalog_entries": len(catalog.items),
-            "checks": ["bundled imports", "Tcl runtime", "native TLS, hashing and compression", "synthetic log parser", "model catalog", "loopback client", "bundled icon", "bundled item database", "localized item ID resolution", "party link separation", "source URL protection", "bundled update helper", "bundled external cleanup helper", "bundled installation permission helper"] + (["bundled cleanup inventory", "no obsolete app-local UCRT"] if getattr(sys, "frozen", False) else []) + (["Windows system UCRT"] if system_ucrt else []),
+            "checks": ["bundled imports", "Tcl runtime", "native TLS, hashing and compression", "synthetic log parser", "model catalog", "loopback client", "bundled icon", "bundled item database", "localized item ID resolution", "party link separation", "source URL protection", "bundled update helper", "bundled external cleanup helper", "bundled installation permission helper", "offline interface language catalogs"] + (["bundled cleanup inventory", "no obsolete app-local UCRT"] if getattr(sys, "frozen", False) else []) + (["Windows system UCRT"] if system_ucrt else []),
             "system_tray_imports": True,
             "windows_opened": False, "network_requests": False}
 
@@ -336,7 +347,7 @@ def detached_launch_notice(reason: str) -> None:
     try:
         # Only the fixed notices above enter the script; no command-line, chat,
         # path, server response or exception text is interpolated.
-        notice = notices[reason].replace("'", "''")
+        notice = tr(notices[reason]).replace("'", "''")
         script = ("$ErrorActionPreference = 'Stop'\n"
                   "$popup = New-Object -ComObject WScript.Shell\n"
                   "[void]$popup.Popup('" + notice + f"', {LAUNCH_NOTICE_SECONDS}, 'Lineage 2 Chat Translator', {POPUP_INFORMATION_ICON})\n")
@@ -353,8 +364,18 @@ def detached_launch_notice(reason: str) -> None:
         pass
 
 
+def save_ui_language(language: str, settings_path: Path | None = None) -> str:
+    """Save only the interface preference, preserving the chat target and model."""
+    path = SETTINGS_PATH if settings_path is None else settings_path
+    settings = read_json(path)
+    language = normalize_language(language)
+    settings["ui_language"] = language
+    write_json(path, settings)
+    return language
+
+
 class SetupWindow:
-    def __init__(self, root: tk.Tk, *, automatic: bool = False, installer_mode: bool = False):
+    def __init__(self, root: tk.Tk, *, automatic: bool = False, installer_mode: bool = False, ui_language: str | None = None):
         self.root = root
         # A configured normal launch validates its service in the background.
         # Withdraw before building widgets so setup never flashes on success.
@@ -379,13 +400,16 @@ class SetupWindow:
         self._startup_frame = None
         self._startup_progress = None
         self.settings = read_json(SETTINGS_PATH)
+        set_language(ui_language or self.settings.get("ui_language") or get_language())
+        self.ui_language = tk.StringVar(value=LANGUAGE_NAMES[get_language()])
+        self._language_variables = []
         location = read_json(RUNTIME_PATH)
         self.data = tk.StringVar(value=location.get("data_root") or str(default_data_directory()))
         self.model_tags = list(MODEL_CATALOG)
         selected = self.settings.get("model", DEFAULT_MODEL)
         if selected not in MODEL_CATALOG:
             selected = DEFAULT_MODEL
-        self.labels = [MODEL_CATALOG[tag]["label"] for tag in self.model_tags]
+        self.labels = [tr(MODEL_CATALOG[tag]["label"]) for tag in self.model_tags]
         self.model = tk.StringVar(value=self.labels[self.model_tags.index(selected)])
         log_path = self.settings.get("log_path", "")
         if not isinstance(log_path, str) or not log_path.strip():
@@ -393,11 +417,11 @@ class SetupWindow:
         self.game = tk.StringVar(value=str(Path(log_path).parent) if log_path else "")
         self.initial_game = self.game.get()
         self.accepted = tk.BooleanVar(value=False)
-        self.detail = tk.StringVar()
-        self.model_note = tk.StringVar()
+        self.detail = self._message_var()
+        self.model_note = self._message_var()
         self.details_visible = False
-        self.status = tk.StringVar(value="Choose your model and folders, then download to get started.")
-        self.hardware = tk.StringVar(value="Checking memory, graphics hardware, and available storage…")
+        self.status = self._message_var(value="Choose your model and folders, then download to get started.")
+        self.hardware = self._message_var(value="Checking memory, graphics hardware, and available storage…")
         self._build()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.after(SETUP_EVENT_POLL_INTERVAL_MS, self._drain)
@@ -406,12 +430,39 @@ class SetupWindow:
         else:
             self._show_setup()
 
+    def _message_var(self, value=""):
+        variable = LocalizedStringVar(master=self.root, value=value)
+        self._language_variables.append(variable)
+        return variable
+
+    def _ui_language_changed(self, _event=None):
+        previous = get_language()
+        language = language_code(self.ui_language.get())
+        selected = self.selected_tag()
+        try:
+            save_ui_language(language)
+        except (ValueError, OSError) as exc:
+            self.ui_language.set(LANGUAGE_NAMES[previous])
+            messagebox.showerror(tr("Interface language"), tr("Could not save the interface language: {error}", error=exc), parent=self.root)
+            return
+        self.settings["ui_language"] = language
+        set_language(language)
+        self.labels = [tr(MODEL_CATALOG[tag]["label"]) for tag in self.model_tags]
+        self.model_box.configure(values=self.labels)
+        self.model.set(self.labels[self.model_tags.index(selected)])
+        localize_tree(self.root)
+        for variable in self._language_variables:
+            variable.refresh_language()
+        self._refresh_model_text()
+        self.root.title(tr("Lineage 2 Chat Translator — Setup {VERSION}", VERSION=VERSION))
+        self._sync_cancel_action()
+
     def _show_setup(self):
         """Reveal configuration only when requested or startup needs attention."""
         if self._hide_starting():
-            self.root.title(f"Lineage 2 Chat Translator — Setup {VERSION}")
-            self.root.minsize(700, 620)
-            self.root.geometry("740x640")
+            self.root.title(tr('Lineage 2 Chat Translator — Setup {VERSION}', VERSION=VERSION))
+            self.root.minsize(700, 680)
+            self.root.geometry("740x700")
             self.root.resizable(True, True)
             self.root.configure(background="#f4f6f9")
             self._setup_frame.pack(fill="both", expand=True)
@@ -427,16 +478,16 @@ class SetupWindow:
         if self._startup_frame is not None:
             return
         self._setup_frame.pack_forget()
-        self.root.title("Lineage 2 Chat Translator — Starting…")
+        self.root.title(tr('Lineage 2 Chat Translator — Starting…'))
         self.root.minsize(460, 210)
         self.root.geometry("460x210")
         self.root.resizable(False, False)
         self.root.configure(background="#111820")
         self._startup_frame = tk.Frame(self.root, background="#111820", padx=24, pady=24)
         self._startup_frame.pack(fill="both", expand=True)
-        tk.Label(self._startup_frame, text="Starting translator…", background="#111820", foreground="#edf3f8",
+        tk.Label(self._startup_frame, text=tr("Starting translator…"), background="#111820", foreground="#edf3f8",
                  font=("Segoe UI", 16, "bold")).pack(pady=(0, 12))
-        self.status.set("Starting local Ollama.\nThe translator will open automatically.")
+        self.status.set(tr('Starting local Ollama.\nThe translator will open automatically.'))
         tk.Label(self._startup_frame, textvariable=self.status,
                  background="#111820", foreground="#a4b4c3", justify="center", wraplength=400).pack(pady=(0, 18))
         self._startup_progress = ttk.Progressbar(self._startup_frame, mode="indeterminate", length=340)
@@ -463,9 +514,9 @@ class SetupWindow:
         return self.model_tags[self.labels.index(self.model.get())]
 
     def _build(self):
-        self.root.title(f"Lineage 2 Chat Translator — Setup {VERSION}")
-        self.root.geometry("740x640")
-        self.root.minsize(700, 620)
+        self.root.title(tr('Lineage 2 Chat Translator — Setup {VERSION}', VERSION=VERSION))
+        self.root.geometry("740x700")
+        self.root.minsize(700, 680)
         self.root.configure(background="#f4f6f9")
         self.root.option_add("*Font", ("Segoe UI", 10))
         style = ttk.Style(self.root)
@@ -494,10 +545,20 @@ class SetupWindow:
         self._setup_frame = frame
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(0, weight=1)
-        ttk.Label(frame, text="Set up your translator", style="Heading.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(frame, text="Download once. Translate locally.", style="Setup.TLabel").grid(row=1, column=0, sticky="w", pady=(5, 18))
+        # The first field and first tab stop always selects the interface language.
+        language_row = ttk.Frame(frame, style="Setup.TFrame")
+        language_row.grid(row=0, column=0, sticky="ew", pady=(0, 14))
+        ttk.Label(language_row, text="Language / 语言", style="Setup.TLabel").pack(side="left", padx=(0, 10))
+        self.language_box = ttk.Combobox(language_row, textvariable=self.ui_language,
+                                        values=language_choices(), state="readonly", width=25,
+                                        height=len(LANGUAGE_NAMES),
+                                        style="Setup.TCombobox")
+        self.language_box.pack(side="right")
+        self.language_box.bind("<<ComboboxSelected>>", self._ui_language_changed)
+        ttk.Label(frame, text="Set up your translator", style="Heading.TLabel").grid(row=1, column=0, sticky="w")
+        ttk.Label(frame, text="Download once. Translate locally.", style="Setup.TLabel").grid(row=2, column=0, sticky="w", pady=(5, 18))
         card = ttk.Frame(frame, padding=18, style="Card.TFrame")
-        card.grid(row=2, column=0, sticky="ew")
+        card.grid(row=3, column=0, sticky="ew")
         card.columnconfigure(0, weight=1)
         ttk.Label(card, text="Translation model", style="Field.TLabel").grid(row=0, column=0, sticky="w")
         self.model_box = ttk.Combobox(card, textvariable=self.model, values=self.labels, state="readonly", style="Setup.TCombobox")
@@ -516,9 +577,9 @@ class SetupWindow:
         self._path_row(card, 7, "Lineage 2 system folder · required", self.game, True)
         ttk.Label(card, text="Choose before downloading. You can change it later in the translator's Settings.", style="Note.TLabel", wraplength=600).grid(row=9, column=0, sticky="w", pady=(4, 0))
         self.details_button = ttk.Button(frame, text="Details & model tools ▸", style="Details.TButton", command=self._toggle_details)
-        self.details_button.grid(row=3, column=0, sticky="w", pady=(8, 0))
+        self.details_button.grid(row=4, column=0, sticky="w", pady=(8, 0))
         self.details_panel = ttk.Frame(frame, style="Setup.TFrame")
-        self.details_panel.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        self.details_panel.grid(row=5, column=0, sticky="ew", pady=(6, 0))
         self.details_panel.columnconfigure(0, weight=1)
         ttk.Label(self.details_panel, textvariable=self.hardware, style="Setup.TLabel", wraplength=640).grid(row=0, column=0, sticky="w", pady=(0, 8))
         buttons = ttk.Frame(self.details_panel, style="Setup.TFrame")
@@ -531,14 +592,14 @@ class SetupWindow:
         self.output = tk.Text(self.details_panel, height=5, wrap="word", state="disabled", font=("Segoe UI", 9), background="#ffffff", relief="flat", padx=8, pady=6)
         self.output.grid(row=2, column=0, sticky="ew")
         self.details_panel.grid_remove()
-        frame.rowconfigure(5, weight=1)
+        frame.rowconfigure(6, weight=1)
         self.status_label = ttk.Label(frame, textvariable=self.status, style="Setup.TLabel", wraplength=640, justify="left")
-        self.status_label.grid(row=6, column=0, sticky="w", pady=(10, 8))
+        self.status_label.grid(row=7, column=0, sticky="w", pady=(10, 8))
         self.progress = ttk.Progressbar(frame, mode="indeterminate")
-        self.progress.grid(row=7, column=0, sticky="ew", pady=(0, 10))
+        self.progress.grid(row=8, column=0, sticky="ew", pady=(0, 10))
         self.progress.grid_remove()
         actions = ttk.Frame(frame, style="Setup.TFrame")
-        actions.grid(row=8, column=0, sticky="ew")
+        actions.grid(row=9, column=0, sticky="ew")
         actions.columnconfigure(0, weight=1)
         self.install_button = ttk.Button(actions, text="Download & configure", command=self.install, style="Primary.TButton")
         self.install_button.grid(row=0, column=0, sticky="ew")
@@ -552,6 +613,8 @@ class SetupWindow:
         if not self.installer_mode:
             self.controls.append(self.remove_button)
         self._model_changed()
+        localize_tree(self.root)
+        self.language_box.focus_set()
 
     def _path_row(self, frame, row, label, variable, game):
         ttk.Label(frame, text=label, style="Field.TLabel").grid(row=row, column=0, sticky="w", pady=(4, 0))
@@ -571,7 +634,7 @@ class SetupWindow:
             self._sync_actions()
 
     def _sync_actions(self):
-        self.install_button.configure(state="disabled" if self.busy else "normal", text="Working…" if self.busy else "Download & configure")
+        self.install_button.configure(state="disabled" if self.busy else "normal", text=(tr('Working…') if self.busy else tr('Download & configure')))
         self.open_button.configure(state="disabled" if self.busy else "normal")
         if self.ready:
             self.install_button.grid_remove()
@@ -582,23 +645,27 @@ class SetupWindow:
 
     def _toggle_details(self):
         self.details_visible = not self.details_visible
-        self.details_button.configure(text="Details & model tools ▾" if self.details_visible else "Details & model tools ▸")
+        self.details_button.configure(text=(tr('Details & model tools ▾') if self.details_visible else tr('Details & model tools ▸')))
         if self.details_visible:
             self.details_panel.grid()
         else:
             self.details_panel.grid_remove()
         self.root.update_idletasks()
         change = 210 if self.details_visible else -210
-        height = max(620, self.root.winfo_height() + change)
+        height = max(680, self.root.winfo_height() + change)
         height = min(height, self.root.winfo_screenheight() - 100)
         self.root.geometry(f"{self.root.winfo_width()}x{height}")
 
     def _model_changed(self, _event=None):
         self._invalidate()
         self.accepted.set(False)
+        self._refresh_model_text()
+
+    def _refresh_model_text(self):
         choice = MODEL_CATALOG[self.selected_tag()]
         disk = required_disk_bytes(self.selected_tag()) / 1024**3
-        self.detail.set(f"{choice['download_gb']:.1f} GB download · Allow {disk:.1f} GiB free · {choice['license']}")
+        set_message(self.detail, "{download:.1f} GB download · Allow {disk:.1f} GiB free · {license}",
+                    download=choice["download_gb"], disk=disk, license=choice["license"])
         notes = {DEFAULT_MODEL: "Current tested model. A GPU is recommended; Greeklish can still be inaccurate.",
                  "qwen2.5:3b": "Smaller download. Less accurate with slang and Greeklish.",
                  "qwen3.5:4b-q4_K_M": "Experimental. Translation quality has not been validated."}
@@ -608,7 +675,7 @@ class SetupWindow:
         webbrowser.open(MODEL_CATALOG[self.selected_tag()]["license_url"])
 
     def _browse(self, variable, game):
-        chosen = filedialog.askdirectory(parent=self.root, title="Choose Lineage II system folder" if game else "Choose runtime and model folder")
+        chosen = filedialog.askdirectory(parent=self.root, title=(tr('Choose Lineage II system folder') if game else tr('Choose runtime and model folder')))
         if chosen:
             variable.set(chosen)
             if not game:
@@ -629,7 +696,8 @@ class SetupWindow:
             self.progress.grid_remove()
 
     def _report(self, text):
-        self.events.put(("progress", str(text)))
+        # Preserve localized template metadata through the worker queue.
+        self.events.put(("progress", text if isinstance(text, str) else str(text)))
 
     def _sync_cancel_action(self):
         button = getattr(self, "cancel_button", None)
@@ -637,7 +705,7 @@ class SetupWindow:
             if self.busy and self._cancellable:
                 button.grid()
                 button.configure(state="disabled" if self._cancel_event.is_set() else "normal",
-                                 text="Cancelling…" if self._cancel_event.is_set() else "Cancel")
+                                 text=(tr('Cancelling…') if self._cancel_event.is_set() else tr('Cancel')))
             else:
                 button.grid_remove()
 
@@ -696,7 +764,7 @@ class SetupWindow:
                 else:
                     self._service_managers.remove(manager)
             if failures:
-                raise RuntimeError("Could not finish local service cleanup: " + "\n".join(failures))
+                raise RuntimeError(tr('Could not finish local service cleanup: ') + "\n".join(failures))
 
     def finish(self):
         """Cover abnormal setup exits and failures before translator handoff."""
@@ -725,7 +793,7 @@ class SetupWindow:
         try:
             chosen_game = self.game.get().strip()
             if not chosen_game:
-                raise ValueError("Choose your Lineage II system folder before downloading. You can change it later in the translator's Settings.")
+                raise ValueError(tr("Choose your Lineage II system folder before downloading. You can change it later in the translator's Settings."))
             # An unchanged folder must preserve even a manually selected log filename.
             initial_game = getattr(self, "initial_game", "")
             saved_log = self.settings.get("log_path")
@@ -734,7 +802,7 @@ class SetupWindow:
                 chosen_game = ""
             data_root, log = validate_selection(self.data.get(), self.selected_tag(), chosen_game)
             if not self.accepted.get():
-                raise ValueError("Review and accept the selected model's license before downloading.")
+                raise ValueError(tr("Review and accept the selected model's license before downloading."))
             confirmed_root = None
             confirmed_identity = None
             if storage_requires_confirmation(data_root, SETTINGS_PATH.parent):
@@ -742,19 +810,14 @@ class SetupWindow:
                 # the same path while the prompt or worker handoff is pending.
                 confirmed_identity = storage_confirmation_identity(data_root, SETTINGS_PATH.parent)
                 approved = messagebox.askyesno(
-                    "Review existing model storage",
-                    "Please confirm this is the folder you use for this translator:\n\n"
-                    + str(data_root)
-                    + "\n\nIts runtime, models, logs and service-home folders will be treated as this app's data and removed if you uninstall. "
-                      "Your Windows account keeps full access. No model files are deleted during this review. "
-                      "Other unconfirmed historical folders will be left for manual review.\n\n"
-                      "Use and secure this folder? Choose No to select another folder.",
+                    tr('Review existing model storage'),
+                    tr('Please confirm this is the folder you use for this translator:\n\n') + str(data_root) + tr("\n\nIts runtime, models, logs and service-home folders will be treated as this app's data and removed if you uninstall. Your Windows account keeps full access. No model files are deleted during this review. Other unconfirmed historical folders will be left for manual review.\n\nUse and secure this folder? Choose No to select another folder."),
                     parent=self.root, default="no")
                 if not approved:
                     return
                 confirmed_root = data_root
         except (ValueError, OSError, SetupError) as exc:
-            messagebox.showerror("Setup", str(exc), parent=self.root)
+            messagebox.showerror(tr('Setup'), str(exc), parent=self.root)
             return
         model = self.selected_tag()
         self.ready = False
@@ -771,13 +834,13 @@ class SetupWindow:
                 manager = self._runtime_manager(data_root, cancel_event)
                 manager.prepare(model)
                 self._check_cancelled(cancel_event)
-                self._report("Testing translation with a synthetic Russian sentence…")
+                self._report(tr('Testing translation with a synthetic Russian sentence…'))
                 client = OllamaClient(ENDPOINT, model, "English")
                 with manager.cancellable_client(client):
                     result = client.translate("Привет! Ищем хилера в пати.")
                 self._check_cancelled(cancel_event)
-                self._report("Sample translation: " + result)
-                self._report("Cleaning up installation files…")
+                self._report(tr('Sample translation: ') + result)
+                self._report(tr('Cleaning up installation files…'))
                 manager.cleanup_installation()
                 self._check_cancelled(cancel_event)
                 save_configuration(data_root, model, log)
@@ -796,11 +859,11 @@ class SetupWindow:
             data_root, _ = validate_selection(self.data.get(), tag)
             current = read_json(SETTINGS_PATH).get("model")
             if tag == current:
-                raise ValueError("Configure a different model first, then select this model to remove it.")
+                raise ValueError(tr('Configure a different model first, then select this model to remove it.'))
         except (ValueError, OSError) as exc:
-            messagebox.showerror("Remove model", str(exc), parent=self.root)
+            messagebox.showerror(tr('Remove model'), str(exc), parent=self.root)
             return
-        if not messagebox.askyesno("Remove downloaded model", f"Remove {tag} from this translator's model folder?\n\nYou can download it again later.", parent=self.root):
+        if not messagebox.askyesno(tr('Remove downloaded model'), tr("Remove {tag} from this translator's model folder?\n\nYou can download it again later.", tag=tag), parent=self.root):
             return
         self._set_busy(True)
         def work(cancel_event):
@@ -822,7 +885,7 @@ class SetupWindow:
             settings = read_json(SETTINGS_PATH)
         except (ValueError, OSError) as exc:
             self._show_setup()
-            self.status.set("Could not open the saved configuration: " + str(exc))
+            self.status.set(tr('Could not open the saved configuration: ') + str(exc))
             return
         if not location.get("data_root") or settings.get("model") not in MODEL_CATALOG:
             self._show_setup()
@@ -830,32 +893,32 @@ class SetupWindow:
         log_path = settings.get("log_path")
         if not isinstance(log_path, str) or not log_path.strip():
             self._show_setup()
-            self.status.set("Choose your Lineage II system folder to finish setup. You can change it later in the translator's Settings.")
+            self.status.set(tr("Choose your Lineage II system folder to finish setup. You can change it later in the translator's Settings."))
             return
         try:
             if storage_requires_confirmation(Path(location["data_root"]), SETTINGS_PATH.parent):
                 self._show_setup()
-                self.status.set("Review your existing model folder, then choose Download & configure to secure it. Existing model files will be reused after verification.")
+                self.status.set(tr('Review your existing model folder, then choose Download & configure to secure it. Existing model files will be reused after verification.'))
                 return
         except (OSError, ValueError, SetupError) as exc:
             self._show_setup()
-            self.status.set("The saved model folder needs review: " + str(exc))
+            self.status.set(tr('The saved model folder needs review: ') + str(exc))
             return
         if getattr(self, "automatic", False):
             self._show_starting()
         self._set_busy(True)
-        self.status.set("Checking your local translation service…")
+        self.status.set(tr('Checking your local translation service…'))
         def work(cancel_event):
             try:
                 register_data_root(Path(location["data_root"]), SETTINGS_PATH.parent)
                 manager = self._runtime_manager(Path(location["data_root"]), cancel_event)
                 if not manager.executable.is_file():
-                    raise ValueError("The local Ollama runtime is missing. Use Download & configure to restore it.")
+                    raise ValueError(tr('The local Ollama runtime is missing. Use Download & configure to restore it.'))
                 manager.ensure_service()
                 self._check_cancelled(cancel_event)
                 model = settings["model"]
                 if model not in {entry.get("name", entry.get("model")) for entry in manager.installed_models()}:
-                    raise ValueError("The selected model is missing. Use Download & configure to restore it.")
+                    raise ValueError(tr('The selected model is missing. Use Download & configure to restore it.'))
                 client = OllamaClient(ENDPOINT, model)
                 with manager.cancellable_client(client):
                     client._verify_local_model()
@@ -869,10 +932,10 @@ class SetupWindow:
         try:
             location = read_json(RUNTIME_PATH)
             if not location.get("data_root"):
-                raise ValueError("There is no configured service to stop. If an earlier translator uses this port, close its local Ollama service first or choose its existing data folder.")
+                raise ValueError(tr('There is no configured service to stop. If an earlier translator uses this port, close its local Ollama service first or choose its existing data folder.'))
             data_root = Path(location["data_root"])
         except (ValueError, OSError) as exc:
-            messagebox.showerror("Local service", str(exc), parent=self.root)
+            messagebox.showerror(tr('Local service'), str(exc), parent=self.root)
             return
         self._invalidate()
         self._set_busy(True)
@@ -923,14 +986,14 @@ class SetupWindow:
                         self.root.destroy()
                         return
                     self._show_setup()
-                    self.status.set("Setup cancelled. Unfinished model downloads can be resumed. Retry when ready.")
+                    self.status.set(tr('Setup cancelled. Unfinished model downloads can be resumed. Retry when ready.'))
                 elif kind in ("close_error", "cancel_error"):
                     self._closing = False
                     self.ready = self.setup_completed = self.launch_requested = False
                     self._cancellable = False
                     self._set_busy(False)
                     self._show_setup()
-                    self.status.set(value + " Close this window again to retry.")
+                    self.status.set(value + tr(' Close this window again to retry.'))
                 else:
                     self._cancellable = False
                     self.ready = kind == "ready"
@@ -939,7 +1002,7 @@ class SetupWindow:
                         self.root.destroy()
                         return
                     self._set_busy(False)
-                    self.status.set(value if kind != "error" else "Setup stopped: " + value + " Retry with Download & configure.")
+                    self.status.set((value if kind != "error" else tr('Setup stopped: ') + value + tr(' Retry with Download & configure.')))
                     if kind == "error":
                         self._show_setup()
         except queue.Empty:
@@ -956,7 +1019,7 @@ class SetupWindow:
         if self.busy and self._cancellable:
             self.ready = False
             self._cancel_event.set()
-            self.status.set("Cancelling… Stopping setup's work and local service.")
+            self.status.set(tr("Cancelling… Stopping setup's work and local service."))
             self._sync_cancel_action()
 
     def _begin_cancel_cleanup(self):
@@ -979,13 +1042,13 @@ class SetupWindow:
             if self._cancellable:
                 self.cancel_work()
             else:
-                self.status.set("Closing… Waiting for local service cleanup.")
+                self.status.set(tr('Closing… Waiting for local service cleanup.'))
             return
         if not self._service_managers:
             self.root.destroy()
             return
         self._set_busy(True)
-        self.status.set("Closing… Stopping the local translation service.")
+        self.status.set(tr('Closing… Stopping the local translation service.'))
         def work():
             try:
                 self._cleanup_services()
@@ -1006,9 +1069,18 @@ def main(argv=None) -> int:
     modes.add_argument("--cleanup-program-files", action="store_true", help=argparse.SUPPRESS)
     modes.add_argument("--self-test", action="store_true")
     modes.add_argument("--diagnose", action="store_true")
+    parser.add_argument("--ui-language", choices=tuple(LANGUAGE_NAMES), help="Interface language selected by the installer")
     parser.add_argument("--output", type=Path, help="Write headless JSON to this file")
     parser.add_argument("--cleanup-result", type=Path, help="Write a plain-text result for the Windows installer or uninstaller")
     args = parser.parse_args(argv)
+    # Maintenance stays headless; only an explicit installer language changes prefs.
+    if args.ui_language:
+        set_language(args.ui_language)
+    elif not (args.self_test or args.diagnose):
+        try:
+            set_language(read_json(SETTINGS_PATH).get("ui_language") or get_language())
+        except (ValueError, OSError):
+            pass
     if args.cleanup_program_files:
         # A frozen process may map the exact DLL it is asked to remove. Only the
         # installer's external system helper performs this maintenance now.
@@ -1025,9 +1097,9 @@ def main(argv=None) -> int:
         mutex = SingleInstance()
         try:
             if not mutex.acquire():
-                raise ValueError("Close the translator and its setup window, then retry uninstalling.")
+                raise ValueError(tr('Close the translator and its setup window, then retry uninstalling.'))
             if update_in_progress():
-                raise ValueError("An update is in progress. Wait for it to finish before uninstalling.")
+                raise ValueError(tr('An update is in progress. Wait for it to finish before uninstalling.'))
             report = uninstall_data(SETTINGS_PATH.parent)
             code, result = 0, "Local model, runtime, settings and log cleanup completed."
             retained = (report.get("unconfirmed_records_preserved", [])
@@ -1082,13 +1154,15 @@ def main(argv=None) -> int:
             mutex_released = True
             detached_launch_notice("update")
             return 2
+        if args.ui_language:
+            save_ui_language(args.ui_language)
         cleanup_update_cache(SETTINGS_PATH.parent, strict=False)
         root = tk.Tk()
         apply_window_icon(root)
         previous_update = consume_update_result(SETTINGS_PATH.parent)
         if previous_update and previous_update.get("status") == "error":
             root.withdraw()
-            messagebox.showwarning("Translator update",
+            messagebox.showwarning(tr('Translator update'),
                                    previous_update.get("message", "The last update could not be completed. Retry from Settings."),
                                    parent=root)
         window = SetupWindow(root, automatic=not (args.configure or args.install_model), installer_mode=args.install_model)
@@ -1103,7 +1177,7 @@ def main(argv=None) -> int:
                 translator_app.SETTINGS = SETTINGS_PATH
                 location = read_json(RUNTIME_PATH)
                 if not location.get("data_root"):
-                    raise ValueError("The configured local model folder is missing. Open setup and configure it again.")
+                    raise ValueError(tr('The configured local model folder is missing. Open setup and configure it again.'))
                 translator_app.main(migrate_legacy_models=False, runtime_root=Path(location["data_root"]))
             return 0
         finally:
@@ -1116,7 +1190,7 @@ def main(argv=None) -> int:
             root = tk.Tk()
             root.withdraw()
             apply_window_icon(root)
-        messagebox.showerror("Lineage 2 Chat Translator", str(exc), parent=root)
+        messagebox.showerror(tr('Lineage 2 Chat Translator'), str(exc), parent=root)
         return 1
     finally:
         if root is not None:

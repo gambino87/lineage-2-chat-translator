@@ -463,7 +463,7 @@ class OverlaySettingsIntegrationTests(unittest.TestCase):
         }
         self.settings_path.write_text(json.dumps(saved), encoding="utf-8")
         restored = translator_app.load_settings()
-        self.assertEqual(restored, {**saved, "model": "qwen3.5:9b-q4_K_M", "minimize_to_tray": False})
+        self.assertEqual(restored, {**saved, "model": "qwen3.5:9b-q4_K_M", "minimize_to_tray": False, "ui_language": "en"})
 
     def test_upgrade_keeps_new_model_and_unrelated_model_selections(self):
         for model in ("qwen3.5:9b-q4_K_M", "another-local-model:7b"):

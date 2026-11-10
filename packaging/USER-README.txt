@@ -1,7 +1,16 @@
-LINEAGE 2 CHAT TRANSLATOR 1.7.16
+LINEAGE 2 CHAT TRANSLATOR 1.8.0
 
 Windows 10/11, 64-bit. Python is included; no separate Python installation is needed.
 The supplied L2CT artwork is used for the program, shortcuts and window icons.
+
+INTERFACE LANGUAGE
+
+Choose your language before the installer begins. The launcher keeps its language
+selector visible at the top. Changes apply immediately to the launcher and overlay
+and are remembered for future launches. Supported languages: English, Spanish,
+Brazilian Portuguese, Russian, Polish, German, French, Turkish, Korean, Japanese
+and Simplified Chinese. The interface language is separate from chat translation
+and reply language; changing menus does not alter translated chat or replies.
 
 PT-BR STREAM PROMOTIONS
 

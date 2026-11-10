@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "product": "Lineage 2 Chat Translator",
-  "version": "1.7.16",
+  "version": "1.8.0",
   "purpose": "Source published for transparency; not a claim of byte-for-byte binary reproducibility.",
   "published_installer": {
-    "file": "Lineage-2-Chat-Translator-1.7.16-Setup.exe",
-    "bytes": 21419433,
-    "sha256": "febf68e7fe68c4f20c1ae26955b84a949e0085d7a69d8f48260d7bfe89bf72fe",
-    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.7.16-Setup.exe"
+    "file": "Lineage-2-Chat-Translator-1.8.0-Setup.exe",
+    "bytes": 21581227,
+    "sha256": "46b5cf5fd3cea8d1b66be205310739b2eace15a5ee45c0cb42b3b92742adeb49",
+    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.8.0-Setup.exe"
   },
   "release_toolchain": {
     "python": "3.12.10",
@@ -17,11 +17,11 @@
   "application_sources": [
     {
       "path": "installer_main.py",
-      "sha256": "f7e6e140d5ae8daa0e6ef12ea4c0093d50180d6296aea9ba3f32033224d89f14"
+      "sha256": "d5b2edcb9176468d4a5836c34e6791200ef23b106945c2fd48e77bd77ce8daa9"
     },
     {
       "path": "installer_runtime.py",
-      "sha256": "7d2aabe945e839ab6b3a02ee92ab704cc81ea7956614eb859b7067a373c09c94"
+      "sha256": "f3365570298e10b59d0cf48dddc2d69293d87a5c8482c2b99a07735c45ac7790"
     },
     {
       "path": "app_paths.py",
@@ -29,7 +29,7 @@
     },
     {
       "path": "app_version.py",
-      "sha256": "17179ba51497da083c00a7079915025bc6baba6bf1e8d07211a2b8187518a08a"
+      "sha256": "b6a67097910ffb4f8002d5537ad865ee6c86738d8fa3254dc30afab2412757be"
     },
     {
       "path": "app_icon.py",
@@ -37,7 +37,7 @@
     },
     {
       "path": "translator_app.py",
-      "sha256": "eb33abfb3fa6d1c9ac0f9e34b2a6d084917cc9153784f07dad7bba536a2a909f"
+      "sha256": "0ce068d5a7984f7c166ff5143e1b89a795960f4548848943328d379ea193dee7"
     },
     {
       "path": "translator_core.py",
@@ -57,15 +57,15 @@
     },
     {
       "path": "chat_overlay.py",
-      "sha256": "c68760f6c5a78bf2ab74de5cc66520ef3839d35a39e82ee6288068c0d45da590"
+      "sha256": "f3f4d83f3e953735265331213bd554132d6bb22fb243db99803b26cfef04de1f"
     },
     {
       "path": "overlay_tray.py",
-      "sha256": "f1c39148ddf45964307a2ea786a1792204fd000f13a21b5cd7ae018bf1de5220"
+      "sha256": "4daf9fd180b0ba3e4c25379bf0c52b762c07916bb815fa7c4059edb889a8fbf1"
     },
     {
       "path": "reply_composer.py",
-      "sha256": "9bbb38ccb18843e112fa349ab20bba53890e325547e6893d35cda0abb0cc35fb"
+      "sha256": "93e27cc1de4d5e280c209164d237459dff0aed90399efb33351644c4f01adca8"
     },
     {
       "path": "uninstall_data.py",
@@ -81,7 +81,7 @@
     },
     {
       "path": "update_controls.py",
-      "sha256": "7b15650fc479296dd91462fe8cb10c95b13413739a9b7c517f4fbd23ac856246"
+      "sha256": "d8265992c5b49417401802f94f79a1b124bd4482f54d05da978e7e9d83df2c77"
     },
     {
       "path": "installation_cleanup.py",
@@ -105,11 +105,31 @@
     },
     {
       "path": "windows_tray.py",
-      "sha256": "109aaa64c55aa0089ba8835490f60abae22996a583da5c821194c73938480561"
+      "sha256": "a1edca2c62e38f76a4f22ab3fb8a26ae03576fd31d43f4df1583ab93255bdc6d"
     },
     {
       "path": "tray_controls.py",
-      "sha256": "c97eaf82e2aa4e5943d8e5eba139601a44687ccb760a26385175b8fdccf67b55"
+      "sha256": "a57e10353d5e0695013c761b4d0363e2ea91009c36ce65379c1a77ec8d12b984"
+    },
+    {
+      "path": "ui_i18n.py",
+      "sha256": "f72b1c428474da74ea4171cbc94dca37f2a3d9a4c6ef481ff55b7e4e94b35f49"
+    },
+    {
+      "path": "ui_strings_installer.py",
+      "sha256": "3ea72db54eff845e6913eefce87b9162e7ffb219f004a6ae4d7247c0194d33cd"
+    },
+    {
+      "path": "ui_strings_client.py",
+      "sha256": "5ddbbc88ce6ddbca1a993b2abd33f2fde619d83b8f6f1ae62b886f62e25a8d53"
+    },
+    {
+      "path": "ui_strings_overlay.py",
+      "sha256": "08eee77f21b4882526b3dbb98d9c7a0848e1d6f4bf010b0d6860329d16832345"
+    },
+    {
+      "path": "ui_strings_runtime.py",
+      "sha256": "10a16da3a82b3d1a67361d71244817fa619a23b64e1238e431d52f355ab14dc5"
     }
   ],
   "application_assets": [
@@ -179,7 +199,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "d04813206329e866e29299e321540a230cfaed19bdcb5dee3108207c1ef79d3a"
+      "sha256": "9d972ae2a2bd00772f98d386decf5e7b6ff77f8d8ca58bfbf92297f945914e5a"
     },
     {
       "path": "SECURITY.md",
@@ -211,7 +231,7 @@
     },
     {
       "path": "app_version.py",
-      "sha256": "17179ba51497da083c00a7079915025bc6baba6bf1e8d07211a2b8187518a08a"
+      "sha256": "b6a67097910ffb4f8002d5537ad865ee6c86738d8fa3254dc30afab2412757be"
     },
     {
       "path": "assets/ITEM-CATALOG-NOTICE.txt",
@@ -247,7 +267,7 @@
     },
     {
       "path": "chat_overlay.py",
-      "sha256": "c68760f6c5a78bf2ab74de5cc66520ef3839d35a39e82ee6288068c0d45da590"
+      "sha256": "f3f4d83f3e953735265331213bd554132d6bb22fb243db99803b26cfef04de1f"
     },
     {
       "path": "game_log_setup.py",
@@ -267,11 +287,11 @@
     },
     {
       "path": "installer_main.py",
-      "sha256": "f7e6e140d5ae8daa0e6ef12ea4c0093d50180d6296aea9ba3f32033224d89f14"
+      "sha256": "d5b2edcb9176468d4a5836c34e6791200ef23b106945c2fd48e77bd77ce8daa9"
     },
     {
       "path": "installer_runtime.py",
-      "sha256": "7d2aabe945e839ab6b3a02ee92ab704cc81ea7956614eb859b7067a373c09c94"
+      "sha256": "f3365570298e10b59d0cf48dddc2d69293d87a5c8482c2b99a07735c45ac7790"
     },
     {
       "path": "item_catalog.py",
@@ -287,7 +307,7 @@
     },
     {
       "path": "overlay_tray.py",
-      "sha256": "f1c39148ddf45964307a2ea786a1792204fd000f13a21b5cd7ae018bf1de5220"
+      "sha256": "4daf9fd180b0ba3e4c25379bf0c52b762c07916bb815fa7c4059edb889a8fbf1"
     },
     {
       "path": "packaging/DISCORD.md",
@@ -319,7 +339,7 @@
     },
     {
       "path": "packaging/USER-README.txt",
-      "sha256": "8bf91d743b1d8d688ef9d85e14ddb52a6467c1e1cc45f97ceeb9fb8800a8381e"
+      "sha256": "88ea6a3efe5628e83eeebd0cc19a0da8972b7b5e5aabe367ce1ee92a78d87eee"
     },
     {
       "path": "packaging/bootstrap-tools.ps1",
@@ -327,7 +347,7 @@
     },
     {
       "path": "packaging/build.py",
-      "sha256": "1919f38b963baa97d6dbf469f9e76609ef413ad110bf991b44785e7e6bb5daf5"
+      "sha256": "517bf642b748c49305e8854df665794dd5a1394a9a72cab79ccbb93cf79f45b8"
     },
     {
       "path": "packaging/build_environment.py",
@@ -347,7 +367,59 @@
     },
     {
       "path": "packaging/installer.iss",
-      "sha256": "ec3d72787bf39b9e8839be929a176776dbe2b3cf28f503cd58eca42ecb4d9893"
+      "sha256": "937a36d61b9d0247f334eb8308ff880e8d92959e5838bfd0f80c6f56211e2dbb"
+    },
+    {
+      "path": "packaging/languages/ChineseSimplified.isl",
+      "sha256": "e0b0b350e2245f3c5e65586dfe43d574f6e7f06f2261149aba284954b3fc9a8d"
+    },
+    {
+      "path": "packaging/languages/CustomMessages.isl",
+      "sha256": "72528f5bdb2e095c135a088012dfbcdcdf42910604eee1ab05fedfb946958d87"
+    },
+    {
+      "path": "packaging/languages/info-de.txt",
+      "sha256": "cc950acecfd83ce6b01535c0b2778c4f2220cc74a419ef3834d6aca6697e2da1"
+    },
+    {
+      "path": "packaging/languages/info-en.txt",
+      "sha256": "8c8da6f0b15c88731aa60cc80e059c06eb66c969270b029c038b1666c374b11f"
+    },
+    {
+      "path": "packaging/languages/info-es.txt",
+      "sha256": "9c66755855ca5582f25fb5261b7c0d9b3f1b59d29e52bd46945684d59cf0aea0"
+    },
+    {
+      "path": "packaging/languages/info-fr.txt",
+      "sha256": "5778c950f5bc85c5ec35ae2f4c20d3aa4bb2f4fcaa6ef3a2488e5b613f4f00d1"
+    },
+    {
+      "path": "packaging/languages/info-ja.txt",
+      "sha256": "0b4ac460f70a2d2fdf6c730523dbda9a88c8948f5d6276f5355dcf980216e032"
+    },
+    {
+      "path": "packaging/languages/info-ko.txt",
+      "sha256": "323d866b9ca4c46448e443cf0530b9ef4ebe550605da705dea9b08e2b69bcdad"
+    },
+    {
+      "path": "packaging/languages/info-pl.txt",
+      "sha256": "d420a63d986a088dc625ce27184e7eb2823f7e331822b60d3ff55d0f391be5a7"
+    },
+    {
+      "path": "packaging/languages/info-pt-BR.txt",
+      "sha256": "555d1201a959f96fbb832b0679612ed38532f36a54ae0eebce683773e450f174"
+    },
+    {
+      "path": "packaging/languages/info-ru.txt",
+      "sha256": "83f28148d618709cab20942e8e9e6cfb132bd992f2d4f83729735d3f3d3c0374"
+    },
+    {
+      "path": "packaging/languages/info-tr.txt",
+      "sha256": "5c26dda49a7c0672b758e318880373ff3aa9755d5ea82d4e12aa659b4e7c0436"
+    },
+    {
+      "path": "packaging/languages/info-zh-CN.txt",
+      "sha256": "6e2664a8903de8d1132d7b71f8127b7c33407aef8ff01938682f0e1669e63543"
     },
     {
       "path": "packaging/licenses/INNO-SETUP.txt",
@@ -419,11 +491,11 @@
     },
     {
       "path": "packaging/public-source/README.template.md",
-      "sha256": "e1d3a9f11f2e858970cc1993612e224fa135ea88bff3c96f834762acbf09a845"
+      "sha256": "b4a21a9a062971d811c8b790ec8c3b738914e0bc8962b610219810bfeaacf788"
     },
     {
       "path": "packaging/public-source/allowlist.json",
-      "sha256": "3a772aa7bd1a3605ebe576a6768bf1ba87e091b33e347207a7f5b1daa7a49d9e"
+      "sha256": "28162f34bc93dd86da50913c6faabc1471f83476b48c57565666bb334d5b06e9"
     },
     {
       "path": "packaging/public-source/gitattributes.txt",
@@ -507,7 +579,7 @@
     },
     {
       "path": "packaging/source_release.py",
-      "sha256": "2c1800e343d36526d98083562b8d3b2a6db118173a3be934b2b4337a07887fda"
+      "sha256": "7e5c61c2691f1cad4210ffb45552d3122e95a9d1e465fb97632477084bac469f"
     },
     {
       "path": "packaging/verify_dll_upgrade.py",
@@ -519,7 +591,7 @@
     },
     {
       "path": "reply_composer.py",
-      "sha256": "9bbb38ccb18843e112fa349ab20bba53890e325547e6893d35cda0abb0cc35fb"
+      "sha256": "93e27cc1de4d5e280c209164d237459dff0aed90399efb33351644c4f01adca8"
     },
     {
       "path": "runtime_integrity.py",
@@ -539,11 +611,11 @@
     },
     {
       "path": "sites/l2-chat-translator/changelog.json",
-      "sha256": "d24dff70d91fa0eb14258f26ea5ad9d34cb90b02864798c61b2f99763800e0e9"
+      "sha256": "d81b5171bda8c0aa52a287793696ae13711c5a60d69c4a23337dfe09c0469b0c"
     },
     {
       "path": "sites/l2-chat-translator/index.template.html",
-      "sha256": "b198a859d67ba4d6d48dc99b020f63eb4dbefeb3de97ebb622e3e488d2d0c62a"
+      "sha256": "d05d5d35ec4d6199f32648da9d0930192a1b22e026d4454af80d967e19ac9344"
     },
     {
       "path": "tests/test_app_update_integration.py",
@@ -564,6 +636,10 @@
     {
       "path": "tests/test_chinese_staff_slang.py",
       "sha256": "7463d363a7134cb9a3d5225117f4744ac88b515c72023660cc7f076e8e499519"
+    },
+    {
+      "path": "tests/test_client_localization.py",
+      "sha256": "914aa614f3fc068c803001f0ad153973b645a425b99ec6f044fe3f70184ad819"
     },
     {
       "path": "tests/test_complete_release.py",
@@ -610,8 +686,12 @@
       "sha256": "c4f02e9130015317103a106eaa043ec449b3c875e25887c1e9c7d664acc1f131"
     },
     {
+      "path": "tests/test_installer_localization.py",
+      "sha256": "235c79d5d93aacb29b273f1bdb462eb971271fbc09a8226dddc5391aeabf1bf7"
+    },
+    {
       "path": "tests/test_installer_main.py",
-      "sha256": "c69822a9cfc5736329c57a5d7ee27d53926a555335adc0b7095860bf3739223d"
+      "sha256": "edd7993f8ff50f953de54fbf753adcc1c5e903aeb478925ce0ee7597ccf6347f"
     },
     {
       "path": "tests/test_installer_runtime.py",
@@ -659,11 +739,15 @@
     },
     {
       "path": "tests/test_overlay_integration.py",
-      "sha256": "962617c13813487c024a44c55603b9a670efc43919fd1e0e9d3bbafc4320b92c"
+      "sha256": "13f90686ec0706b7548c3cdec53d64a04dc1f312a520ae869253f147be0ebfc2"
+    },
+    {
+      "path": "tests/test_overlay_localization.py",
+      "sha256": "9952f56d56b7ca5791c51fb38a433a083091e27004cfc74fe3da3d7cd59f0f96"
     },
     {
       "path": "tests/test_overlay_tray.py",
-      "sha256": "7dfb5c837bc79cbe9d8460a31129a4c3363d12617471a0b0956ac2b46c036571"
+      "sha256": "51b7b40fb23db9bd418e3b604bb5d4fc93a8cb1bba7ffbd6c87913e5f9ba47a0"
     },
     {
       "path": "tests/test_overlay_tray_integration.py",
@@ -723,7 +807,7 @@
     },
     {
       "path": "tests/test_startup_visibility.py",
-      "sha256": "516c5f1a6352d4b11589388aecba433f830165e03375809f8e6af049cb445e4f"
+      "sha256": "51e89f5c26790776f44a4ae02fc729aaa8c888921ece0e8f7684e03f91155b10"
     },
     {
       "path": "tests/test_translator_core.py",
@@ -732,6 +816,10 @@
     {
       "path": "tests/test_tray_controls.py",
       "sha256": "8a3114baa74e7079b6c73ba4d2fc473c930cd0e0fa827e9e3ff689487536378e"
+    },
+    {
+      "path": "tests/test_ui_i18n.py",
+      "sha256": "8940df4a217128fb260f36618cc9083632d853488440ee1031ddabd075483a71"
     },
     {
       "path": "tests/test_uninstall_data.py",
@@ -743,7 +831,7 @@
     },
     {
       "path": "tests/test_update_controls.py",
-      "sha256": "0a8f6798b24d39106bf0adb025345ff3ee34d8d2b2d34c2908bc65cb94b7c1f2"
+      "sha256": "a2ee0b85948717855c45104d8e8286fe606e8f26f34cf8fa448b9addd895d501"
     },
     {
       "path": "tests/test_update_network.py",
@@ -779,7 +867,7 @@
     },
     {
       "path": "translator_app.py",
-      "sha256": "eb33abfb3fa6d1c9ac0f9e34b2a6d084917cc9153784f07dad7bba536a2a909f"
+      "sha256": "0ce068d5a7984f7c166ff5143e1b89a795960f4548848943328d379ea193dee7"
     },
     {
       "path": "translator_core.py",
@@ -787,7 +875,27 @@
     },
     {
       "path": "tray_controls.py",
-      "sha256": "c97eaf82e2aa4e5943d8e5eba139601a44687ccb760a26385175b8fdccf67b55"
+      "sha256": "a57e10353d5e0695013c761b4d0363e2ea91009c36ce65379c1a77ec8d12b984"
+    },
+    {
+      "path": "ui_i18n.py",
+      "sha256": "f72b1c428474da74ea4171cbc94dca37f2a3d9a4c6ef481ff55b7e4e94b35f49"
+    },
+    {
+      "path": "ui_strings_client.py",
+      "sha256": "5ddbbc88ce6ddbca1a993b2abd33f2fde619d83b8f6f1ae62b886f62e25a8d53"
+    },
+    {
+      "path": "ui_strings_installer.py",
+      "sha256": "3ea72db54eff845e6913eefce87b9162e7ffb219f004a6ae4d7247c0194d33cd"
+    },
+    {
+      "path": "ui_strings_overlay.py",
+      "sha256": "08eee77f21b4882526b3dbb98d9c7a0848e1d6f4bf010b0d6860329d16832345"
+    },
+    {
+      "path": "ui_strings_runtime.py",
+      "sha256": "10a16da3a82b3d1a67361d71244817fa619a23b64e1238e431d52f355ab14dc5"
     },
     {
       "path": "uninstall_data.py",
@@ -795,7 +903,7 @@
     },
     {
       "path": "update_controls.py",
-      "sha256": "7b15650fc479296dd91462fe8cb10c95b13413739a9b7c517f4fbd23ac856246"
+      "sha256": "d8265992c5b49417401802f94f79a1b124bd4482f54d05da978e7e9d83df2c77"
     },
     {
       "path": "update_network.py",
@@ -811,7 +919,7 @@
     },
     {
       "path": "windows_tray.py",
-      "sha256": "109aaa64c55aa0089ba8835490f60abae22996a583da5c821194c73938480561"
+      "sha256": "a1edca2c62e38f76a4f22ab3fb8a26ae03576fd31d43f4df1583ab93255bdc6d"
     }
   ]
 }

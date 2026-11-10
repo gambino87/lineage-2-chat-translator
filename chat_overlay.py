@@ -15,6 +15,7 @@ from tkinter import messagebox
 from translator_core import LANGUAGE_CODES, MAX_CHAT_CHARACTERS, UNIVERSAL_TRADE_LANGUAGE
 from reply_composer import whisper_recipient
 from overlay_tray import ChannelTray
+from ui_i18n import tr
 
 
 # Protocol IDs, not words in the message: a party advertisement in Say stays Say.
@@ -41,8 +42,8 @@ HEADER = "#201f1a"
 BORDER = "#625841"
 GOLD = "#d4c59a"
 MUTED = "#a59e8b"
-# Party green and channel 25 red are matched to the supplied chat references.
-CHANNEL_COLORS = {0: "#f0f0ed", 1: "#ffb769", 2: "#e9a5ed",
+# Whisper magenta, Party green and channel 25 red match the supplied chat references.
+CHANNEL_COLORS = {0: "#f0f0ed", 1: "#ffb769", 2: "#ff0cff",
                   3: "#0cff0c", 4: "#c2aeef", 8: "#e4b1d6",
                   9: "#b6dd89", 17: "#ffe390", 25: "#f15353"}
 # Filter labels use the same channel color/fallback as rendered messages.
@@ -155,8 +156,9 @@ def message_parts(message: OverlayMessage, settings: dict) -> tuple[str, str, st
     timestamp = f"[{message.timestamp}]"
     source_language = getattr(message.record, "source_language", None)
     language = "[--]" if source_language == UNIVERSAL_TRADE_LANGUAGE else f"[{LANGUAGE_CODES.get(source_language, '??')}]"
-    name = f"[{message.sender}]: "
-    text = ("Translation unavailable: " if message.error else "") + message.translated
+    sender = tr(message.sender) if message.record is not None and not str(getattr(message.record, "sender", message.sender)).strip() else message.sender
+    name = f"[{sender}]: "
+    text = (tr("Translation unavailable: ") if message.error else "") + message.translated
     original = message.original if settings.get("show_original") and message.original != message.translated else ""
     return timestamp, language, name, text, original
 
@@ -306,9 +308,10 @@ class ChatOverlay:
         self._tray = None
         self._drag_origin = None
         self._resize_origin = None
+        self._localized_widgets = []
         self.window = tk.Toplevel(root)
         self.window.withdraw()
-        self.window.title("Lineage 2 Chat Translator — Overlay")
+        self.window.title(tr("Lineage 2 Chat Translator — Overlay"))
         # No transient() here: the overlay must remain when the controls minimize.
         self.window.overrideredirect(True)
         self.window.configure(bg=BORDER)
@@ -332,7 +335,7 @@ class ChatOverlay:
         self.header = tk.Frame(border, bg=HEADER, height=23)
         self.header.pack(fill="x")
         # Reserve controls first so a long model name cannot hide them.
-        self.grip = tk.Label(self.header, text="◥", bg=HEADER, fg=BORDER,
+        self.grip = self._label(self.header, text="◥", bg=HEADER, fg=BORDER,
                              cursor="size_ne_sw", font=("Tahoma", 10), padx=5, pady=2)
         self.grip.pack(side="right")
         self.grip.bind("<ButtonPress-1>", self._start_resize)
@@ -340,13 +343,14 @@ class ChatOverlay:
         self.grip.bind("<ButtonRelease-1>", self._end_geometry)
         self._header_button("×", self.hide).pack(side="right")
         self._header_button("Settings", self.open_settings).pack(side="right")
-        self.channels_button = self._header_button("Channels ▴", self._toggle_channel_tray)
+        self.channels_button = self._header_button("Channels", self._toggle_channel_tray)
         self.channels_button.pack(side="right")
+        self._tray_open_changed(False)
         self.lock_button = self._header_button("Lock", lambda: self._change("locked", True))
         self.lock_button.pack(side="right")
         titles = tk.Frame(self.header, bg=HEADER)
         titles.pack(side="left", fill="x", expand=True)
-        self.caption = tk.Label(titles, text="Translations", bg=HEADER, fg=GOLD,
+        self.caption = self._label(titles, text="Translations", bg=HEADER, fg=GOLD,
                                 font=("Tahoma", 9, "bold"), padx=8, pady=4, anchor="w")
         self.caption.pack(side="left")
         self.model_label = tk.Label(titles, text=f"· {self.model}" if self.model else "",
@@ -384,17 +388,52 @@ class ChatOverlay:
             self.text.tag_bind("whisper", "<Leave>", self._reply_leave)
         self.bottom = tk.Frame(border, bg=BACKGROUND, height=15)
         self.bottom.pack(fill="x")
-        self.latest = tk.Button(self.bottom, text="", command=self._latest, bg=BACKGROUND,
+        self.latest = self._button(self.bottom, text="", command=self._latest, bg=BACKGROUND,
                                 fg=GOLD, activebackground=HEADER, activeforeground=GOLD,
                                 borderwidth=0, highlightthickness=0, font=("Tahoma", 8),
                                 padx=5, pady=0, cursor="hand2", takefocus=False)
         self.latest.pack(side="left")
 
     def _header_button(self, text, command):
-        return tk.Button(self.header, text=text, command=command, bg=HEADER, fg=MUTED,
+        return self._button(self.header, text=text, command=command, bg=HEADER, fg=MUTED,
                          activebackground="#343024", activeforeground=GOLD,
                          relief="flat", bd=0, highlightthickness=0, padx=6, pady=2,
                          font=("Tahoma", 8), cursor="hand2", takefocus=False)
+
+    def _localized_widget(self, factory, parent, **options):
+        """Retain English sources so repeated language changes never chain translations."""
+        source = options.get("text", "")
+        options["text"] = tr(source)
+        widget = factory(parent, **options)
+        if not hasattr(self, "_localized_widgets"):
+            self._localized_widgets = []
+        self._localized_widgets.append((widget, source))
+        return widget
+
+    def _label(self, parent, **options):
+        return self._localized_widget(tk.Label, parent, **options)
+
+    def _button(self, parent, **options):
+        return self._localized_widget(tk.Button, parent, **options)
+
+    def _checkbutton(self, parent, **options):
+        return self._localized_widget(tk.Checkbutton, parent, **options)
+
+    def refresh_language(self):
+        """Refresh the live overlay without changing chat, placement, or user selection."""
+        if self._destroyed:
+            return
+        self.window.title(tr("Lineage 2 Chat Translator — Overlay"))
+        for widget, source in self._localized_widgets:
+            widget.configure(text=tr(source))
+        self._update_caption()
+        self._tray_open_changed(self._tray.is_open if self._tray is not None else False)
+        if self._settings_window is not None:
+            self._settings_window.title(tr("Chat overlay settings"))
+        if self._tray is not None:
+            self._tray.refresh_language()
+        self._render_all()
+        self.latest.configure(text=tr("{count} new · Latest ↓", count=self._unseen) if self._unseen else "")
 
     def _toggle_channel_tray(self):
         if self._destroyed or self.settings["locked"]:
@@ -413,7 +452,7 @@ class ChatOverlay:
 
     def _tray_open_changed(self, opened):
         if not self._destroyed:
-            self.channels_button.configure(text="Channels ▾" if opened else "Channels ▴")
+            self.channels_button.configure(text=tr("Channels") + (" ▾" if opened else " ▴"))
 
     def _reposition_tray(self):
         if getattr(self, "_tray", None) is not None:
@@ -482,16 +521,19 @@ class ChatOverlay:
             self._native.style(self.settings["locked"], self.settings["opacity"])
         if self.settings["locked"] and getattr(self, "_tray", None) is not None:
             self._tray.hide()
-        caption = "Translations"
-        if not self.settings["channels"]:
-            caption += " · no channels"
-        elif len(self.settings["channels"]) < len(ALL_CHANNEL_FILTERS):
-            caption += " · filtered"
-        if self.settings["locked"]:
-            caption += " · locked"
-        self.caption.configure(text=caption)
-        self.lock_button.configure(text="Locked" if self.settings["locked"] else "Lock")
+        self._update_caption()
         self._render_all()
+
+    def _update_caption(self):
+        caption = tr("Translations")
+        if not self.settings["channels"]:
+            caption += " · " + tr("no channels")
+        elif len(self.settings["channels"]) < len(ALL_CHANNEL_FILTERS):
+            caption += " · " + tr("filtered")
+        if self.settings["locked"]:
+            caption += " · " + tr("locked")
+        self.caption.configure(text=caption)
+        self.lock_button.configure(text=tr("Locked" if self.settings["locked"] else "Lock"))
 
     def _change(self, key, value):
         previous = dict(self.settings)
@@ -507,7 +549,7 @@ class ChatOverlay:
                 self._apply_appearance()
             except (OSError, tk.TclError):
                 pass
-            messagebox.showerror("Overlay setting", f"Could not apply this setting: {exc}", parent=self._settings_window or self.root)
+            messagebox.showerror(tr("Overlay setting"), tr("Could not apply this setting: {error}", error=exc), parent=self._settings_window or self.root)
         self._sync_vars()
         if key == "channels":
             # A changed selection starts at its newest visible row; old unread
@@ -641,7 +683,7 @@ class ChatOverlay:
             self.text.yview("overlay_view")
             if visible:
                 self._unseen += 1
-                self.latest.configure(text=f"{self._unseen} new · Latest ↓")
+                self.latest.configure(text=tr("{count} new · Latest ↓", count=self._unseen))
         self._schedule_layout()
 
     def _render_all(self):
@@ -766,22 +808,23 @@ class ChatOverlay:
             return
         panel = tk.Toplevel(self.root)
         self._settings_window = panel
-        panel.title("Chat overlay settings")
+        panel.title(tr("Chat overlay settings"))
+        self._settings_text_start = len(getattr(self, "_localized_widgets", []))
         panel.configure(bg=HEADER)
         panel.resizable(False, False)
         panel.transient(self.root)
         panel.attributes("-topmost", True)
         content = tk.Frame(panel, bg=HEADER, padx=18, pady=16)
         content.pack(fill="both", expand=True)
-        tk.Label(content, text="CHAT OVERLAY", bg=HEADER, fg=GOLD,
+        self._label(content, text="CHAT OVERLAY", bg=HEADER, fg=GOLD,
                  font=("Tahoma", 12, "bold")).pack(anchor="w", pady=(0, 10))
-        tk.Label(content, text="Drag the header to move. Drag the top-right corner to resize.",
-                 bg=HEADER, fg="#dedbcf", font=("Tahoma", 9)).pack(anchor="w", pady=(0, 12))
+        self._label(content, text="Drag the header to move. Drag the top-right corner to resize.",
+                 bg=HEADER, fg="#dedbcf", font=("Tahoma", 9), wraplength=550, justify="left").pack(anchor="w", pady=(0, 12))
         self._vars = {}
         def checkbox(key, label, command=None):
             variable = tk.BooleanVar(value=self.settings[key])
             self._vars[key] = variable
-            widget = tk.Checkbutton(content, text=label, variable=variable, bg=HEADER,
+            widget = self._checkbutton(content, text=label, variable=variable, bg=HEADER,
                 fg="#dedbcf", activebackground=HEADER, activeforeground=GOLD,
                 selectcolor=BACKGROUND, anchor="w", font=("Tahoma", 10),
                 command=command or (lambda: self._change(key, variable.get())))
@@ -791,13 +834,13 @@ class ChatOverlay:
         lock = checkbox("locked", "Lock placement and pass mouse clicks through")
         if self._native is None:
             lock.configure(state="disabled")
-        tk.Label(content, text="To unlock, return to the main translator → Overlay settings.",
-                 bg=HEADER, fg=MUTED, font=("Tahoma", 9)).pack(anchor="w", padx=(24, 0), pady=(0, 10))
+        self._label(content, text="To unlock, return to the main translator → Overlay settings.",
+                 bg=HEADER, fg=MUTED, font=("Tahoma", 9), wraplength=526, justify="left").pack(anchor="w", padx=(24, 0), pady=(0, 10))
         for key, label, lower, upper in (("opacity", "Opacity", *(round(value * 100) for value in OPACITY_RANGE)),
                                         ("font_size", "Text size", *FONT_SIZE_RANGE)):
             row = tk.Frame(content, bg=HEADER)
             row.pack(fill="x", pady=4)
-            tk.Label(row, text=label, width=10, anchor="w", bg=HEADER, fg="#dedbcf", font=("Tahoma", 10)).pack(side="left")
+            self._label(row, text=label, anchor="w", bg=HEADER, fg="#dedbcf", font=("Tahoma", 10)).pack(side="left", padx=(0, 12))
             variable = tk.IntVar(value=round(self.settings[key] * 100) if key == "opacity" else self.settings[key])
             self._vars[key] = variable
             scale = tk.Scale(row, from_=lower, to=upper, orient="horizontal", variable=variable,
@@ -810,10 +853,10 @@ class ChatOverlay:
         channels.pack(fill="x", pady=(12, 0))
         heading = tk.Frame(channels, bg=HEADER)
         heading.pack(fill="x", pady=(0, 4))
-        tk.Label(heading, text="Channels shown in overlay", bg=HEADER, fg=GOLD,
+        self._label(heading, text="Channels shown in overlay", bg=HEADER, fg=GOLD,
                  font=("Tahoma", 10, "bold")).pack(side="left")
         for label, selection in (("None", []), ("All", list(ALL_CHANNEL_FILTERS))):
-            tk.Button(heading, text=label, command=lambda chosen=selection: self._change("channels", chosen),
+            self._button(heading, text=label, command=lambda chosen=selection: self._change("channels", chosen),
                       bg=BORDER, fg="#fff8e5", relief="flat", padx=8, pady=2).pack(side="right", padx=(5, 0))
         choices = tk.Frame(channels, bg=HEADER)
         choices.pack(fill="x")
@@ -822,24 +865,26 @@ class ChatOverlay:
             variable = tk.BooleanVar(value=key in self.settings["channels"])
             self._channel_vars[key] = variable
             color = CHANNEL_FILTER_COLORS[key]
-            tk.Checkbutton(choices, text=label, variable=variable, command=self._channels_changed,
+            self._checkbutton(choices, text=label, variable=variable, command=self._channels_changed,
                            bg=HEADER, fg=color, activebackground=HEADER, activeforeground=color,
                            selectcolor=BACKGROUND, anchor="w", font=("Tahoma", 9)).grid(
                                row=index // CHANNEL_FILTER_COLUMNS, column=index % CHANNEL_FILTER_COLUMNS,
                                sticky="w", padx=(0, 10), pady=2)
-        tk.Label(channels, text="Changes apply immediately and are saved.\nSystem notices also need Include notices in launcher Settings.",
-                 bg=HEADER, fg=MUTED, justify="left", font=("Tahoma", 9)).pack(anchor="w", pady=(5, 0))
+        self._label(channels, text="Changes apply immediately and are saved.\nSystem notices also need Include notices in launcher Settings.",
+                 bg=HEADER, fg=MUTED, justify="left", font=("Tahoma", 9), wraplength=550).pack(anchor="w", pady=(5, 0))
         actions = tk.Frame(content, bg=HEADER)
         actions.pack(fill="x", pady=(14, 0))
-        tk.Button(actions, text="Reset placement & unlock", command=self._reset_placement,
+        self._button(actions, text="Reset placement & unlock", command=self._reset_placement,
                   bg=BORDER, fg="#fff8e5", relief="flat", padx=10, pady=7).pack(side="left")
-        tk.Button(actions, text="Done", command=self._close_settings, bg=BORDER, fg="#fff8e5",
+        self._button(actions, text="Done", command=self._close_settings, bg=BORDER, fg="#fff8e5",
                   relief="flat", padx=18, pady=7).pack(side="right")
         panel.protocol("WM_DELETE_WINDOW", self._close_settings)
 
     def _close_settings(self):
         if self._settings_window:
             self._settings_window.destroy()
+            if hasattr(self, "_settings_text_start"):
+                del self._localized_widgets[self._settings_text_start:]
         self._settings_window = None
         self._vars = {}
         self._channel_vars = {}

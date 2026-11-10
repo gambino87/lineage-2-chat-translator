@@ -94,6 +94,12 @@ class TrayBehaviorTests(unittest.TestCase):
         self.pending[token] = (delay, callback)
         return token
 
+    def next_frame(self):
+        token, (delay, callback) = next(iter(self.pending.items()))
+        del self.pending[token]
+        self.now += delay / 1000
+        callback()
+
     def finish_animation(self):
         for _ in range(30):
             if not self.pending:
@@ -156,6 +162,75 @@ class TrayBehaviorTests(unittest.TestCase):
         self.finish_animation()
         self.assertEqual(self.tray._progress, 1)
         self.assertFalse(self.pending)
+
+    def test_frames_use_one_native_placement_without_relayout_or_idle_flushes(self):
+        self.tray.toggle()
+        self.window.geometry.reset_mock()
+        self.window.update_idletasks.reset_mock()
+        self.tray.content.place.reset_mock()
+        self.native.place.reset_mock()
+        self.tray.get_anchor = Mock(side_effect=AssertionError("Anchor queried during frame"))
+        self.tray.get_bounds = Mock(side_effect=AssertionError("Monitor queried during frame"))
+        self.finish_animation()
+        frames = [item.args for item in self.native.place.call_args_list]
+        self.assertGreater(len(frames), 8)
+        self.assertEqual([height for _, _, _, height in frames],
+                         sorted(height for _, _, _, height in frames))
+        self.assertTrue(all(x == -700 and width == 540 and y + height == 300
+                            for x, y, width, height in frames))
+        self.window.geometry.assert_not_called()
+        self.window.update_idletasks.assert_not_called()
+        self.tray.content.place.assert_not_called()
+
+    def test_render_cost_is_in_frame_budget_and_missed_frames_are_skipped(self):
+        self.tray.toggle()
+        self.native.place.side_effect = lambda *_: setattr(self, "now", self.now + .006)
+        self.next_frame()
+        delay, _ = next(iter(self.pending.values()))
+        self.assertLessEqual(delay, 11)
+        self.assertGreater(delay, 0)
+        self.now += .075
+        self.next_frame()
+        self.assertEqual(len(self.pending), 1)
+        self.assertLessEqual(next(iter(self.pending.values()))[0], 17)
+        self.assertGreater(self.tray._progress, .4)
+        self.finish_animation()
+        self.assertEqual(self.tray._progress, 1)
+
+    def test_slow_first_map_does_not_consume_opening_animation_and_reopen_settles(self):
+        self.window.deiconify.side_effect = lambda: setattr(self, "now", self.now + .12)
+        self.window.update_idletasks.side_effect = lambda: setattr(self, "now", self.now + .025)
+        self.tray.toggle()
+        self.assertEqual(self.tray._progress, 0)
+        self.assertEqual(self.tray._started_at, self.now)
+        self.native.place.assert_called_with(-700, 299, 540, 1)
+        self.finish_animation()
+        self.tray.toggle()
+        self.finish_animation()
+        self.window.update_idletasks.reset_mock()
+        self.tray.toggle()
+        self.assertEqual(self.tray._progress, 0)
+        self.assertEqual(self.window.update_idletasks.call_count, 3)
+        self.native.place.assert_called_with(-700, 299, 540, 1)
+        self.finish_animation()
+
+    def test_easing_starts_and_finishes_gently(self):
+        self.tray.toggle()
+        self.now = self.tray._started_at + self.tray._duration * .1
+        self.tray._advance()
+        self.assertAlmostEqual(self.tray._progress, .028)
+        self.now = self.tray._started_at + self.tray._duration * .9
+        self.tray._advance()
+        self.assertAlmostEqual(self.tray._progress, .972)
+
+    def test_non_native_fallback_animates_without_flushing_idles_per_frame(self):
+        self.tray._native = None
+        self.tray.toggle()
+        self.window.update_idletasks.reset_mock()
+        self.finish_animation()
+        self.window.geometry.assert_called_with(
+            f"540x{self.tray._wanted_height}-700+{300 - self.tray._wanted_height}")
+        self.window.update_idletasks.assert_not_called()
 
     def test_hide_and_destroy_cancel_callbacks_and_never_reopen(self):
         self.tray.toggle()
