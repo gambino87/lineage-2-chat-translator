@@ -1,5 +1,11 @@
 [
   {
+    "version": "1.8.6",
+    "changes": [
+      "Extended Greeklish 'good evening to all' greetings to supported group messages, including 'ektos apo ton' ('except') endings with one- or two-word person labels."
+    ]
+  },
+  {
     "version": "1.8.5",
     "changes": [
       "Improved short Greeklish kalhspera/kalispera greetings, including uppercase messages, so they translate as 'Good evening'.",

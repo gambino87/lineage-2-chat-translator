@@ -1733,6 +1733,37 @@
           "expected_notes": "Good evening, guys/kids, with a plural address. Do not turn it into singular kid."
         }
       ]
+    },
+    {
+      "id": "el_greeklish_all_group_evening_greeting",
+      "language": "Greek (Latin-script Greeklish)",
+      "forms": [
+        "kalhspera se olous tous",
+        "kalispera se olous tous",
+        "ektos apo ton"
+      ],
+      "english_gloss": "Good evening to all the addressed group; optional except/excluding one named addressee",
+      "context": "A complete greeting with one ASCII-style group identifier of 2–40 characters and an optional ektos apo ton exception followed by one or two ASCII-style person identifiers of 2–40 characters each. Case insensitive with strict ASCII spelling/identifier matching.",
+      "risks": "The exception sense is gated to this complete all-group greeting, not a global ektos apo rule. Reject quotes, partial words, added clauses/negation, unsupported articles, paths and protected labels. Do not infer clan membership, define unknown names or inject source fields into the fixed system hint. Model name handling still applies, including possible casing normalization. Common-noun group words may translate normally. Other Greeklish sentences remain outside this rule.",
+      "sources": [
+        "https://www.sfu.ca/~papappas/webpages/PDFfiles/Handouts/MGreek1/MGr1_lec1",
+        "https://www.greek-language.gr/greekLang/modern_greek/tools/lexica/triantafyllides/search.html?dq=&lq=%CF%8C%CE%BB%CE%BF%CF%82+%CE%BF",
+        "https://pyli.greeklanguage.gr/nea-elliniki-glossa/lexiko-tis-laikis-kai-tis-perithoriakis-glossas?l=3924&tab=2"
+      ],
+      "examples": [
+        {
+          "source": "KALHSPERA SE OLOUS TOUS GROUPONE EKTOS APO TON PLAYER ONE",
+          "expected_notes": "Good evening to all GroupOne except Player One; preserve the exclusion and synthetic labels."
+        },
+        {
+          "source": "KALHSPERA SE OLOUS TOUS AERION",
+          "expected_notes": "Good evening to all Aerion; do not invent an exception."
+        },
+        {
+          "source": "kalispera se olous tous filous ektos apo ton PlayerOne",
+          "expected_notes": "Good evening to all friends except PlayerOne; no invented my or clan membership."
+        }
+      ]
     }
   ]
 }

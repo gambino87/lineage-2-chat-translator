@@ -30,6 +30,11 @@ _ZH_COMBAT = r"(?:怪物|拉怪|引怪|刷怪|抢怪|搶怪|奶妈|奶媽|补师
 
 # Incoming non-English chat. Existing v1.3.5 hints retain their wording.
 _INCOMING = (
+    # Complete all-group greetings, optionally excluding one named addressee.
+    _hint(r"\A\s*(?a:kal[ih]spera[ \t]+se[ \t]+olous[ \t]+tous[ \t]+"
+          r"[A-Za-z][A-Za-z0-9_-]{1,39}(?:[ \t]+ektos[ \t]+apo[ \t]+ton[ \t]+"
+          r"[A-Za-z][A-Za-z0-9_-]{1,39}(?:[ \t]+[A-Za-z][A-Za-z0-9_-]{1,39})?)?)[ \t.!?…]*\Z",
+          'Greeklish kalhspera/kalispera se olous tous = good evening to all; ektos apo ton = except. Preserve player and group names exactly as written, including underscores and spaces'),
     # Keep the common plural address distinct from a single person or name.
     _hint(r"\A\s*(?a:kal[ih]spera(?:[ \t]+|[ \t]*,[ \t]*)paidia)[ \t.!?…]*\Z",
           'Greeklish paidia (παιδιά) in a greeting = guys/children (plural)'),
