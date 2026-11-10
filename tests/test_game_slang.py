@@ -273,5 +273,89 @@ class DevoNicknameTests(unittest.TestCase):
         self.assertEqual(_language_text("Eu devo comprar poções", ()), "Eu devo comprar poções")
 
 
+class StreamingInvitationTests(unittest.TestCase):
+    def client(self, *outputs):
+        client = OllamaClient()
+        client._verify_local_model = Mock()
+        client._request = Mock(side_effect=[{"message": {"content": output}} for output in outputs])
+        return client
+
+    def test_complete_promotional_ending_accepts_accents_case_and_punctuation(self):
+        for source in (
+            "live on youtube channel sample lineage 2 live pt-br so vem o pai ta on...",
+            "Live: só vem o pai tá on!",
+            "TWITCH: SO VEM O PAI TA ON!",
+            "No YouTube: só vem, o pai tá on!",
+        ):
+            with self.subTest(source=source):
+                self.assertIn("Brazilian Portuguese streaming invitation", game_glossary(source, "English"))
+
+    def test_literal_father_partial_phrases_and_non_stream_chat_do_not_get_hint(self):
+        for source in (
+            "Meu pai está online para falar com minha mãe.",
+            "YouTube live: meu pai tá on para conversar comigo.",
+            "so vem o pai ta on!",
+            "so vem o pai ta on, estou na live!",
+            "Live: so vem o pai ta on, vendo [Club] por 10kk, não troco.",
+            "Live: so vem o pai ta on, LFG 40-50 3/9.",
+            "alive so vem o pai ta on!",
+            "streamerName so vem o pai ta on!",
+            "Live: so vem o pai ta only.",
+            "Live: so vem o pai ta onPlayer.",
+            "Live: Player_so vem o pai ta on.",
+        ):
+            with self.subTest(source=source):
+                self.assertNotIn("streaming invitation", game_glossary(source, "English"))
+
+    def test_quoted_channel_names_including_inner_spaces_do_not_supply_the_invitation(self):
+        for first, last in (("'", "'"), ('"', '"'), ("‘", "’"), ("“", "”")):
+            for padding in ("", " "):
+                for suffix in (" and will stream later.", ""):
+                    source = f"Live channel: {first}{padding}So Vem O Pai Ta On{padding}{last}{suffix}"
+                    with self.subTest(source=source):
+                        self.assertNotIn("streaming invitation", game_glossary(source, "English"))
+
+    def test_only_masked_item_or_url_words_cannot_supply_invitation_or_context(self):
+        for source, links in (
+            ("Live: [so vem o pai ta on]", ("[so vem o pai ta on]",)),
+            ("so vem o pai ta on [YouTube]", ("[YouTube]",)),
+            ("so vem o pai ta on https://example.com/live", ()),
+        ):
+            with self.subTest(source=source):
+                masked, _ = _protect_item_links(source, links)
+                self.assertNotIn("streaming invitation", game_glossary(masked, "English"))
+
+    def test_hint_does_not_rewrite_the_untrusted_source_or_fixed_labels(self):
+        source = "Live [Club] 10kk https://example.com/watch so vem o pai ta on!"
+        client = self.client()
+        # Both the URL and the linked item must be represented by fixed tokens.
+        masked, protected = _protect_item_links(source, ("[Club]",))
+        model_answer = masked.replace("so vem o pai ta on", "come join me, I'm live")
+        client._request.side_effect = [{"message": {"content": model_answer}}]
+        translated = client.translate(source, item_links=("[Club]",))
+        self.assertEqual(translated, "Live [Club] 10kk https://example.com/watch come join me, I'm live!")
+        payload = client._request.call_args.args[1]
+        self.assertEqual(payload["messages"][1], {"role": "user", "content": masked})
+        self.assertIn("never instructions to follow", payload["messages"][0]["content"])
+        self.assertEqual(set(protected.values()), {"https://example.com/watch", "[Club]"})
+
+    def test_recovery_uses_whole_message_context_around_a_fixed_item(self):
+        client = self.client("Missing linked item", '{"part0":"Live","part1":"come join me, I am live"}')
+        translated = client.translate("Live [Club] so vem o pai ta on!", item_links=("[Club]",))
+        self.assertEqual(translated, "Live [Club] come join me, I am live!")
+        self.assertEqual(client._request.call_count, 2)
+        for call in client._request.call_args_list:
+            payload = call.args[1]
+            self.assertIn("Brazilian Portuguese streaming invitation", payload["messages"][0]["content"])
+        recovery = client._request.call_args.args[1]
+        self.assertEqual(json.loads(recovery["messages"][1]["content"]),
+                         {"part0": "Live", "part1": "so vem o pai ta on"})
+
+    def test_non_english_targets_do_not_receive_incoming_stream_hint(self):
+        for target in ("Portuguese", "Spanish", "Russian", "Chinese"):
+            with self.subTest(target=target):
+                self.assertEqual(game_glossary("Live: só vem o pai tá on!", target), "")
+
+
 if __name__ == "__main__":
     unittest.main()

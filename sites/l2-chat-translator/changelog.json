@@ -1,5 +1,11 @@
 [
   {
+    "version": "1.7.16",
+    "changes": [
+      "Improved English translations of mixed English/PT-BR stream promotions ending in 'só vem o pai tá on' ('come join me, I'm live'), including unaccented forms. This improvement is limited to promotional endings."
+    ]
+  },
+  {
     "version": "1.7.15",
     "changes": [
       "Channel names in the overlay's Channels tray and Overlay settings now match their chat colors. The colors stay consistent while hovering or selecting options."

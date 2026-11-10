@@ -1,7 +1,14 @@
-LINEAGE 2 CHAT TRANSLATOR 1.7.15
+LINEAGE 2 CHAT TRANSLATOR 1.7.16
 
 Windows 10/11, 64-bit. Python is included; no separate Python installation is needed.
 The supplied L2CT artwork is used for the program, shortcuts and window icons.
+
+PT-BR STREAM PROMOTIONS
+
+English translations include contextual help for stream promotions ending in
+"so vem o pai ta on" ("come join me, I'm live"), including accented forms.
+This improvement is limited to promotional endings; other mixed-language
+messages can still translate incompletely.
 
 MINIMIZE TO SYSTEM TRAY
 

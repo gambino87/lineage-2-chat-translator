@@ -28,6 +28,10 @@ _ZH_COMBAT = r"(?:怪物|拉怪|引怪|刷怪|抢怪|搶怪|奶妈|奶媽|补师
 
 # Incoming non-English chat. Existing v1.3.5 hints retain their wording.
 _INCOMING = (
+    # A promotional ending, not a quoted title or a phrase followed by other chat.
+    _hint(r"(?<!\w)s[oó]\s+vem[\s,;:!.-]+o\s+pai\s+t[aá]\s+on(?=[.!?…\s]*\Z)",
+          "In a Brazilian Portuguese streaming invitation, so vem o pai ta on (or só vem o pai tá on) means come join me, I'm live. Translate the invitation, and keep the whole channel title including its language tag unchanged",
+          r"(?<!\w)(?:live|stream(?:ing)?|youtube|twitch)(?!\w)"),
     _hint(r"收[個个把]\s*(?:普[頂顶]\s*)?(?:(?:可(?:以)?|能)吃蛋的)?\s*(?:法杖|杖|弓|武器)(?![\u3400-\u9fff])",
           "收個/收个/收把 equipment = looking to buy that equipment in a trade listing"),
     _hint(r"普[頂顶]", "普頂/普顶 = top no-grade equipment", r"(?:法杖|杖|弓|武器)"),
