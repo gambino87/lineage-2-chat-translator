@@ -1700,6 +1700,39 @@
           "expected_notes": "Literal agriculture; no game vocabulary hint."
         }
       ]
+    },
+    {
+      "id": "el_greeklish_short_evening_greeting",
+      "language": "Greek (Latin-script Greeklish)",
+      "forms": [
+        "kalhspera",
+        "kalispera",
+        "kalhspera paidia",
+        "kalispera paidia"
+      ],
+      "english_gloss": "Good evening (greeting); paidia in this short greeting is a plural address, guys/children",
+      "context": "Full short greeting: standalone, or one unquoted ASCII-style addressee of 2–40 characters, optionally comma-separated and followed by ordinary .!? punctuation. Case insensitive; spelling/address character matching is ASCII-scoped.",
+      "risks": "Do not treat arbitrary quoted titles, linked item labels, URLs, longer prose or partial words as this greeting. Two-word titles can still be ambiguous. No identity or lexical meaning is assigned to a following name/group label; normal model name handling still applies. Longer Greeklish clauses remain outside this rule. This hint neither detects language nor rewrites the source. A separate companion hint for the complete paidia greeting retains plural number; singular paidi is not assigned this plural meaning.",
+      "sources": [
+        "https://www.sfu.ca/~papappas/webpages/PDFfiles/Handouts/MGreek1/MGr1_lec1",
+        "https://www.greek-language.gr/greekLang/modern_greek/tools/lexica/triantafyllides/search.html?lq=%CE%BA%CE%B1%CE%BB%CE%B7%CF%83%CF%80%CE%AD%CF%81%CE%B1",
+        "https://www.greek-language.gr/digitalResources/modern_greek/tools/lexica/glossology_edu/iframe.html?heading=2&id=163",
+        "https://pyli.greeklanguage.gr/index.php?catid=69&id=630&option=com_content&st=%CF%80%CE%B1%CE%B9%CE%B4%CE%AF&tab=2&view=article"
+      ],
+      "examples": [
+        {
+          "source": "KALHSPERA AERION",
+          "expected_notes": "Translate the greeting to Good evening; retain the synthetic addressee, without inventing its meaning."
+        },
+        {
+          "source": "Kalispera is my clan name.",
+          "expected_notes": "No Greeklish greeting hint; keep the title contextual."
+        },
+        {
+          "source": "kalispera paidia",
+          "expected_notes": "Good evening, guys/kids, with a plural address. Do not turn it into singular kid."
+        }
+      ]
     }
   ]
 }

@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.8.5",
+    "changes": [
+      "Improved short Greeklish kalhspera/kalispera greetings, including uppercase messages, so they translate as 'Good evening'.",
+      "Kept paidia plural in supported short greetings ('guys' or 'kids'), while retaining normal handling of names and singular forms."
+    ]
+  },
+  {
     "version": "1.8.4",
     "changes": [
       "Preserved repeated ASCII-art decorations such as ',i, ,i, ,i,' in translated messages instead of dropping or rewriting them.",

@@ -30,6 +30,12 @@ _ZH_COMBAT = r"(?:怪物|拉怪|引怪|刷怪|抢怪|搶怪|奶妈|奶媽|补师
 
 # Incoming non-English chat. Existing v1.3.5 hints retain their wording.
 _INCOMING = (
+    # Keep the common plural address distinct from a single person or name.
+    _hint(r"\A\s*(?a:kal[ih]spera(?:[ \t]+|[ \t]*,[ \t]*)paidia)[ \t.!?…]*\Z",
+          'Greeklish paidia (παιδιά) in a greeting = guys/children (plural)'),
+    # Short Greeklish greetings; keep quoted names and longer prose contextual.
+    _hint(r"\A\s*(?a:kal[ih]spera(?:(?:[ \t]+|[ \t]*,[ \t]*)[A-Za-z][A-Za-z0-9_-]{1,39})?)[ \t.!?…]*\Z",
+          'Greeklish kalhspera/kalispera (καλησπέρα) = good evening'),
     # Standalone approval; do not reinterpret a literal place or a question.
     _hint(r"\A[\s¡!]*bien\s+ah[ií](?:[\s!.…]|[:;]-?[)D])*\Z",
           'Spanish bien ahí / bien ahi = Nice!'),
