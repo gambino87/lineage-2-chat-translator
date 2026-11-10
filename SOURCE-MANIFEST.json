@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "product": "Lineage 2 Chat Translator",
-  "version": "1.8.11",
+  "version": "1.8.12",
   "purpose": "Source published for transparency; not a claim of byte-for-byte binary reproducibility.",
   "published_installer": {
-    "file": "Lineage-2-Chat-Translator-1.8.11-Setup.exe",
-    "bytes": 21674944,
-    "sha256": "9b0078796ecad953f7eff8b8f9f1cd8d82b2280bd4c6f6ea40e7f49fcacdd772",
-    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.8.11-Setup.exe"
+    "file": "Lineage-2-Chat-Translator-1.8.12-Setup.exe",
+    "bytes": 21674626,
+    "sha256": "2aa5f480239c16aa8fa0c0e665a38a5474333719b82cfd1bc2c9f1333dbf79ae",
+    "url": "https://40.160.140.227/downloads/Lineage-2-Chat-Translator-1.8.12-Setup.exe"
   },
   "release_toolchain": {
     "python": "3.12.10",
@@ -29,7 +29,7 @@
     },
     {
       "path": "app_version.py",
-      "sha256": "5dfef1d4750d91ba9e49f2b40fdbfa6ead5ba74bea04fc204ea45a1e35dadec8"
+      "sha256": "04256148bc2e718b58088efddc6d16e36e963e02b42c99d0a44ecacd85499094"
     },
     {
       "path": "app_icon.py",
@@ -37,7 +37,7 @@
     },
     {
       "path": "translator_app.py",
-      "sha256": "cd931ccd44a5f91f654415ddc1d444e8af93662d1718fe9cce49af9f3be2d86f"
+      "sha256": "33e176f1fa2bf0dec6c59f818ad69b87a11ce4923ffdce6e91155f1b10a17078"
     },
     {
       "path": "translator_core.py",
@@ -61,7 +61,7 @@
     },
     {
       "path": "chat_overlay.py",
-      "sha256": "a0d54e514eed6cdfbd9c53fa761b8ba72f1f19097437f0b6228a11a56fcceafd"
+      "sha256": "4214efd9e32ead3fec8c70b6c53713916fe5fc670216c975a33b195ed7ef9490"
     },
     {
       "path": "overlay_tray.py",
@@ -210,7 +210,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "cc5c118a33a1eafe51e5c7d49218cabaf2e3276018a7e6b5a11349070cf799d9"
+      "sha256": "7cb628c6a6383580d3825adda384c9231101c3dfb24f8b66b4dee5950e29a6b7"
     },
     {
       "path": "SECURITY.md",
@@ -246,7 +246,7 @@
     },
     {
       "path": "app_version.py",
-      "sha256": "5dfef1d4750d91ba9e49f2b40fdbfa6ead5ba74bea04fc204ea45a1e35dadec8"
+      "sha256": "04256148bc2e718b58088efddc6d16e36e963e02b42c99d0a44ecacd85499094"
     },
     {
       "path": "assets/ITEM-CATALOG-NOTICE.txt",
@@ -286,7 +286,7 @@
     },
     {
       "path": "chat_overlay.py",
-      "sha256": "a0d54e514eed6cdfbd9c53fa761b8ba72f1f19097437f0b6228a11a56fcceafd"
+      "sha256": "4214efd9e32ead3fec8c70b6c53713916fe5fc670216c975a33b195ed7ef9490"
     },
     {
       "path": "game_log_setup.py",
@@ -362,7 +362,7 @@
     },
     {
       "path": "packaging/USER-README.txt",
-      "sha256": "597bb4c0b4ba65b954d9bb561bd58af7bbef198404cb697de4d9c8cd0c83b900"
+      "sha256": "fce28a02df58975728a1b2e911d8c37a543e2bdf7ab75276694fba9538e878bb"
     },
     {
       "path": "packaging/bootstrap-tools.ps1",
@@ -642,11 +642,11 @@
     },
     {
       "path": "sites/l2-chat-translator/changelog.json",
-      "sha256": "b529d3ae92b1ab002173ff59c9d2d3504ddc8527dfdc7f2d84e29c94d7c7e30e"
+      "sha256": "5ba8cdd8117f5c0a090fdeb79fbfd8f7254b3b1af523f054bf7e467b5cd44ad2"
     },
     {
       "path": "sites/l2-chat-translator/index.template.html",
-      "sha256": "c1baab3ab3263aea26fd625ccd04278270d9f4246e723d3f3dd3feb03dbfaf2e"
+      "sha256": "cda57d7195b3aa18c8d65ff5eb92f5403d64c9590ee11a8077a502f6cdfb9d8f"
     },
     {
       "path": "tests/test_app_activation.py",
@@ -938,7 +938,7 @@
     },
     {
       "path": "translator_app.py",
-      "sha256": "cd931ccd44a5f91f654415ddc1d444e8af93662d1718fe9cce49af9f3be2d86f"
+      "sha256": "33e176f1fa2bf0dec6c59f818ad69b87a11ce4923ffdce6e91155f1b10a17078"
     },
     {
       "path": "translator_core.py",
@@ -996,9 +996,9 @@
   "published_incremental_update": {
     "schema_version": 1,
     "manifest": {
-      "file": "updates/1.8.11/files.json",
+      "file": "updates/1.8.12/files.json",
       "bytes": 274969,
-      "sha256": "86f08752934a1449f0fe55da356d75ec640ac8feaf0fcd175842b0050bbf285f"
+      "sha256": "69af19052bfb4a6351a3109d0000cce67b40c6767272fe21bdc0264d9811c35b"
     }
   }
 }

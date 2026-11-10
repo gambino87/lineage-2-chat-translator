@@ -272,32 +272,46 @@ class TranslatorApp:
         ttk.Button(toolbar, text="Clear", command=self.clear).grid(row=0, column=1, sticky="ew", pady=(0, 5))
         self.settings_panel = ttk.Frame(outer)
         self.settings_panel.grid(row=3, column=0, sticky="ew", pady=(0, 8))
-        controls = ttk.Frame(self.settings_panel)
-        controls.pack(fill="x", pady=(0, 6))
-        ttk.Label(controls, text="Translate to").grid(row=0, column=0, sticky="w", padx=(0, 6), pady=(0, 5))
+        def settings_group(caption):
+            group = ttk.Frame(self.settings_panel)
+            group.pack(fill="x", pady=(0, 10))
+            ttk.Label(group, text=caption, foreground=MUTED,
+                      font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 4))
+            body = ttk.Frame(group)
+            body.pack(fill="x", padx=(12, 0))
+            return body
+
+        translation = settings_group("Translation")
+        controls = ttk.Frame(translation)
+        controls.pack(fill="x", pady=(0, 4))
+        ttk.Label(controls, text="Translate to").pack(side="left", padx=(0, 8))
         self.target_languages = ("English", "Russian", "Spanish", "Portuguese", "German", "French", "Polish", "Greek", "Korean", "Japanese", "Chinese")
         self.target_box = ttk.Combobox(controls, textvariable=self.target_display, state="readonly", width=15,
             values=tuple(tr(name) for name in self.target_languages))
-        self.target_box.grid(row=0, column=1, sticky="w", pady=(0, 5))
+        self.target_box.pack(side="left")
         self.target_box.bind("<<ComboboxSelected>>", self._target_changed)
-        ttk.Checkbutton(controls, text="Original text", variable=self.show_original,
-                        command=self._render_rows).grid(row=1, column=0, columnspan=2, sticky="w")
-        ttk.Checkbutton(controls, text="Include notices", variable=self.notices).grid(row=1, column=2, sticky="w", padx=12)
-        ttk.Checkbutton(controls, text="Main window on top", variable=self.on_top,
-                        command=lambda: self.root.attributes("-topmost", self.on_top.get())).grid(row=0, column=2, sticky="w", padx=12)
-        self.overlay_button = ttk.Checkbutton(self.settings_panel, text="Show overlay",
+        ttk.Checkbutton(translation, text="Original text", variable=self.show_original,
+                        command=self._render_rows).pack(anchor="w", pady=(0, 4))
+        ttk.Checkbutton(translation, text="Include notices", variable=self.notices).pack(anchor="w")
+
+        overlay_controls = settings_group("Overlay")
+        self.overlay_button = ttk.Checkbutton(overlay_controls, text="Show overlay",
             variable=self.overlay_enabled, command=lambda: self.overlay.toggle())
-        self.overlay_button.pack(anchor="w", pady=(0, 6))
-        self.overlay_lock_button = ttk.Checkbutton(self.settings_panel,
+        self.overlay_button.pack(anchor="w", pady=(0, 4))
+        self.overlay_lock_button = ttk.Checkbutton(overlay_controls,
             text="Lock overlay and pass mouse clicks through", variable=self.overlay_locked,
             command=self._overlay_lock_changed)
-        self.overlay_lock_button.pack(anchor="w", pady=(0, 6))
-        ttk.Checkbutton(self.settings_panel, text="Minimize to system tray", variable=self.minimize_to_tray,
-                        command=self._tray_setting_changed).pack(anchor="w", pady=(0, 6))
-        ttk.Checkbutton(self.settings_panel, text="Close to system tray", variable=self.close_to_tray,
+        self.overlay_lock_button.pack(anchor="w")
+
+        window_controls = settings_group("Window")
+        ttk.Checkbutton(window_controls, text="Main window on top", variable=self.on_top,
+                        command=lambda: self.root.attributes("-topmost", self.on_top.get())).pack(anchor="w", pady=(0, 4))
+        ttk.Checkbutton(window_controls, text="Minimize to system tray", variable=self.minimize_to_tray,
+                        command=self._tray_setting_changed).pack(anchor="w", pady=(0, 4))
+        ttk.Checkbutton(window_controls, text="Close to system tray", variable=self.close_to_tray,
                         command=self._tray_setting_changed).pack(anchor="w")
-        ttk.Label(self.settings_panel, text="To quit, right-click the tray icon and choose Exit.",
-                  foreground=MUTED, wraplength=680, justify="left").pack(anchor="w", padx=(20, 0), pady=(0, 6))
+        ttk.Label(window_controls, text="To quit, right-click the tray icon and choose Exit.",
+                  foreground=MUTED, wraplength=680, justify="left").pack(anchor="w", padx=(20, 0), pady=(3, 0))
         source = ttk.Frame(self.settings_panel)
         source.pack(fill="x", pady=(0, 6))
         ttk.Label(source, text="Chat log", foreground=MUTED).pack(side="left", padx=(0, 8))

@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.8.12",
+    "changes": [
+      "Reorganized client Settings into Translation, Overlay and Window groups with consistent spacing and a clearer reading order.",
+      "Removed the movement, immediate-save and system-notice explanatory text from overlay Settings."
+    ]
+  },
+  {
     "version": "1.8.11",
     "changes": [
       "Improved the reported Greeklish clan-war sentence while keeping who is being addressed and leaving its omitted final action unstated.",
@@ -66,7 +73,7 @@
     "changes": [
       "Linked items now appear in light grey and party recruitment links in light blue in the launcher and overlay.",
       "Surrounding text and player names keep their chat-channel colors. Party descriptions remain translated, and original-message views use the same link colors.",
-      "Improved standalone Spanish approval replies such as 'bien ahÃ­' so they read naturally in English ('Nice!').",
+      "Improved standalone Spanish approval replies such as 'bien ahÃƒÆ’Ã‚Â­' so they read naturally in English ('Nice!').",
       "Added selected English farm/farming game vocabulary for Spanish replies, using farmear/farmeando in supported activity and verb contexts while retaining the original grammar and stated details."
     ]
   },
@@ -96,7 +103,7 @@
   {
     "version": "1.7.16",
     "changes": [
-      "Improved English translations of mixed English/PT-BR stream promotions ending in 'sÃ³ vem o pai tÃ¡ on' ('come join me, I'm live'), including unaccented forms. This improvement is limited to promotional endings."
+      "Improved English translations of mixed English/PT-BR stream promotions ending in 'sÃƒÆ’Ã‚Â³ vem o pai tÃƒÆ’Ã‚Â¡ on' ('come join me, I'm live'), including unaccented forms. This improvement is limited to promotional endings."
     ]
   },
   {

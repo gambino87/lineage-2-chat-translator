@@ -891,8 +891,6 @@ class ChatOverlay:
                      relief="flat", bd=0, cursor="hand2").pack(side="right")
         self._label(heading, text="Settings", bg=HEADER, fg=GOLD,
                  font=("Tahoma", 10, "bold")).pack(side="left")
-        self._label(content, text="Drag the header to move. Drag the top-right corner to resize.",
-                 bg=HEADER, fg="#dedbcf", font=("Tahoma", 9), wraplength=550, justify="left").pack(anchor="w", pady=(0, 12))
         self._vars = {}
         def checkbox(key, label, command=None):
             variable = tk.BooleanVar(value=self.settings[key])
@@ -941,8 +939,6 @@ class ChatOverlay:
                            bg=HEADER, fg=color, activebackground=HEADER, activeforeground=color,
                            selectcolor=BACKGROUND, anchor="w", font=("Tahoma", 9))
             self._settings_choices.append(widget)
-        self._label(channels, text="Changes apply immediately and are saved.\nSystem notices also need Include notices in launcher Settings.",
-                 bg=HEADER, fg=MUTED, justify="left", font=("Tahoma", 9), wraplength=550).pack(anchor="w", pady=(5, 0))
         actions = tk.Frame(content, bg=HEADER)
         actions.pack(fill="x", pady=(14, 0))
         self._settings_actions = [
