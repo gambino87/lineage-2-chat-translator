@@ -372,23 +372,25 @@
     },
     {
       "path": "ollama.exe",
-      "sha256": "fd03fdbb47a91b247e26f63769d694c761ee617e063a01ec69e388270ca040c0",
-      "bytes": 40338944
+      "sha256": "43de841ec8809f3fce05cb1839ba8e365365d7de3f0e3f837cd59ac9171d02d3",
+      "bytes": 40339968
     }
   ],
-  "version": "0.40.14-l2ct.1",
+  "version": "0.40.14-l2ct.2",
   "upstream_version": "0.40.14",
   "archive_sha256": "65d68cade6cf6375f398b518224f8c8a15e062387f38cf477abfc848de7e7e29",
   "upstream_executable_sha256": "14e0fff0449ce3c3a7fe9db8b8b32089274db5f835d4c99f5af7c32dcbf08981",
   "source_commit": "9a3e8177767245acc62b735eba7d5d8a553606d0",
   "source_archive_sha256": "051b27c9e51ed8afeaea6beba63fb4fe58cb4db7710a7b7436bc0d65c7a5b169",
   "patch_inputs": {
-    "build-lock.json": "daffdf4f8783847a9115cfb12f679127ffaabecfd1b00bec75d63a552174eb51",
+    "build-lock.json": "336b08d089cebd07c64a97e4e8cd3a795700b13057eae95d3f362faec099c46a",
     "overlay/l2ctsecurity/process_other.go": "fceb0fdfaf2d0f315977f0dc2b72d373297e5116f5ca289b1d1668b4fcc9e6e9",
     "overlay/l2ctsecurity/process_windows.go": "0336a3816cd46e8c44674bb7ef1d80980b77890617dbf96beefa92cdc4d14a05",
     "overlay/l2ctsecurity/process_windows_test.go": "ac3d4fcd0e867cc4872dced6e747040f0d4afc794c63dcf3d4899c79ddc6b4d6",
     "overlay/l2ctsecurity/security.go": "766d5de7a859569695ad0a4a678edacec04f611c997e08cebf0f6e3e7e3e61b2",
     "overlay/l2ctsecurity/security_test.go": "c98a1b98706cc2be378f1e3a2d731c2aa520c9eba2d2770a6196861105039bf8",
-    "patch_source.py": "dfc5f974511d1b97ef7dbf14cd19b9512c645fe178f9952fe1d4a84006c47070"
+    "overlay/l2ctsecurity/text_only.go": "a42c353a74abaa5e0a4b216c5c8de072af174f7cff4d2b0e473f6299df54e033",
+    "overlay/l2ctsecurity/text_only_test.go": "430b39c57485f5566937903b206475eda5bea4334870677d8554d429276147a5",
+    "patch_source.py": "e1ec377686e6f920ce9733d2cbd1c752184d34acb69621a6bbf6f1f0dd77339f"
   }
 }

@@ -321,6 +321,7 @@ def _service_environment(models_dir: Path, service_home: Path, credential: str) 
                         "OLLAMA_MODELS": str(models_dir), "OLLAMA_CONTEXT_LENGTH": str(MODEL_CONTEXT_TOKENS),
                         "OLLAMA_NUM_PARALLEL": "1", "OLLAMA_MAX_LOADED_MODELS": "1", "OLLAMA_KEEP_ALIVE": MODEL_KEEP_ALIVE,
                         "OLLAMA_DEBUG": "0", "OLLAMA_DEBUG_LOG_REQUESTS": "0", "OLLAMA_ORIGINS": "",
+                        "L2CT_TEXT_ONLY": "1",
                         "L2CT_OLLAMA_API_KEY": credential})
     return environment
 

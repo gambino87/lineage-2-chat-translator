@@ -1,4 +1,4 @@
-LINEAGE 2 CHAT TRANSLATOR 1.8.13
+LINEAGE 2 CHAT TRANSLATOR 1.8.14
 
 Windows 10/11, 64-bit. Python is included; no separate Python installation is needed.
 The supplied L2CT artwork is used for the program, shortcuts and window icons.

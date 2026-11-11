@@ -366,12 +366,15 @@ class RuntimeTests(unittest.TestCase):
         inherited = {"OLLAMA_DEBUG": "2", "OLLAMA_DEBUG_LOG_REQUESTS": "1", "OLLAMA_ORIGINS": "*",
                      "CUDA_VISIBLE_DEVICES": "1", "HTTPS_PROXY": "https://proxy.example.invalid",
                      "GGML_BACKEND_PATH": "C:/untrusted", "OLLAMA_LLM_LIBRARY": "untrusted",
-                     "LLAMA_API_KEY": "inherited-key", "PATH": "C:/untrusted"}
+                     "LLAMA_API_KEY": "inherited-key", "L2CT_TEXT_ONLY": "0",
+                     "OLLAMA_CONTEXT_LENGTH": "1024", "PATH": "C:/untrusted"}
         with patch.dict("installer_runtime.os.environ", inherited), \
              patch.object(self.manager, "ensure_runtime"), patch.object(self.manager, "_port_open", side_effect=[False, False, True]), patch.object(self.manager, "_request_api", return_value={"version": runtime.BACKEND_VERSION}), patch("installer_runtime.subprocess.Popen", return_value=process) as popen:
             self.manager.ensure_service()
         kwargs = popen.call_args.kwargs
         self.assertEqual(kwargs["env"]["OLLAMA_NO_CLOUD"], "1")
+        self.assertEqual(kwargs["env"]["L2CT_TEXT_ONLY"], "1")
+        self.assertEqual(kwargs["env"]["OLLAMA_CONTEXT_LENGTH"], "2048")
         self.assertEqual(kwargs["env"]["OLLAMA_HOST"], "127.0.0.1:11435")
         self.assertEqual(kwargs["env"]["OLLAMA_MODELS"], str(self.manager.models_dir))
         self.assertEqual(kwargs["env"]["OLLAMA_DEBUG"], "0")

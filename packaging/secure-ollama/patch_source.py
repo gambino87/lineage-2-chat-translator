@@ -19,6 +19,9 @@ def replace_once(root: Path, name: str, old: str, new: str) -> None:
 def apply(root: Path) -> None:
     for name in ("cmd/cmd.go", "server/routes.go", "llm/llama_server.go", "discover/llama_server.go"):
         replace_once(root, name, 'import (\n', 'import (\n' + IMPORT)
+    replace_once(root, "llm/llama_server.go", '\tmmprojMemory, err := mmprojMemoryRequirement(modelPath, f, projectors)\n', '''	projectors = l2ctsecurity.TextOnlyProjectors(projectors)
+	mmprojMemory, err := mmprojMemoryRequirement(modelPath, f, projectors)
+''')
     replace_once(root, "cmd/cmd.go", 'func RunServer(_ *cobra.Command, _ []string) error {\n', '''func RunServer(_ *cobra.Command, _ []string) error {
 	// Validate before opening any listener or creating upstream auth files.
 	if _, err := l2ctsecurity.RequiredKey(); err != nil { return err }

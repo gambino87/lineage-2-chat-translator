@@ -187,6 +187,7 @@ class RuntimeIntegrityTests(unittest.TestCase):
     def test_legacy_vendor_frontend_is_distinct_from_authenticated_frontend(self):
         self.assertTrue(self.verified())
         self.assertFalse(self.verified(legacy=True))
+
         executable = self.runtime / "ollama.exe"
         executable.write_bytes(b"official frontend")
         self.assertTrue(self.verified(legacy=True))
@@ -194,6 +195,36 @@ class RuntimeIntegrityTests(unittest.TestCase):
         executable.write_bytes(self.files["ollama.exe"])
         self.assertTrue(self.verified())
         self.assertFalse(self.verified(legacy=True))
+
+    def test_pinned_predecessor_is_accepted_for_migration_only(self):
+        predecessor = b"synthetic reviewed predecessor frontend"
+        identity = {hashlib.sha256(predecessor).hexdigest(): len(predecessor)}
+        executable = self.runtime / "ollama.exe"
+        executable.write_bytes(predecessor)
+        with patch.object(integrity, "PREDECESSOR_FRONTENDS", identity):
+            self.assertTrue(self.verified(legacy=True))
+            self.assertFalse(self.verified())
+            with patch.object(integrity, "PREDECESSOR_FRONTENDS", {
+                    hashlib.sha256(predecessor).hexdigest(): len(predecessor) + 1}):
+                self.assertFalse(self.verified(legacy=True))
+            executable.write_bytes(predecessor + b"tampered")
+            self.assertFalse(self.verified(legacy=True))
+
+    def test_predecessor_migration_still_checks_native_files_and_extra_code(self):
+        predecessor = b"synthetic reviewed predecessor frontend"
+        identity = {hashlib.sha256(predecessor).hexdigest(): len(predecessor)}
+        (self.runtime / "ollama.exe").write_bytes(predecessor)
+        with patch.object(integrity, "PREDECESSOR_FRONTENDS", identity):
+            library = self.runtime / "cuda/gpu.dll"
+            library.write_bytes(b"tampered native library")
+            self.assertFalse(self.verified(legacy=True))
+            library.write_bytes(self.files["cuda/gpu.dll"])
+            extra = self.runtime / "extra.exe"
+            extra.write_bytes(b"unknown executable")
+            self.assertFalse(self.verified(legacy=True))
+            self.assertTrue(extra.exists())
+            extra.unlink()
+            self.assertTrue(self.verified(legacy=True))
 
 
 if __name__ == "__main__":

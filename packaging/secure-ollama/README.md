@@ -2,9 +2,16 @@
 
 This directory maintains a narrow source patch against upstream Ollama
 `v0.40.14`, commit `9a3e8177767245acc62b735eba7d5d8a553606d0`. It builds
-`0.40.14-l2ct.1`. Only `ollama.exe` changes. Native llama.cpp, CPU/GPU DLLs,
+`0.40.14-l2ct.2`. Only `ollama.exe` changes. Native llama.cpp, CPU/GPU DLLs,
 and their notices remain byte-for-byte members of the SHA-256-pinned official
 Windows archive. Model weights are unchanged.
+
+The translator sets `L2CT_TEXT_ONLY=1` for its dedicated service. This removes
+separate or automatically detected inline projectors before memory estimation
+and runner creation. The text weights, model manifests, selected model name,
+prompt template and 2,048-token context are preserved. Without that flag,
+projector loading follows upstream behavior. Existing protected frontends are
+upgraded only from explicitly pinned predecessor bytes with matching native files.
 
 ## Transport contract
 
@@ -50,7 +57,7 @@ Run from the project root on Windows x64:
 ```
 
 The script verifies pinned source, official runtime, Go 1.26.10 and LLVM-MinGW
-20261104 archives; applies exact-context edits; runs nine focused Go security
+20261104 archives; applies exact-context edits; runs focused Go security and loading
 tests; verifies downloaded Go modules against upstream's committed `go.sum`;
 and builds the frontend with `-trimpath -buildvcs=false`. No model or service is
 started. Tools and intermediates stay in `.build-tools/secure-ollama/`.
@@ -84,6 +91,16 @@ An actual-service smoke check is separate from the normal build, requires explic
 launch permission, uses an empty isolated model/home directory and separate port,
 and must never load a model or touch the running translator. Model inference and
 GPU performance are not established by these security-only checks.
+
+The text-only release was also checked in a disposable installation with the
+existing Qwen3.5 9B model files held read-only. Normal and text-only loading
+returned eight identical translation/recovery outputs and the same rejection of
+an intentionally damaged non-English reply. The runner retained a 2,048-token
+context and omitted projector compute buffers; total GPU memory fell by about
+1.1 GiB on the tested RTX 5070 Ti Laptop GPU. This is a bounded comparison, not
+a quality guarantee for every input. Fresh archive setup, the pinned predecessor
+upgrade, repeated startup verification, and synthetic file-update/rollback
+transactions were checked before publication.
 
 A separately authorized release validation also completed exactly one short
 synthetic translation with the existing `qwen3.5:9b-q4_K_M` model. The original

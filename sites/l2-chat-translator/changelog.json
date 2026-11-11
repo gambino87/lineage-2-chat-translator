@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.8.14",
+    "changes": [
+      "Reduced GPU memory use by leaving unused vision components unloaded during text translation, while retaining the same text model and 2,048-token context.",
+      "Existing installations automatically upgrade the verified local backend without changing downloaded models or preferences."
+    ]
+  },
+  {
     "version": "1.8.13",
     "changes": [
       "Incoming translations display sooner and use fewer LLM calls: source-language detection now runs when you select Reply instead of delaying every incoming message."

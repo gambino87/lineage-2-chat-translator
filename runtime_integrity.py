@@ -16,7 +16,10 @@ from secure_storage import StorageError, locked_file
 
 
 MANIFEST_PATH = Path(__file__).parent / "assets" / "secure-ollama-manifest.json"
-BACKEND_VERSION = "0.40.14-l2ct.1"
+BACKEND_VERSION = "0.40.14-l2ct.2"
+PREDECESSOR_FRONTENDS = {
+    "fd03fdbb47a91b247e26f63769d694c761ee617e063a01ec69e388270ca040c0": 40338944,
+}
 LOADABLE_SUFFIXES = {".exe", ".dll", ".pyd", ".com"}
 MAX_MANIFEST_BYTES = 256 * 1024
 
@@ -83,15 +86,20 @@ def pin_runtime(root, *, legacy=False, check=lambda: None):
         for row in manifest["files"]:
             check()
             source = stack.enter_context(locked_file(root / row["path"]))
-            expected_hash = (manifest["upstream_executable_sha256"]
-                             if legacy and row["path"].casefold() == "ollama.exe" else row["sha256"])
+            legacy_frontend = legacy and row["path"].casefold() == "ollama.exe"
             digest = hashlib.sha256()
             count = 0
             while block := source.read(1024 * 1024):
                 check()
                 digest.update(block)
                 count += len(block)
-            if digest.hexdigest() != expected_hash or (not (legacy and row["path"].casefold() == "ollama.exe") and count != row["bytes"]):
+            actual_hash = digest.hexdigest()
+            if legacy_frontend:
+                matches = (actual_hash == manifest["upstream_executable_sha256"]
+                           or PREDECESSOR_FRONTENDS.get(actual_hash) == count)
+            else:
+                matches = actual_hash == row["sha256"] and count == row["bytes"]
+            if not matches:
                 raise StorageError("The runtime does not match the trusted application inventory. Its files were preserved.")
         return stack
     except Exception:

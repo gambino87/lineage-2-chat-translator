@@ -108,7 +108,7 @@ def main() -> None:
         try:
             ready(process, args.port, "/api/version", key)
             status, raw = request(args.port, "/api/version", key)
-            assert status == 200 and json.loads(raw)["version"] == "0.40.14-l2ct.1"
+            assert status == 200 and json.loads(raw)["version"] == "0.40.14-l2ct.2"
             checks.append("authorized frontend version")
             for path, method, body in (("/api/version", "GET", None), ("/debug/pprof/", "GET", None),
                                        ("/api/delete", "DELETE", {"model": "synthetic-test"}),

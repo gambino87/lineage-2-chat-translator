@@ -301,6 +301,8 @@ foreach($scenario in @('success','already current files','selftest rollback','pa
         Write-Fixture (Join-Path $root 'Lineage2ChatTranslator.exe') 'old-exe'
         Write-Fixture (Join-Path $root '_internal/keep.dll') 'unchanged'
         Write-Fixture (Join-Path $root '_internal/change.dll') 'old-library'
+        Write-Fixture (Join-Path $root '_internal/secure-runtime/ollama.exe') 'old-protected-frontend'
+        Write-Fixture (Join-Path $root '_internal/assets/secure-ollama-manifest.json') 'old-protected-inventory'
         Write-Fixture (Join-Path $root '_internal/retired.dll') 'known-retired'
         Write-Fixture (Join-Path $root '_internal/modified.txt') 'owner-data'
         Write-Fixture (Join-Path $root 'settings.json') 'preferences-fixture'
@@ -308,10 +310,10 @@ foreach($scenario in @('success','already current files','selftest rollback','pa
         Write-Fixture (Join-Path $preferences 'installed-release.json') 'previous-release'
         Write-Fixture (Join-Path $preferences 'installed-release.sig') 'previous-signature'
         $unchanged=(Get-Item -LiteralPath (Join-Path $root '_internal/keep.dll')).LastWriteTimeUtc
-        $files=@((New-FileRecord 'Lineage2ChatTranslator.exe' 'new-exe'),(New-FileRecord '_internal/keep.dll' 'unchanged'),(New-FileRecord '_internal/change.dll' 'new-library'),(New-FileRecord '_internal/new/dependency.dll' 'new-dependency'))
+        $files=@((New-FileRecord 'Lineage2ChatTranslator.exe' 'new-exe'),(New-FileRecord '_internal/keep.dll' 'unchanged'),(New-FileRecord '_internal/change.dll' 'new-library'),(New-FileRecord '_internal/new/dependency.dll' 'new-dependency'),(New-FileRecord '_internal/secure-runtime/ollama.exe' 'new-text-only-frontend'),(New-FileRecord '_internal/assets/secure-ollama-manifest.json' 'new-text-only-inventory'))
         foreach($file in $files){
             if($file.path -ne '_internal/keep.dll'){
-                $text=switch($file.path){'Lineage2ChatTranslator.exe'{'new-exe'}'_internal/change.dll'{'new-library'}default{'new-dependency'}}
+                $text=switch($file.path){'Lineage2ChatTranslator.exe'{'new-exe'}'_internal/change.dll'{'new-library'}'_internal/secure-runtime/ollama.exe'{'new-text-only-frontend'}'_internal/assets/secure-ollama-manifest.json'{'new-text-only-inventory'}default{'new-dependency'}}
                 Write-Fixture (Join-Path $stage ($file.sha256+'.payload')) $text
                 if($scenario -eq 'already current files'){Write-Fixture (Get-ProgramFile $root $file.path) $text}
             }
@@ -348,6 +350,8 @@ foreach($scenario in @('success','already current files','selftest rollback','pa
                 }
             }
             foreach($file in $files){Assert-FileMatches (Get-ProgramFile $root $file.path) $file}
+            if([IO.File]::ReadAllText((Join-Path $root '_internal/secure-runtime/ollama.exe')) -cne 'new-text-only-frontend'){throw 'Protected frontend not updated'}
+            if([IO.File]::ReadAllText((Join-Path $root '_internal/assets/secure-ollama-manifest.json')) -cne 'new-text-only-inventory'){throw 'Protected inventory not updated with frontend'}
             if([IO.File]::Exists((Join-Path $root '_internal/retired.dll'))){throw 'Retired file survived'}
             if((Read-Record (Join-Path $stage 'transaction.json') $maxFileManifestBytes).state -cne 'committed'){throw 'Transaction not committed'}
             if([IO.File]::ReadAllText((Join-Path $preferences 'installed-files.json')) -cne [IO.File]::ReadAllText((Join-Path $stage 'files.json'))){throw 'Successful inventory not persisted'}
@@ -355,6 +359,8 @@ foreach($scenario in @('success','already current files','selftest rollback','pa
             if(-not $rejected){throw ('Failed to reject '+$scenario)}
             if([IO.File]::ReadAllText((Join-Path $root 'Lineage2ChatTranslator.exe')) -cne 'old-exe'){throw 'Original executable not restored'}
             if([IO.File]::ReadAllText((Join-Path $root '_internal/change.dll')) -cne 'old-library'){throw 'Original library not restored'}
+            if([IO.File]::ReadAllText((Join-Path $root '_internal/secure-runtime/ollama.exe')) -cne 'old-protected-frontend'){throw 'Original protected frontend not restored'}
+            if([IO.File]::ReadAllText((Join-Path $root '_internal/assets/secure-ollama-manifest.json')) -cne 'old-protected-inventory'){throw 'Original protected inventory not restored with frontend'}
             if([IO.File]::Exists((Join-Path $root '_internal/new/dependency.dll'))){throw 'New dependency not rolled back'}
             if($scenario -in @('selftest rollback','partial temporary rollback')){
                 if(@($script:progressEvents|Where-Object{$_.text -ceq 'Restoring the previous version...'}).Count -eq 0){throw 'Failed update did not report restoration progress'}
